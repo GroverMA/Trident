@@ -40,6 +40,19 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
+Trident is now entering a dual-delivery migration. The existing Streamlit app
+remains a compatibility client and regression baseline, while the enterprise
+HTTP boundary can be started separately:
+
+```bash
+uvicorn api:app --host 0.0.0.0 --port 8000
+```
+
+FastAPI, the application use-case layer, and the repository contract are new
+Trident components; they do not modify the original Industry Analyst repository
+or its deployed Streamlit site. See
+[the API and persistence migration note](docs/architecture/api-persistence-migration.md).
+
 The application does not call the model or search service merely by loading a
 page. Put local competition credentials in `.env` only when running integration
 checks; use Streamlit Secrets for the later online deployment.
