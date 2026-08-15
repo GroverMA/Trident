@@ -53,6 +53,11 @@ Trident components; they do not modify the original Industry Analyst repository
 or its deployed Streamlit site. See
 [the API and persistence migration note](docs/architecture/api-persistence-migration.md).
 
+The customer-facing API uses PostgreSQL through `DATABASE_URL` (including Neon
+pooled connection strings) and Alembic migrations. SQLite is not an online
+default; it is available only for tests and explicit local development through
+`TRIDENT_ALLOW_SQLITE=true`.
+
 The application does not call the model or search service merely by loading a
 page. Put local competition credentials in `.env` only when running integration
 checks; use Streamlit Secrets for the later online deployment.

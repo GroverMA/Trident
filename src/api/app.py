@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
 from functools import lru_cache
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
@@ -12,7 +10,7 @@ from pydantic import BaseModel
 
 from src.application.research import ProjectNotFoundError, ResearchApplication
 from src.core.container import ServiceContainer
-from src.persistence.sqlite_projects import SQLiteProjectRepository
+from src.persistence.factory import create_project_repository
 from src.services.reviewer_orchestration import ReviewerPipelineError
 from src.state.project import ProjectState, ResearchMode, WorkspaceMode
 
@@ -37,16 +35,10 @@ class PipelineRequest(BaseModel):
     enterprise: bool | None = None
 
 
-def _database_path() -> Path:
-    path = Path(os.getenv("TRIDENT_DATABASE_PATH", "data/trident.db")).expanduser()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    return path
-
-
 @lru_cache(maxsize=1)
 def build_application() -> ResearchApplication:
     return ResearchApplication(
-        projects=SQLiteProjectRepository(_database_path()),
+        projects=create_project_repository(),
         service_factory=ServiceContainer.from_runtime,
     )
 

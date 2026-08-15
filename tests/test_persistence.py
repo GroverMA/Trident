@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+import pytest
+
+from src.persistence.factory import (
+    PersistenceConfigurationError,
+    create_project_repository,
+)
+from src.persistence.postgres_projects import PostgresProjectRepository
 from src.persistence.sqlite_projects import SQLiteProjectRepository
 from src.state.project import ProjectState
 
@@ -43,3 +50,23 @@ def test_sqlite_repository_updates_payload_and_orders_by_update_time(tmp_path) -
     assert repository.get(first.project_id).current_step == "evidence_collection"
     assert repository.list(limit=1)[0].project_id == second.project_id
 
+
+def test_production_repository_requires_database_url(monkeypatch) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("TRIDENT_ALLOW_SQLITE", raising=False)
+
+    with pytest.raises(PersistenceConfigurationError, match="DATABASE_URL is required"):
+        create_project_repository()
+
+
+def test_sqlite_requires_explicit_local_opt_in(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("TRIDENT_ALLOW_SQLITE", "true")
+    monkeypatch.setenv("TRIDENT_DATABASE_PATH", str(tmp_path / "local.db"))
+
+    assert isinstance(create_project_repository(), SQLiteProjectRepository)
+
+
+def test_postgres_adapter_rejects_non_postgres_urls() -> None:
+    with pytest.raises(ValueError, match="requires a PostgreSQL URL"):
+        PostgresProjectRepository("sqlite:///unsafe.db")

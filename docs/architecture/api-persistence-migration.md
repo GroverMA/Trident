@@ -31,20 +31,19 @@ workflow plug-ins, mobile clients and background workers.
 
 ## Persistence design
 
-`ProjectRepository` is the application-facing contract. SQLite is the first
-adapter because it is zero-administration and suitable for local development
-and single-instance pilots. The application layer does not import SQLite and
-therefore can later use Postgres, managed Postgres or another transactional
-store without changing research use cases.
+`ProjectRepository` is the application-facing contract. PostgreSQL is the
+production store; Neon can be used through its standard pooled `DATABASE_URL`.
+SQLAlchemy owns connection lifecycle and performs a pre-ping before checkout.
+Alembic owns versioned schema migration. SQLite is disabled by default and is
+available only for tests or explicit local development with
+`TRIDENT_ALLOW_SQLITE=true`.
 
-SQLite is not the target for multi-user production. Before production rollout,
-add:
+Before broader enterprise rollout, add:
 
-1. a Postgres repository implementing the same contract;
-2. organization, workspace, user and role tables;
+1. organization, workspace, user and role tables;
 3. object storage for source files and generated reports;
 4. migration tooling and row-level authorization;
-5. an append-only event and audit log.
+4. an append-only event and audit log.
 
 ## API boundary
 
@@ -59,6 +58,10 @@ The initial API includes:
 AI configuration is lazy-loaded. Health checks and project CRUD can operate
 without loading model credentials. Model and search credentials are required
 only when an AI-backed use case executes.
+
+Project APIs require `DATABASE_URL`. For Neon, use the pooled connection string
+provided by the Neon console. Run `alembic upgrade head` during deployment
+before starting the API process.
 
 ## Local commands
 
@@ -87,4 +90,3 @@ Do not delete Streamlit code until all conditions are true:
 4. the deployment has authentication, authorization, database migrations,
    object storage and observability;
 5. a rollback window has completed without critical defects.
-
