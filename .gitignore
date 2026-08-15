@@ -21,3 +21,13 @@ venv/
 .DS_Store
 .idea/
 .vscode/
+
+# Local API persistence
+data/*.db
+data/*.db-*
+
+# Next.js customer web client
+web/node_modules/
+web/.next/
+web/out/
+web/.env.local

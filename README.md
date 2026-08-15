@@ -33,6 +33,33 @@ See [docs/golden_case.md](docs/golden_case.md).
 
 ## Run locally
 
+### New customer Web client
+
+The customer-facing client now lives in `web/` and calls FastAPI over HTTP. It
+preserves Trident's existing visual language while removing delivery-channel
+coupling from the research workflow.
+
+Terminal 1 — API and local persistence:
+
+```bash
+export TRIDENT_ENV=development
+uvicorn api:app --host 0.0.0.0 --port 8000
+```
+
+Terminal 2 — Web client:
+
+```bash
+cd web
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+Open `http://127.0.0.1:3000`. The Web client proxies project requests to
+`TRIDENT_API_URL` (default `http://127.0.0.1:8000`). Both research paths
+write to the same project record, and switching paths does not clear the form.
+
+### Streamlit compatibility client
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
@@ -40,11 +67,62 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
+Trident is now entering a dual-delivery migration. The existing Streamlit app
+remains a compatibility client and regression baseline, while the enterprise
+HTTP boundary can be started separately:
+
+```bash
+uvicorn api:app --host 0.0.0.0 --port 8000
+```
+
+FastAPI, the Next.js Web client, the application use-case layer, and the
+repository contract are new Trident components; they do not modify the original
+Industry Analyst repository or its deployed Streamlit site. Streamlit remains
+available as a compatibility client until feature parity is reached. See
+[the API and persistence migration note](docs/architecture/api-persistence-migration.md).
+
+The enterprise API also includes a production container entry point. On a
+customer deployment it validates configuration, applies database migrations,
+and starts serving traffic only after persistence is ready. Customers never
+see or configure `DATABASE_URL`.
+
+The customer-facing API uses PostgreSQL through `DATABASE_URL` (including Neon
+pooled connection strings) and Alembic migrations. Local development and tests
+default to an isolated SQLite database so a missing cloud credential does not
+interrupt development. `TRIDENT_ENV=staging` and `TRIDENT_ENV=production`
+require PostgreSQL and never fail over customer data to SQLite.
+
 The application does not call the model or search service merely by loading a
 page. Put local competition credentials in `.env` only when running integration
 checks; use Streamlit Secrets for the later online deployment.
 
 ## Deploy online
+
+### Public full-stack deployment
+
+The repository includes a `render.yaml` Blueprint that provisions the complete
+public stack from this GitHub repository:
+
+- `trident-web`: the public Next.js interface
+- `trident-api`: the FastAPI application service
+- `trident-postgres`: the shared PostgreSQL database
+
+Create a new Render Blueprint and select this repository. Render injects the
+private API address and database connection automatically. Visitors only open
+the public `trident-web` URL and never configure `DATABASE_URL` themselves.
+
+The free database is suitable for a public demo but expires after 30 days.
+Before customer pilots, upgrade the database to a persistent paid plan without
+changing application code or the public web address.
+
+The same services can be deployed on Vercel when a serverless setup is
+preferred. Create two projects from this repository: the API project uses the
+repository root, while the Web project uses `web/` as its Root Directory.
+Connect a Neon Postgres resource to the API project, set `TRIDENT_ENV=production`,
+and set the Web project's `TRIDENT_API_URL` to the API project's public URL.
+The API's Vercel build hook applies Alembic migrations automatically.
+
+### Streamlit compatibility deployment
 
 The production target is Streamlit Community Cloud with `app.py` as the
 entrypoint and Python 3.12. Runtime credentials belong in Community Cloud
