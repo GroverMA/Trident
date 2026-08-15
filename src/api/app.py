@@ -6,6 +6,7 @@ from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from src.application.research import ProjectNotFoundError, ResearchApplication
@@ -59,6 +60,24 @@ ResearchApp = Annotated[ResearchApplication, Depends(get_research_application)]
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "trident-research-api"}
+
+
+@app.get("/ready", response_model=None)
+def readiness():
+    """Report whether the configured persistence service can accept traffic."""
+    try:
+        research = build_application()
+        research.check_persistence()
+    except Exception as exc:  # readiness must remain observable during outages
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "degraded",
+                "service": "trident-research-api",
+                "reason": type(exc).__name__,
+            },
+        )
+    return {"status": "ready", "service": "trident-research-api"}
 
 
 @app.get("/v1/capabilities")

@@ -34,9 +34,11 @@ workflow plug-ins, mobile clients and background workers.
 `ProjectRepository` is the application-facing contract. PostgreSQL is the
 production store; Neon can be used through its standard pooled `DATABASE_URL`.
 SQLAlchemy owns connection lifecycle and performs a pre-ping before checkout.
-Alembic owns versioned schema migration. SQLite is disabled by default and is
-available only for tests or explicit local development with
-`TRIDENT_ALLOW_SQLITE=true`.
+Alembic owns versioned schema migration. In `development` and `test`, a missing
+`DATABASE_URL` selects an isolated SQLite database at
+`TRIDENT_DATABASE_PATH` (default `data/trident.db`). In `staging` and
+`production`, PostgreSQL is mandatory and the service will not silently split
+customer data into a local database.
 
 Before broader enterprise rollout, add:
 
@@ -49,7 +51,8 @@ Before broader enterprise rollout, add:
 
 The initial API includes:
 
-- `GET /health`
+- `GET /health` for process liveness;
+- `GET /ready` for persistence readiness and explicit degraded status;
 - `GET /v1/capabilities`
 - project create, list, read, replace and delete endpoints;
 - research-brief generation;
@@ -59,9 +62,11 @@ AI configuration is lazy-loaded. Health checks and project CRUD can operate
 without loading model credentials. Model and search credentials are required
 only when an AI-backed use case executes.
 
-Project APIs require `DATABASE_URL`. For Neon, use the pooled connection string
-provided by the Neon console. Run `alembic upgrade head` during deployment
-before starting the API process.
+For Neon staging or production, set `TRIDENT_ENV` and use the pooled connection
+string provided by the Neon console as `DATABASE_URL`. Run `alembic upgrade
+head` during deployment before starting the API process. If PostgreSQL is
+temporarily unavailable, `/health` remains observable while `/ready` returns
+503; production does not switch to an unreplicated SQLite database.
 
 ## Local commands
 
@@ -74,6 +79,17 @@ streamlit run app.py
 Enterprise API:
 
 ```bash
+# No database configuration is required for local development.
+export TRIDENT_ENV=development
+uvicorn api:app --host 0.0.0.0 --port 8000
+```
+
+Production example (keep the real URL in the hosting platform's secret store):
+
+```bash
+export TRIDENT_ENV=production
+export DATABASE_URL='postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require'
+alembic upgrade head
 uvicorn api:app --host 0.0.0.0 --port 8000
 ```
 

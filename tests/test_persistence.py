@@ -53,18 +53,38 @@ def test_sqlite_repository_updates_payload_and_orders_by_update_time(tmp_path) -
 
 def test_production_repository_requires_database_url(monkeypatch) -> None:
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.delenv("TRIDENT_ALLOW_SQLITE", raising=False)
+    monkeypatch.setenv("TRIDENT_ENV", "production")
 
     with pytest.raises(PersistenceConfigurationError, match="DATABASE_URL is required"):
         create_project_repository()
 
 
-def test_sqlite_requires_explicit_local_opt_in(monkeypatch, tmp_path) -> None:
+def test_development_uses_local_sqlite_when_database_url_is_absent(
+    monkeypatch, tmp_path
+) -> None:
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.setenv("TRIDENT_ALLOW_SQLITE", "true")
+    monkeypatch.setenv("TRIDENT_ENV", "development")
     monkeypatch.setenv("TRIDENT_DATABASE_PATH", str(tmp_path / "local.db"))
 
     assert isinstance(create_project_repository(), SQLiteProjectRepository)
+
+
+def test_default_environment_keeps_local_development_runnable(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("TRIDENT_ENV", raising=False)
+    monkeypatch.setenv("TRIDENT_DATABASE_PATH", str(tmp_path / "default.db"))
+
+    assert isinstance(create_project_repository(), SQLiteProjectRepository)
+
+
+def test_unknown_environment_is_rejected(monkeypatch) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("TRIDENT_ENV", "prodution")
+
+    with pytest.raises(PersistenceConfigurationError, match="TRIDENT_ENV must be"):
+        create_project_repository()
 
 
 def test_postgres_adapter_rejects_non_postgres_urls() -> None:

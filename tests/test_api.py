@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from src.api.app import app, get_research_application
+from src.api.app import app, build_application, get_research_application
 from src.application.research import ResearchApplication
 from src.persistence.sqlite_projects import SQLiteProjectRepository
 
@@ -13,6 +13,23 @@ def test_health_does_not_require_ai_credentials() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_readiness_uses_local_persistence_without_cloud_credentials(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("TRIDENT_ENV", "development")
+    monkeypatch.setenv("TRIDENT_DATABASE_PATH", str(tmp_path / "ready.db"))
+    build_application.cache_clear()
+
+    try:
+        with TestClient(app) as client:
+            response = client.get("/ready")
+        assert response.status_code == 200
+        assert response.json()["status"] == "ready"
+    finally:
+        build_application.cache_clear()
 
 
 def test_project_crud_is_available_without_loading_ai_runtime(tmp_path) -> None:
@@ -51,4 +68,3 @@ def test_project_crud_is_available_without_loading_ai_runtime(tmp_path) -> None:
             assert client.get(f"/v1/projects/{project['project_id']}").status_code == 404
     finally:
         app.dependency_overrides.clear()
-

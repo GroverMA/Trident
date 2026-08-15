@@ -15,6 +15,13 @@ class PersistenceConfigurationError(RuntimeError):
 
 
 def create_project_repository() -> ProjectRepository:
+    environment = os.getenv("TRIDENT_ENV", "development").strip().lower()
+    allowed_environments = {"development", "test", "staging", "production"}
+    if environment not in allowed_environments:
+        raise PersistenceConfigurationError(
+            "TRIDENT_ENV must be development, test, staging, or production"
+        )
+
     database_url = os.getenv("DATABASE_URL", "").strip()
     if database_url:
         if not database_url.startswith(("postgresql://", "postgresql+psycopg://")):
@@ -23,12 +30,14 @@ def create_project_repository() -> ProjectRepository:
             )
         return PostgresProjectRepository(database_url)
 
-    if os.getenv("TRIDENT_ALLOW_SQLITE", "").lower() not in {"1", "true", "yes"}:
+    if environment in {"staging", "production"}:
         raise PersistenceConfigurationError(
-            "DATABASE_URL is required. SQLite is available only when "
-            "TRIDENT_ALLOW_SQLITE=true is explicitly set for local development."
+            f"DATABASE_URL is required when TRIDENT_ENV={environment}; "
+            "production-like environments never fall back to SQLite"
         )
 
+    # Local development and automated tests must remain runnable without cloud
+    # credentials. This database is intentionally isolated from customer data.
     path = Path(os.getenv("TRIDENT_DATABASE_PATH", "data/trident.db")).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
     return SQLiteProjectRepository(path)

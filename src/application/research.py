@@ -54,6 +54,9 @@ class ResearchApplication:
     def delete_project(self, project_id: str) -> bool:
         return self.projects.delete(project_id)
 
+    def check_persistence(self) -> None:
+        self.projects.ping()
+
     def generate_brief(self, project_id: str) -> ProjectState:
         project = self.get_project(project_id)
         brief = self.services.research_planning.generate_brief(project)

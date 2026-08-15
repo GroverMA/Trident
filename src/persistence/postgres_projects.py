@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import create_engine, delete, select
+from sqlalchemy import create_engine, delete, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
@@ -25,6 +25,10 @@ class PostgresProjectRepository:
             pool_size=5,
             max_overflow=5,
         )
+
+    def ping(self) -> None:
+        with self.engine.connect() as connection:
+            connection.execute(text("SELECT 1")).scalar_one()
 
     def save(self, project: ProjectState) -> ProjectState:
         values = {
@@ -73,4 +77,3 @@ class PostgresProjectRepository:
                 delete(projects_table).where(projects_table.c.project_id == project_id)
             )
         return bool(result.rowcount)
-

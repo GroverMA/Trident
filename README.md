@@ -54,9 +54,10 @@ or its deployed Streamlit site. See
 [the API and persistence migration note](docs/architecture/api-persistence-migration.md).
 
 The customer-facing API uses PostgreSQL through `DATABASE_URL` (including Neon
-pooled connection strings) and Alembic migrations. SQLite is not an online
-default; it is available only for tests and explicit local development through
-`TRIDENT_ALLOW_SQLITE=true`.
+pooled connection strings) and Alembic migrations. Local development and tests
+default to an isolated SQLite database so a missing cloud credential does not
+interrupt development. `TRIDENT_ENV=staging` and `TRIDENT_ENV=production`
+require PostgreSQL and never fail over customer data to SQLite.
 
 The application does not call the model or search service merely by loading a
 page. Put local competition credentials in `.env` only when running integration

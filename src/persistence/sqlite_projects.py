@@ -38,6 +38,10 @@ class SQLiteProjectRepository:
                 "ON projects(updated_at DESC)"
             )
 
+    def ping(self) -> None:
+        with self._connect() as connection:
+            connection.execute("SELECT 1").fetchone()
+
     def save(self, project: ProjectState) -> ProjectState:
         with self._connect() as connection:
             connection.execute(
