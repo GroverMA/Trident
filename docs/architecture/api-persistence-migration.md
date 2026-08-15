@@ -22,7 +22,8 @@ Streamlit compatibility client ─┐
                                ├─ Research Core ─ Providers / SOP / extensions
 FastAPI enterprise boundary ───┘
                  │
-                 └─ ProjectRepository ─ SQLiteProjectRepository
+                 └─ ProjectRepository ─┬─ PostgreSQL / Neon (customer environments)
+                                      └─ SQLite (development and automated tests)
 ```
 
 The next web client will call FastAPI rather than importing Python services.
@@ -94,6 +95,26 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 ```
 
 OpenAPI documentation is available at `/docs` while the API is running.
+
+## Customer-link release gate
+
+The container entry point performs the following sequence before accepting
+customer traffic:
+
+1. validate `TRIDENT_ENV`, `PORT`, and worker settings;
+2. require `DATABASE_URL` in staging and production;
+3. execute all pending Alembic migrations when PostgreSQL is configured;
+4. start FastAPI only after migrations succeed;
+5. expose `/ready` as the deployment health check.
+
+Customers never configure database credentials. The operator stores
+`DATABASE_URL`, model credentials, and search credentials in the hosting
+platform's encrypted environment settings. A failed migration stops the new
+release before it receives traffic, leaving the previous healthy deployment
+available for rollback.
+
+The included `Dockerfile` is platform-neutral. It can be deployed to a managed
+container service without changing the research core or persistence adapters.
 
 ## Removal gate for Streamlit
 

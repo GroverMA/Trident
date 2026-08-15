@@ -53,6 +53,11 @@ Trident components; they do not modify the original Industry Analyst repository
 or its deployed Streamlit site. See
 [the API and persistence migration note](docs/architecture/api-persistence-migration.md).
 
+The enterprise API also includes a production container entry point. On a
+customer deployment it validates configuration, applies database migrations,
+and starts serving traffic only after persistence is ready. Customers never
+see or configure `DATABASE_URL`.
+
 The customer-facing API uses PostgreSQL through `DATABASE_URL` (including Neon
 pooled connection strings) and Alembic migrations. Local development and tests
 default to an isolated SQLite database so a missing cloud credential does not
