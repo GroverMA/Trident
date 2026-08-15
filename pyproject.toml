@@ -1,3 +1,19 @@
+[project]
+name = "trident-research-api"
+version = "0.2.0"
+description = "Enterprise research and strategic decision intelligence API"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "alembic>=1.16,<2",
+    "fastapi>=0.115,<1",
+    "mcp>=1.28,<1.29",
+    "pydantic>=2.8,<3",
+    "psycopg[binary]>=3.2,<4",
+    "python-dotenv>=1.0,<2",
+    "requests>=2.32,<3",
+    "sqlalchemy>=2.0,<3",
+]
+
 [tool.vercel]
 entrypoint = "api:app"
 
