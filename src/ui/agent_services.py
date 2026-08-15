@@ -4,12 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src.config import Settings
-from src.knowledge.sop import load_active_sop
-from src.providers.hkgai_mcp import HKGAIMCPProvider
-from src.providers.hkgai_model import HKGAIModelProvider
-from src.providers.hkgai_structured_rest import HKGAIStructuredRestProvider
-from src.providers.search_router import SearchRouter
+from src.core.container import ServiceContainer
 from src.services.evidence_collection import EvidenceCollectionService
 from src.services.action_planning import ActionPlanningService
 from src.services.company_assessment import CompanyAssessmentService
@@ -22,75 +17,48 @@ from src.services.reviewer_revision import ReviewerRevisionService
 
 
 def research_planning_service() -> ResearchPlanningService:
-    settings = Settings.load()
-    return ResearchPlanningService(
-        model=HKGAIModelProvider(settings),
-        sop=load_active_sop(),
-    )
+    return _service_container().research_planning
 
 
-EVIDENCE_SERVICE_CACHE_VERSION = "reviewer-content-revision-v2"
+SERVICE_CONTAINER_CACHE_VERSION = "research-core-foundation-v1"
 
 
 @st.cache_resource(show_spinner=False)
-def _cached_evidence_collection_service(
-    cache_version: str,
-) -> EvidenceCollectionService:
-    """Keep the router health state and crawl cache for the active app process."""
+def _cached_service_container(cache_version: str) -> ServiceContainer:
+    """Keep one framework-neutral service graph for the active app process."""
 
-    settings = Settings.load()
-    router = SearchRouter(
-        HKGAIMCPProvider(settings),
-        HKGAIStructuredRestProvider(settings),
-        mode=settings.search_transport,
-    )
-    return EvidenceCollectionService(
-        model=HKGAIModelProvider(settings),
-        search=router,
-    )
+    del cache_version
+    return ServiceContainer.from_runtime()
+
+
+def _service_container() -> ServiceContainer:
+    return _cached_service_container(SERVICE_CONTAINER_CACHE_VERSION)
 
 
 def evidence_collection_service() -> EvidenceCollectionService:
     """Return a versioned service so Streamlit never reuses pre-hotfix code."""
 
-    return _cached_evidence_collection_service(EVIDENCE_SERVICE_CACHE_VERSION)
+    return _service_container().evidence_collection
 
 
 def industry_analysis_service() -> IndustryAnalysisService:
-    settings = Settings.load()
-    return IndustryAnalysisService(
-        model=HKGAIModelProvider(settings),
-        sop=load_active_sop(),
-    )
+    return _service_container().industry_analysis
 
 
 def future_intelligence_service() -> FutureIntelligenceService:
-    settings = Settings.load()
-    return FutureIntelligenceService(
-        model=HKGAIModelProvider(settings),
-        sop=load_active_sop(),
-    )
+    return _service_container().future_intelligence
 
 
 def report_generation_service() -> ReportGenerationService:
-    settings = Settings.load()
-    return ReportGenerationService(model=HKGAIModelProvider(settings))
+    return _service_container().report_generation
 
 
 def company_assessment_service() -> CompanyAssessmentService:
-    settings = Settings.load()
-    return CompanyAssessmentService(
-        model=HKGAIModelProvider(settings),
-        sop=load_active_sop(),
-    )
+    return _service_container().company_assessment
 
 
 def action_planning_service() -> ActionPlanningService:
-    settings = Settings.load()
-    return ActionPlanningService(
-        model=HKGAIModelProvider(settings),
-        sop=load_active_sop(),
-    )
+    return _service_container().action_planning
 
 
 def reviewer_orchestration_service() -> ReviewerOrchestrationService:
@@ -100,17 +68,8 @@ def reviewer_orchestration_service() -> ReviewerOrchestrationService:
     downstream service contracts.  Returned artifacts remain pending review.
     """
 
-    return ReviewerOrchestrationService(
-        planning=research_planning_service(),
-        evidence=evidence_collection_service(),
-        industry=industry_analysis_service(),
-        future=future_intelligence_service(),
-        report=report_generation_service(),
-        company=company_assessment_service(),
-        action=action_planning_service(),
-    )
+    return _service_container().reviewer_orchestration
 
 
 def reviewer_revision_service() -> ReviewerRevisionService:
-    settings = Settings.load()
-    return ReviewerRevisionService(model=HKGAIModelProvider(settings))
+    return _service_container().reviewer_revision
