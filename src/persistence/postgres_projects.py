@@ -14,9 +14,17 @@ class PostgresProjectRepository:
     """Persist projects in PostgreSQL using a small, replaceable adapter."""
 
     def __init__(self, database_url: str, *, engine: Engine | None = None) -> None:
-        if not database_url.startswith(("postgresql://", "postgresql+psycopg://")):
+        if not database_url.startswith(
+            ("postgres://", "postgresql://", "postgresql+psycopg://")
+        ):
             raise ValueError("PostgresProjectRepository requires a PostgreSQL URL")
-        normalized = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+        normalized = database_url
+        if normalized.startswith("postgres://"):
+            normalized = normalized.replace("postgres://", "postgresql+psycopg://", 1)
+        elif normalized.startswith("postgresql://"):
+            normalized = normalized.replace(
+                "postgresql://", "postgresql+psycopg://", 1
+            )
         self.engine = engine or create_engine(
             normalized,
             pool_pre_ping=True,

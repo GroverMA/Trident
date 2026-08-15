@@ -98,6 +98,32 @@ checks; use Streamlit Secrets for the later online deployment.
 
 ## Deploy online
 
+### Public full-stack deployment
+
+The repository includes a `render.yaml` Blueprint that provisions the complete
+public stack from this GitHub repository:
+
+- `trident-web`: the public Next.js interface
+- `trident-api`: the FastAPI application service
+- `trident-postgres`: the shared PostgreSQL database
+
+Create a new Render Blueprint and select this repository. Render injects the
+private API address and database connection automatically. Visitors only open
+the public `trident-web` URL and never configure `DATABASE_URL` themselves.
+
+The free database is suitable for a public demo but expires after 30 days.
+Before customer pilots, upgrade the database to a persistent paid plan without
+changing application code or the public web address.
+
+The same services can be deployed on Vercel when a serverless setup is
+preferred. Create two projects from this repository: the API project uses the
+repository root, while the Web project uses `web/` as its Root Directory.
+Connect a Neon Postgres resource to the API project, set `TRIDENT_ENV=production`,
+and set the Web project's `TRIDENT_API_URL` to the API project's public URL.
+The API's Vercel build hook applies Alembic migrations automatically.
+
+### Streamlit compatibility deployment
+
 The production target is Streamlit Community Cloud with `app.py` as the
 entrypoint and Python 3.12. Runtime credentials belong in Community Cloud
 Secrets and are never committed. See [DEPLOYMENT.md](DEPLOYMENT.md) and

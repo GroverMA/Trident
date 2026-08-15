@@ -1,7 +1,10 @@
 const DEFAULT_API_URL = "http://127.0.0.1:8000";
 
 export function tridentApiUrl(path: string): string {
-  const baseUrl = (process.env.TRIDENT_API_URL || DEFAULT_API_URL).replace(/\/$/, "");
+  const configuredUrl = (process.env.TRIDENT_API_URL || DEFAULT_API_URL).replace(/\/$/, "");
+  const baseUrl = /^https?:\/\//i.test(configuredUrl)
+    ? configuredUrl
+    : `http://${configuredUrl}`;
   return `${baseUrl}${path}`;
 }
 

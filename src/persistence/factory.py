@@ -24,7 +24,9 @@ def create_project_repository() -> ProjectRepository:
 
     database_url = os.getenv("DATABASE_URL", "").strip()
     if database_url:
-        if not database_url.startswith(("postgresql://", "postgresql+psycopg://")):
+        if not database_url.startswith(
+            ("postgres://", "postgresql://", "postgresql+psycopg://")
+        ):
             raise PersistenceConfigurationError(
                 "DATABASE_URL must be a PostgreSQL connection string"
             )
