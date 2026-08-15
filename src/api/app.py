@@ -7,7 +7,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from src.application.research import ProjectNotFoundError, ResearchApplication
 from src.core.container import ServiceContainer
@@ -40,6 +40,34 @@ class ProjectCreate(BaseModel):
 
 class PipelineRequest(BaseModel):
     enterprise: bool | None = None
+
+
+class ProjectScopeUpdate(BaseModel):
+    """Editable scope fields shared by both research presentation paths."""
+
+    project_name: str
+    industry: str
+    region: str
+    research_objective: str
+    time_horizon: str
+    output_language: str = "简体中文"
+    target_company: str | None = None
+    company_strategy_objective: str | None = None
+    confirm: bool = False
+
+    @field_validator(
+        "project_name",
+        "industry",
+        "region",
+        "research_objective",
+        "time_horizon",
+    )
+    @classmethod
+    def require_text(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("required scope fields cannot be empty")
+        return cleaned
 
 
 @lru_cache(maxsize=1)
@@ -140,6 +168,20 @@ def list_projects(
 def get_project(project_id: str, research: ResearchApp) -> ProjectState:
     try:
         return research.get_project(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+
+
+@app.patch("/v1/projects/{project_id}/scope", response_model=ProjectState)
+def update_project_scope(
+    project_id: str, payload: ProjectScopeUpdate, research: ResearchApp
+) -> ProjectState:
+    try:
+        return research.update_scope(
+            project_id,
+            scope=payload.model_dump(exclude={"confirm"}),
+            confirm=payload.confirm,
+        )
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="project not found") from exc
 

@@ -7,7 +7,7 @@ from typing import Callable
 
 from src.core.container import ServiceContainer
 from src.persistence.projects import ProjectRepository
-from src.state.project import ProjectState
+from src.state.project import ProjectState, WorkflowStatus, default_workflow
 
 
 class ProjectNotFoundError(LookupError):
@@ -56,6 +56,79 @@ class ResearchApplication:
 
     def check_persistence(self) -> None:
         self.projects.ping()
+
+    def update_scope(
+        self,
+        project_id: str,
+        *,
+        scope: dict[str, object],
+        confirm: bool,
+    ) -> ProjectState:
+        """Save or confirm the research scope without loading the AI runtime.
+
+        The same project state is used by build-first and review-first.  A
+        material draft edit deliberately invalidates downstream artifacts so
+        an old report can never be presented against a new market boundary.
+        """
+
+        project = self.get_project(project_id)
+        material_fields = {
+            "project_name",
+            "industry",
+            "region",
+            "research_objective",
+            "time_horizon",
+            "output_language",
+            "target_company",
+            "company_strategy_objective",
+        }
+        changed = any(
+            field in scope and scope[field] != getattr(project, field)
+            for field in material_fields
+        )
+        now = datetime.now(UTC)
+        payload = project.model_dump()
+        payload.update(scope)
+
+        if changed:
+            statuses = default_workflow()
+            if not project.company_strategy_enabled:
+                statuses["company_assessment"] = WorkflowStatus.NOT_APPLICABLE
+                statuses["action_plan"] = WorkflowStatus.NOT_APPLICABLE
+            payload.update(
+                {
+                    "research_brief_artifact": None,
+                    "research_plan_artifact": None,
+                    "evidence_collection_artifact": None,
+                    "industry_analysis_artifact": None,
+                    "future_intelligence_artifact": None,
+                    "general_report_artifact": None,
+                    "company_scorecard_artifact": None,
+                    "action_plan_artifact": None,
+                    "enterprise_decision_report_artifact": None,
+                    "content_revision_artifact": None,
+                    "execution_authorized_at": None,
+                    "market_scope_confirmed_at": None,
+                    "workflow_status": statuses,
+                    "current_step": "research_brief",
+                }
+            )
+
+        if confirm:
+            statuses = dict(payload["workflow_status"])
+            statuses["research_brief"] = WorkflowStatus.COMPLETED
+            statuses["research_planning"] = WorkflowStatus.READY
+            payload.update(
+                {
+                    "market_scope_confirmed_at": now,
+                    "workflow_status": statuses,
+                    "current_step": "research_planning",
+                }
+            )
+
+        payload["updated_at"] = now
+        updated = ProjectState.model_validate(payload)
+        return self.projects.save(updated)
 
     def generate_brief(self, project_id: str) -> ProjectState:
         project = self.get_project(project_id)

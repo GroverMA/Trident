@@ -69,8 +69,68 @@ def test_project_crud_is_available_without_loading_ai_runtime(
             assert fetched.json()["project_name"] == payload["project_name"]
             assert fetched.json()["research_path"] == research_path
 
+            scope = client.patch(
+                f"/v1/projects/{project['project_id']}/scope",
+                json={
+                    "project_name": payload["project_name"],
+                    "industry": payload["industry"],
+                    "region": payload["region"],
+                    "research_objective": payload["research_objective"]
+                    + "，重点验证主要玩家的竞争位置",
+                    "time_horizon": payload["time_horizon"],
+                    "output_language": "简体中文",
+                    "confirm": True,
+                },
+            )
+            assert scope.status_code == 200
+            confirmed = scope.json()
+            assert confirmed["current_step"] == "research_planning"
+            assert confirmed["market_scope_confirmed_at"] is not None
+            assert confirmed["workflow_status"]["research_brief"] == "completed"
+            assert confirmed["workflow_status"]["research_planning"] == "ready"
+
+            persisted = client.get(f"/v1/projects/{project['project_id']}").json()
+            assert persisted["research_objective"].endswith("主要玩家的竞争位置")
+            assert persisted["market_scope_confirmed_at"] is not None
+
             deleted = client.delete(f"/v1/projects/{project['project_id']}")
             assert deleted.status_code == 204
             assert client.get(f"/v1/projects/{project['project_id']}").status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_scope_update_rejects_empty_required_fields(tmp_path) -> None:
+    research = ResearchApplication(
+        projects=SQLiteProjectRepository(tmp_path / "api.db"),
+        service_factory=lambda: (_ for _ in ()).throw(
+            AssertionError("AI runtime should not load")
+        ),
+    )
+    app.dependency_overrides[get_research_application] = lambda: research
+    try:
+        with TestClient(app) as client:
+            project = client.post(
+                "/v1/projects",
+                json={
+                    "project_name": "IVD研究",
+                    "industry": "IVD",
+                    "region": "中国",
+                    "research_objective": "研究竞争格局",
+                    "time_horizon": "2026-2036",
+                },
+            ).json()
+            response = client.patch(
+                f"/v1/projects/{project['project_id']}/scope",
+                json={
+                    "project_name": "IVD研究",
+                    "industry": "",
+                    "region": "中国",
+                    "research_objective": "研究竞争格局",
+                    "time_horizon": "2026-2036",
+                    "confirm": True,
+                },
+            )
+        assert response.status_code == 422
     finally:
         app.dependency_overrides.clear()

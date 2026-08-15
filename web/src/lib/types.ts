@@ -12,10 +12,25 @@ export interface ProjectSummary {
   company_strategy_enabled: boolean;
   company_strategy_objective?: string | null;
   research_path: ResearchPath;
+  research_mode?: string;
+  workspace_mode?: string;
   current_step: string;
   workflow_status: Record<string, string>;
+  market_scope_confirmed_at?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProjectScopePayload {
+  project_name: string;
+  industry: string;
+  region: string;
+  research_objective: string;
+  time_horizon: string;
+  output_language: string;
+  target_company?: string | null;
+  company_strategy_objective?: string | null;
+  confirm: boolean;
 }
 
 export interface ProjectCreatePayload {
