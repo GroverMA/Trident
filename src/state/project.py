@@ -34,6 +34,13 @@ class WorkspaceMode(StrEnum):
     ANALYST_WORKSPACE = "analyst_workspace"
 
 
+class ResearchPath(StrEnum):
+    """Presentation order for one shared body of research state."""
+
+    BUILD_FIRST = "research_build_first"
+    REVIEW_FIRST = "report_review_first"
+
+
 class WorkflowStatus(StrEnum):
     NOT_STARTED = "not_started"
     READY = "ready"
@@ -83,6 +90,7 @@ class ProjectState(BaseModel):
     output_language: str = "简体中文"
     research_mode: ResearchMode = ResearchMode.GENERAL
     workspace_mode: WorkspaceMode = WorkspaceMode.QUICK_REPORT
+    research_path: ResearchPath = ResearchPath.BUILD_FIRST
     execution_authorized_at: datetime | None = None
     market_scope_confirmed_at: datetime | None = None
     last_pipeline_error: str | None = None

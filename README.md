@@ -33,6 +33,33 @@ See [docs/golden_case.md](docs/golden_case.md).
 
 ## Run locally
 
+### New customer Web client
+
+The customer-facing client now lives in `web/` and calls FastAPI over HTTP. It
+preserves Trident's existing visual language while removing delivery-channel
+coupling from the research workflow.
+
+Terminal 1 — API and local persistence:
+
+```bash
+export TRIDENT_ENV=development
+uvicorn api:app --host 0.0.0.0 --port 8000
+```
+
+Terminal 2 — Web client:
+
+```bash
+cd web
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+Open `http://127.0.0.1:3000`. The Web client proxies project requests to
+`TRIDENT_API_URL` (default `http://127.0.0.1:8000`). Both research paths
+write to the same project record, and switching paths does not clear the form.
+
+### Streamlit compatibility client
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
@@ -48,9 +75,10 @@ HTTP boundary can be started separately:
 uvicorn api:app --host 0.0.0.0 --port 8000
 ```
 
-FastAPI, the application use-case layer, and the repository contract are new
-Trident components; they do not modify the original Industry Analyst repository
-or its deployed Streamlit site. See
+FastAPI, the Next.js Web client, the application use-case layer, and the
+repository contract are new Trident components; they do not modify the original
+Industry Analyst repository or its deployed Streamlit site. Streamlit remains
+available as a compatibility client until feature parity is reached. See
 [the API and persistence migration note](docs/architecture/api-persistence-migration.md).
 
 The enterprise API also includes a production container entry point. On a

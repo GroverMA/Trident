@@ -6,6 +6,7 @@ Trident follows a temporary dual-delivery strategy:
 
 - `app.py` remains the Streamlit compatibility client and regression baseline.
 - `api.py` exposes the new FastAPI application boundary.
+- `web/` contains the new Next.js customer client.
 - `src/application/` contains delivery-channel-neutral use cases.
 - `src/persistence/` contains storage contracts and adapters.
 - `src/core/` remains the shared Research Core used by both delivery channels.
@@ -20,15 +21,20 @@ both research paths pass acceptance tests.
 ```text
 Streamlit compatibility client ─┐
                                ├─ Research Core ─ Providers / SOP / extensions
-FastAPI enterprise boundary ───┘
+Next.js client ─ FastAPI API ───┘
                  │
                  └─ ProjectRepository ─┬─ PostgreSQL / Neon (customer environments)
                                       └─ SQLite (development and automated tests)
 ```
 
-The next web client will call FastAPI rather than importing Python services.
+The Next.js Web client calls FastAPI rather than importing Python services.
 This creates a stable boundary for browser applications, internal portals,
 workflow plug-ins, mobile clients and background workers.
+
+The first migrated vertical slice covers research-path selection, the shared
+project brief, project creation, and persisted project retrieval. It intentionally
+uses the same API and project record for build-first and report-review-first
+workflows so switching the presentation order never forks or discards research.
 
 ## Persistence design
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.api.app import app, build_application, get_research_application
@@ -32,7 +33,10 @@ def test_readiness_uses_local_persistence_without_cloud_credentials(
         build_application.cache_clear()
 
 
-def test_project_crud_is_available_without_loading_ai_runtime(tmp_path) -> None:
+@pytest.mark.parametrize("research_path", ["research_build_first", "report_review_first"])
+def test_project_crud_is_available_without_loading_ai_runtime(
+    tmp_path, research_path: str
+) -> None:
     def fail_if_ai_runtime_is_loaded():
         raise AssertionError("AI runtime should be lazy for project CRUD")
 
@@ -47,6 +51,7 @@ def test_project_crud_is_available_without_loading_ai_runtime(tmp_path) -> None:
         "region": "全球及中国",
         "research_objective": "研究市场现状、未来十年发展和竞争格局",
         "time_horizon": "2026-2036",
+        "research_path": research_path,
     }
 
     try:
@@ -62,6 +67,7 @@ def test_project_crud_is_available_without_loading_ai_runtime(tmp_path) -> None:
             fetched = client.get(f"/v1/projects/{project['project_id']}")
             assert fetched.status_code == 200
             assert fetched.json()["project_name"] == payload["project_name"]
+            assert fetched.json()["research_path"] == research_path
 
             deleted = client.delete(f"/v1/projects/{project['project_id']}")
             assert deleted.status_code == 204

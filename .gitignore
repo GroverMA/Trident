@@ -25,3 +25,9 @@ venv/
 # Local API persistence
 data/*.db
 data/*.db-*
+
+# Next.js customer web client
+web/node_modules/
+web/.next/
+web/out/
+web/.env.local

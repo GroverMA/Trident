@@ -13,7 +13,12 @@ from src.application.research import ProjectNotFoundError, ResearchApplication
 from src.core.container import ServiceContainer
 from src.persistence.factory import create_project_repository
 from src.services.reviewer_orchestration import ReviewerPipelineError
-from src.state.project import ProjectState, ResearchMode, WorkspaceMode
+from src.state.project import (
+    ProjectState,
+    ResearchMode,
+    ResearchPath,
+    WorkspaceMode,
+)
 
 
 class ProjectCreate(BaseModel):
@@ -29,6 +34,7 @@ class ProjectCreate(BaseModel):
     decision_context: str | None = None
     research_mode: ResearchMode = ResearchMode.GENERAL
     workspace_mode: WorkspaceMode = WorkspaceMode.QUICK_REPORT
+    research_path: ResearchPath = ResearchPath.BUILD_FIRST
     industry_pack: str | None = None
 
 
