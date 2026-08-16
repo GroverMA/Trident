@@ -7,11 +7,19 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
-from src.application.research import ProjectNotFoundError, ResearchApplication
+from src.application.research import (
+    ProjectNotFoundError,
+    ResearchApplication,
+    ResearchWorkflowError,
+)
+from src.config import ConfigurationError
 from src.core.container import ServiceContainer
+from src.models.research import MarketDefinition
 from src.persistence.factory import create_project_repository
+from src.providers.base import ProviderError
+from src.services.research_planning import SOPComplianceError
 from src.services.reviewer_orchestration import ReviewerPipelineError
 from src.state.project import (
     ProjectState,
@@ -70,6 +78,22 @@ class ProjectScopeUpdate(BaseModel):
         return cleaned
 
 
+class ResearchBriefReview(BaseModel):
+    decision_statement: str
+    market_definition: MarketDefinition
+    key_questions: list[str] = Field(min_length=1)
+    information_gaps: list[str] = Field(min_length=1)
+    hypotheses: list[str] = Field(min_length=1)
+    clarification_questions: list[str] = Field(default_factory=list)
+    clarification_responses: dict[str, str] = Field(default_factory=dict)
+    confidence_note: str
+    confirm: bool = False
+
+
+class PlanConfirmation(BaseModel):
+    confirm: bool = True
+
+
 @lru_cache(maxsize=1)
 def build_application() -> ResearchApplication:
     return ResearchApplication(
@@ -79,7 +103,7 @@ def build_application() -> ResearchApplication:
 
 app = FastAPI(
     title="Trident Research API",
-    version="0.2.0",
+    version="0.3.0",
     description="Enterprise research and strategic decision intelligence",
 )
 
@@ -210,6 +234,60 @@ def generate_research_brief(project_id: str, research: ResearchApp) -> ProjectSt
         return research.generate_brief(project_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="project not found") from exc
+    except ResearchWorkflowError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SOPComplianceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ConfigurationError as exc:
+        raise HTTPException(status_code=503, detail="AI研究服务尚未完成配置") from exc
+    except ProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.patch("/v1/projects/{project_id}/research-brief", response_model=ProjectState)
+def review_research_brief(
+    project_id: str, payload: ResearchBriefReview, research: ResearchApp
+) -> ProjectState:
+    try:
+        return research.review_brief(
+            project_id,
+            changes=payload.model_dump(exclude={"confirm"}),
+            confirm=payload.confirm,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ResearchWorkflowError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/v1/projects/{project_id}/research-plan", response_model=ProjectState)
+def generate_research_plan(project_id: str, research: ResearchApp) -> ProjectState:
+    try:
+        return research.generate_plan(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ResearchWorkflowError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SOPComplianceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ConfigurationError as exc:
+        raise HTTPException(status_code=503, detail="AI研究服务尚未完成配置") from exc
+    except ProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.patch("/v1/projects/{project_id}/research-plan", response_model=ProjectState)
+def confirm_research_plan(
+    project_id: str, payload: PlanConfirmation, research: ResearchApp
+) -> ProjectState:
+    try:
+        if not payload.confirm:
+            raise ResearchWorkflowError("Research Plan尚未确认")
+        return research.confirm_plan(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ResearchWorkflowError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.post("/v1/projects/{project_id}/report-first", response_model=ProjectState)

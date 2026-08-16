@@ -62,7 +62,9 @@ The initial API includes:
 - `GET /ready` for persistence readiness and explicit degraded status;
 - `GET /v1/capabilities`
 - project create, list, read, replace and delete endpoints;
-- research-brief generation;
+- editable research-scope confirmation;
+- research-brief generation and human review;
+- research-plan generation and human confirmation;
 - report-first orchestration.
 
 AI configuration is lazy-loaded. Health checks and project CRUD can operate

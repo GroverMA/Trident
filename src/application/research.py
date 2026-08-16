@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Callable
+from typing import Callable, Mapping
 
 from src.core.container import ServiceContainer
+from src.models.research import MarketDefinition, ResearchBriefArtifact
 from src.persistence.projects import ProjectRepository
 from src.state.project import ProjectState, WorkflowStatus, default_workflow
 
 
 class ProjectNotFoundError(LookupError):
     pass
+
+
+class ResearchWorkflowError(ValueError):
+    """Raised when a research command is used before its prerequisite."""
 
 
 class ResearchApplication:
@@ -114,17 +119,22 @@ class ResearchApplication:
                 }
             )
 
-        if confirm:
+        # Reconfirming an unchanged scope is idempotent.  In particular, it
+        # must not move an in-progress project back to Research Brief or erase
+        # the status of an already reviewed brief/plan.
+        if confirm and (changed or project.market_scope_confirmed_at is None):
             statuses = dict(payload["workflow_status"])
-            statuses["research_brief"] = WorkflowStatus.COMPLETED
-            statuses["research_planning"] = WorkflowStatus.READY
+            statuses["research_brief"] = WorkflowStatus.READY
+            statuses["research_planning"] = WorkflowStatus.NOT_STARTED
             payload.update(
                 {
                     "market_scope_confirmed_at": now,
                     "workflow_status": statuses,
-                    "current_step": "research_planning",
+                    "current_step": "research_brief",
                 }
             )
+        elif confirm:
+            payload["market_scope_confirmed_at"] = now
 
         payload["updated_at"] = now
         updated = ProjectState.model_validate(payload)
@@ -132,12 +142,108 @@ class ResearchApplication:
 
     def generate_brief(self, project_id: str) -> ProjectState:
         project = self.get_project(project_id)
+        if project.market_scope_confirmed_at is None:
+            raise ResearchWorkflowError("请先确认研究目标与市场范围")
         brief = self.services.research_planning.generate_brief(project)
+        statuses = dict(project.workflow_status)
+        statuses["research_brief"] = WorkflowStatus.NEEDS_REVIEW
+        statuses["research_planning"] = WorkflowStatus.NOT_STARTED
         return self.projects.save(
             project.model_copy(
                 update={
                     "research_brief_artifact": brief,
+                    "research_plan_artifact": None,
+                    "workflow_status": statuses,
                     "current_step": "research_brief",
+                    "updated_at": datetime.now(UTC),
+                }
+            )
+        )
+
+    def review_brief(
+        self,
+        project_id: str,
+        *,
+        changes: Mapping[str, object],
+        confirm: bool,
+    ) -> ProjectState:
+        project = self.get_project(project_id)
+        brief = project.research_brief_artifact
+        if brief is None:
+            raise ResearchWorkflowError("请先生成Research Brief")
+
+        payload = brief.model_dump()
+        payload.update(changes)
+        if isinstance(payload.get("market_definition"), dict):
+            payload["market_definition"] = MarketDefinition.model_validate(
+                payload["market_definition"]
+            )
+        now = datetime.now(UTC)
+        payload.update(
+            {
+                "human_confirmed": confirm,
+                "confirmed_at": now if confirm else None,
+            }
+        )
+        reviewed = ResearchBriefArtifact.model_validate(payload)
+        statuses = dict(project.workflow_status)
+        statuses["research_brief"] = (
+            WorkflowStatus.COMPLETED if confirm else WorkflowStatus.NEEDS_REVIEW
+        )
+        statuses["research_planning"] = (
+            WorkflowStatus.READY if confirm else WorkflowStatus.NOT_STARTED
+        )
+        return self.projects.save(
+            project.model_copy(
+                update={
+                    "research_brief_artifact": reviewed,
+                    "research_plan_artifact": None,
+                    "workflow_status": statuses,
+                    "current_step": "research_planning" if confirm else "research_brief",
+                    "updated_at": now,
+                }
+            )
+        )
+
+    def generate_plan(self, project_id: str) -> ProjectState:
+        project = self.get_project(project_id)
+        brief = project.research_brief_artifact
+        if brief is None or not brief.human_confirmed:
+            raise ResearchWorkflowError("Research Brief必须先经过人工确认")
+        plan = self.services.research_planning.generate_plan(project, brief)
+        statuses = dict(project.workflow_status)
+        statuses["research_planning"] = WorkflowStatus.NEEDS_REVIEW
+        return self.projects.save(
+            project.model_copy(
+                update={
+                    "research_plan_artifact": plan,
+                    "workflow_status": statuses,
+                    "current_step": "research_planning",
+                    "updated_at": datetime.now(UTC),
+                }
+            )
+        )
+
+    def confirm_plan(self, project_id: str) -> ProjectState:
+        project = self.get_project(project_id)
+        plan = project.research_plan_artifact
+        if plan is None:
+            raise ResearchWorkflowError("请先生成Research Plan")
+        statuses = dict(project.workflow_status)
+        statuses["research_planning"] = WorkflowStatus.COMPLETED
+        statuses["evidence_collection"] = WorkflowStatus.READY
+        next_step = "evidence_collection"
+        if project.research_path.value == "report_review_first":
+            statuses["decision_report"] = WorkflowStatus.READY
+            next_step = "decision_report"
+        return self.projects.save(
+            project.model_copy(
+                update={
+                    "research_plan_artifact": plan.model_copy(
+                        update={"human_confirmed": True}
+                    ),
+                    "workflow_status": statuses,
+                    "current_step": next_step,
                     "updated_at": datetime.now(UTC),
                 }
             )

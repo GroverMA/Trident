@@ -57,6 +57,9 @@ pnpm dev
 Open `http://127.0.0.1:3000`. The Web client proxies project requests to
 `TRIDENT_API_URL` (default `http://127.0.0.1:8000`). Both research paths
 write to the same project record, and switching paths does not clear the form.
+The migrated workflow now persists editable market scope, an AI-generated
+Research Brief, human clarification responses, and a confirmable Research Plan
+before evidence collection or report-first orchestration begins.
 
 ### Streamlit compatibility client
 
@@ -94,7 +97,8 @@ require PostgreSQL and never fail over customer data to SQLite.
 
 The application does not call the model or search service merely by loading a
 page. Put local competition credentials in `.env` only when running integration
-checks; use Streamlit Secrets for the later online deployment.
+checks. Production credentials are configured in the cloud API project and are
+never exposed to visitors or committed to GitHub.
 
 ## Deploy online
 

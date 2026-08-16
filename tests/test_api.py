@@ -2,10 +2,78 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from types import SimpleNamespace
 
 from src.api.app import app, build_application, get_research_application
 from src.application.research import ResearchApplication
 from src.persistence.sqlite_projects import SQLiteProjectRepository
+from src.models.research import (
+    MarketDefinition,
+    MethodologyTrace,
+    ResearchBriefArtifact,
+    ResearchPlanArtifact,
+    ResearchTask,
+)
+
+
+def methodology() -> MethodologyTrace:
+    return MethodologyTrace(
+        sop_id="trident-sop",
+        sop_name="Trident行业研究方法",
+        sop_version="3.0",
+        sop_hash="test-hash",
+        rule_ids=["R01", "R02"],
+    )
+
+
+class FakeResearchPlanningService:
+    def generate_brief(self, project):
+        return ResearchBriefArtifact(
+            decision_statement="明确全球及中国IVD市场的增长与竞争判断",
+            original_prompt=project.research_objective,
+            market_definition=MarketDefinition(
+                core_market="体外诊断市场",
+                product_scope="试剂、仪器、耗材与配套软件",
+                customer_scope="医疗机构、第三方实验室和公共卫生机构",
+                geography_scope=project.region,
+                value_chain_scope="上游原材料至终端应用",
+                time_scope=project.time_horizon,
+                inclusions=["免疫诊断", "分子诊断", "POCT"],
+                exclusions=["治疗性药物", "医学影像设备"],
+            ),
+            key_questions=["市场规模与增长如何？", "主要竞争者如何布局？"],
+            information_gaps=["细分赛道口径仍需验证"],
+            hypotheses=["基层诊疗和国产替代将驱动增长"],
+            clarification_questions=["是否包含港澳市场？"],
+            confidence_note="范围可用于启动研究，关键口径需人工确认。",
+            methodology=methodology(),
+        )
+
+    def generate_plan(self, project, brief):
+        return ResearchPlanArtifact(
+            plan_summary="围绕市场、竞争和未来趋势形成可追溯研究底稿。",
+            tasks=[
+                ResearchTask(
+                    task_id="T01",
+                    title="市场定义与规模",
+                    objective="统一市场边界并测算规模",
+                    questions=["市场包含哪些细分赛道？"],
+                    hypotheses=["市场保持结构性增长"],
+                    information_needs=["市场规模", "细分结构"],
+                    preferred_sources=["监管机构", "公司披露"],
+                    search_queries=["全球 中国 IVD 市场规模 2026"],
+                    deliverables=["市场定义", "规模测算"],
+                    evidence_standard="至少两类独立来源相互校验",
+                    validation_gate="人工确认口径与证据可用性",
+                    prompt_question_ids=["Q01"],
+                )
+            ],
+            human_review_gates=["市场口径确认", "证据可用性确认"],
+            unresolved_gaps=["港澳市场是否纳入"],
+            sop_coverage={"industry_definition": ["T01"]},
+            prompt_question_coverage={"Q01": ["T01"]},
+            methodology=methodology(),
+        )
 
 
 def test_health_does_not_require_ai_credentials() -> None:
@@ -84,10 +152,10 @@ def test_project_crud_is_available_without_loading_ai_runtime(
             )
             assert scope.status_code == 200
             confirmed = scope.json()
-            assert confirmed["current_step"] == "research_planning"
+            assert confirmed["current_step"] == "research_brief"
             assert confirmed["market_scope_confirmed_at"] is not None
-            assert confirmed["workflow_status"]["research_brief"] == "completed"
-            assert confirmed["workflow_status"]["research_planning"] == "ready"
+            assert confirmed["workflow_status"]["research_brief"] == "ready"
+            assert confirmed["workflow_status"]["research_planning"] == "not_started"
 
             persisted = client.get(f"/v1/projects/{project['project_id']}").json()
             assert persisted["research_objective"].endswith("主要玩家的竞争位置")
@@ -96,6 +164,99 @@ def test_project_crud_is_available_without_loading_ai_runtime(
             deleted = client.delete(f"/v1/projects/{project['project_id']}")
             assert deleted.status_code == 204
             assert client.get(f"/v1/projects/{project['project_id']}").status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize("research_path", ["research_build_first", "report_review_first"])
+def test_research_brief_and_plan_workflow_persists_for_both_paths(
+    tmp_path, research_path: str
+) -> None:
+    services = SimpleNamespace(research_planning=FakeResearchPlanningService())
+    research = ResearchApplication(
+        projects=SQLiteProjectRepository(tmp_path / f"{research_path}.db"),
+        services=services,
+    )
+    app.dependency_overrides[get_research_application] = lambda: research
+    payload = {
+        "project_name": "全球及中国IVD市场研究",
+        "industry": "IVD",
+        "region": "全球及中国",
+        "research_objective": "研究市场现状、未来十年发展和竞争格局",
+        "time_horizon": "2026-2036",
+        "research_path": research_path,
+    }
+
+    try:
+        with TestClient(app) as client:
+            project = client.post("/v1/projects", json=payload).json()
+            project_url = f"/v1/projects/{project['project_id']}"
+
+            blocked = client.post(f"{project_url}/research-brief")
+            assert blocked.status_code == 409
+
+            scope_payload = {
+                **{key: payload[key] for key in (
+                    "project_name", "industry", "region", "research_objective", "time_horizon"
+                )},
+                "output_language": "简体中文",
+                "confirm": True,
+            }
+            assert client.patch(f"{project_url}/scope", json=scope_payload).status_code == 200
+
+            generated = client.post(f"{project_url}/research-brief")
+            assert generated.status_code == 200
+            brief = generated.json()["research_brief_artifact"]
+            assert brief["human_confirmed"] is False
+            assert generated.json()["workflow_status"]["research_brief"] == "needs_review"
+
+            review_payload = {
+                "decision_statement": brief["decision_statement"],
+                "market_definition": brief["market_definition"],
+                "key_questions": brief["key_questions"],
+                "information_gaps": brief["information_gaps"],
+                "hypotheses": brief["hypotheses"],
+                "clarification_questions": brief["clarification_questions"],
+                "clarification_responses": {"是否包含港澳市场？": "包含"},
+                "confidence_note": brief["confidence_note"],
+                "confirm": True,
+            }
+            reviewed = client.patch(f"{project_url}/research-brief", json=review_payload)
+            assert reviewed.status_code == 200
+            assert reviewed.json()["research_brief_artifact"]["human_confirmed"] is True
+            assert reviewed.json()["workflow_status"]["research_planning"] == "ready"
+
+            planned = client.post(f"{project_url}/research-plan")
+            assert planned.status_code == 200
+            assert planned.json()["research_plan_artifact"]["tasks"][0]["task_id"] == "T01"
+            assert planned.json()["workflow_status"]["research_planning"] == "needs_review"
+
+            confirmed = client.patch(
+                f"{project_url}/research-plan", json={"confirm": True}
+            )
+            assert confirmed.status_code == 200
+            body = confirmed.json()
+            assert body["research_plan_artifact"]["human_confirmed"] is True
+            assert body["workflow_status"]["research_planning"] == "completed"
+            assert body["workflow_status"]["evidence_collection"] == "ready"
+            expected_step = (
+                "decision_report" if research_path == "report_review_first" else "evidence_collection"
+            )
+            assert body["current_step"] == expected_step
+
+            persisted = client.get(project_url).json()
+            assert persisted["research_brief_artifact"]["human_confirmed"] is True
+            assert persisted["research_plan_artifact"]["human_confirmed"] is True
+
+            # Reopening and reconfirming an unchanged scope must preserve all
+            # downstream work and the current workflow position.
+            reconfirmed = client.patch(f"{project_url}/scope", json=scope_payload)
+            assert reconfirmed.status_code == 200
+            reconfirmed_body = reconfirmed.json()
+            assert reconfirmed_body["current_step"] == expected_step
+            assert reconfirmed_body["research_brief_artifact"]["human_confirmed"] is True
+            assert reconfirmed_body["research_plan_artifact"]["human_confirmed"] is True
+            assert reconfirmed_body["workflow_status"]["research_planning"] == "completed"
     finally:
         app.dependency_overrides.clear()
 
