@@ -1,30 +1,41 @@
-FROM python:3.12-slim
+# CloudBase build entrypoint. Keep this file at the repository root because
+# CloudBase resolves the Dockerfile relative to the selected build directory.
+FROM node:22-bookworm-slim AS web-dependencies
+WORKDIR /build/web
+RUN corepack enable
+COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PORT=8000 \
-    WEB_CONCURRENCY=1
+FROM node:22-bookworm-slim AS web-builder
+WORKDIR /build/web
+RUN corepack enable
+COPY --from=web-dependencies /build/web/node_modules ./node_modules
+COPY web/ ./
+ENV TRIDENT_API_URL=http://127.0.0.1:8000
+RUN pnpm build
 
+FROM node:22-bookworm-slim AS node-runtime
+
+FROM python:3.12-slim-bookworm AS runtime
 WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    TRIDENT_ENV=production \
+    TRIDENT_API_URL=http://127.0.0.1:8000 \
+    PORT=3000
 
 RUN apt-get update \
-    && apt-get install --no-install-recommends -y fonts-noto-cjk \
+    && apt-get install -y --no-install-recommends fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 COPY requirements.txt ./
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
-RUN useradd --create-home --uid 10001 trident \
-    && mkdir -p /app/data \
-    && chown -R trident:trident /app
+COPY --from=web-builder /build/web/.next/standalone ./cloudbase-web
+COPY --from=web-builder /build/web/.next/static ./cloudbase-web/.next/static
+COPY deploy/cloudbase/start.sh /app/deploy/cloudbase/start.sh
 
-USER trident
-
-EXPOSE 8000
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD python -c "import json, os, urllib.request; response=urllib.request.urlopen('http://127.0.0.1:' + os.getenv('PORT', '8000') + '/ready', timeout=4); assert json.load(response)['status'] == 'ready'"
-
-CMD ["python", "scripts/start_api.py"]
+EXPOSE 3000
+CMD ["/bin/sh", "/app/deploy/cloudbase/start.sh"]

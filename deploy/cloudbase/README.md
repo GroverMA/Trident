@@ -24,12 +24,12 @@ process inside the same container.
 ## Required environment variables
 
 - `TRIDENT_ENV=production`
-- `DATABASE_URL=mysql+pymysql://USER:PASSWORD@HOST:PORT/DATABASE?charset=utf8mb4`
-- `HKGAI_API_KEY`
-- `HKGAI_MODEL`
-- `HKGAI_BASE_URL`
-- `SEARCH_AGENT_APP_NAME`
-- `SEARCH_AGENT_APP_KEY`
+- `DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:PORT/DATABASE?sslmode=require`
+- `HKGAI_MODEL_API_KEY`
+- `HKGAI_MODEL_NAME=t2_hkgai-v3_fp8_1m_e7`
+- `HKGAI_MODEL_BASE_URL=https://test-new-api.hkchat.app`
+- `HKGAI_APP_NAME`
+- `HKGAI_APP_KEY`
 
 Keep credentials in CloudBase environment variables. Never commit them to Git.
 
