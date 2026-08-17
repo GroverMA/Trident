@@ -53,6 +53,7 @@ def test_sqlite_repository_updates_payload_and_orders_by_update_time(tmp_path) -
 
 
 def test_production_repository_requires_database_url(monkeypatch) -> None:
+    monkeypatch.delenv("TRIDENT_DATABASE_MODE", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("TRIDENT_ENV", "production")
 
@@ -63,6 +64,7 @@ def test_production_repository_requires_database_url(monkeypatch) -> None:
 def test_development_uses_local_sqlite_when_database_url_is_absent(
     monkeypatch, tmp_path
 ) -> None:
+    monkeypatch.delenv("TRIDENT_DATABASE_MODE", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("TRIDENT_ENV", "development")
     monkeypatch.setenv("TRIDENT_DATABASE_PATH", str(tmp_path / "local.db"))
@@ -73,6 +75,7 @@ def test_development_uses_local_sqlite_when_database_url_is_absent(
 def test_default_environment_keeps_local_development_runnable(
     monkeypatch, tmp_path
 ) -> None:
+    monkeypatch.delenv("TRIDENT_DATABASE_MODE", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("TRIDENT_ENV", raising=False)
     monkeypatch.setenv("TRIDENT_DATABASE_PATH", str(tmp_path / "default.db"))
@@ -81,6 +84,7 @@ def test_default_environment_keeps_local_development_runnable(
 
 
 def test_unknown_environment_is_rejected(monkeypatch) -> None:
+    monkeypatch.delenv("TRIDENT_DATABASE_MODE", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("TRIDENT_ENV", "prodution")
 
@@ -99,6 +103,7 @@ def test_mysql_adapter_rejects_non_mysql_urls() -> None:
 
 
 def test_factory_selects_mysql_adapter(monkeypatch) -> None:
+    monkeypatch.delenv("TRIDENT_DATABASE_MODE", raising=False)
     sentinel = object()
     monkeypatch.setenv("TRIDENT_ENV", "production")
     monkeypatch.setenv("DATABASE_URL", "mysql://user:password@db.example/trident")
@@ -108,3 +113,30 @@ def test_factory_selects_mysql_adapter(monkeypatch) -> None:
     )
 
     assert create_project_repository() is sentinel
+
+
+def test_production_explicit_sqlite_demo_uses_sqlite(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("TRIDENT_ENV", "production")
+    monkeypatch.setenv("TRIDENT_DATABASE_MODE", "sqlite")
+    monkeypatch.setenv("TRIDENT_DATABASE_PATH", str(tmp_path / "demo.db"))
+
+    assert isinstance(create_project_repository(), SQLiteProjectRepository)
+
+
+def test_explicit_sqlite_rejects_database_url(monkeypatch) -> None:
+    monkeypatch.setenv("TRIDENT_ENV", "production")
+    monkeypatch.setenv("TRIDENT_DATABASE_MODE", "sqlite")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://example.invalid/trident")
+
+    with pytest.raises(PersistenceConfigurationError, match="Remove DATABASE_URL"):
+        create_project_repository()
+
+
+def test_database_url_mode_requires_url(monkeypatch) -> None:
+    monkeypatch.setenv("TRIDENT_ENV", "production")
+    monkeypatch.setenv("TRIDENT_DATABASE_MODE", "database_url")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    with pytest.raises(PersistenceConfigurationError, match="DATABASE_URL is required"):
+        create_project_repository()

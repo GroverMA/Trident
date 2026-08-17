@@ -23,8 +23,23 @@ def create_project_repository() -> ProjectRepository:
             "TRIDENT_ENV must be development, test, staging, or production"
         )
 
+    database_mode = os.getenv("TRIDENT_DATABASE_MODE", "").strip().lower()
+    if database_mode not in {"", "sqlite", "database_url"}:
+        raise PersistenceConfigurationError(
+            "TRIDENT_DATABASE_MODE must be sqlite or database_url"
+        )
+
     database_url = os.getenv("DATABASE_URL", "").strip()
-    if database_url:
+    if database_mode == "sqlite" and database_url:
+        raise PersistenceConfigurationError(
+            "Remove DATABASE_URL when TRIDENT_DATABASE_MODE=sqlite"
+        )
+    if database_mode == "database_url" and not database_url:
+        raise PersistenceConfigurationError(
+            "DATABASE_URL is required when TRIDENT_DATABASE_MODE=database_url"
+        )
+
+    if database_url and database_mode != "sqlite":
         if database_url.startswith(
             ("postgres://", "postgresql://", "postgresql+psycopg://")
         ):
@@ -35,10 +50,10 @@ def create_project_repository() -> ProjectRepository:
             "DATABASE_URL must be a PostgreSQL or MySQL connection string"
         )
 
-    if environment in {"staging", "production"}:
+    if environment in {"staging", "production"} and database_mode != "sqlite":
         raise PersistenceConfigurationError(
             f"DATABASE_URL is required when TRIDENT_ENV={environment}; "
-            "production-like environments never fall back to SQLite"
+            "set TRIDENT_DATABASE_MODE=sqlite explicitly for a single-instance demo"
         )
 
     # Local development and automated tests must remain runnable without cloud
