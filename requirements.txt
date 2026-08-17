@@ -3,6 +3,7 @@ fastapi>=0.115,<1
 alembic>=1.16,<2
 pydantic>=2.8,<3
 psycopg[binary]>=3.2,<4
+pymysql>=1.1,<2
 python-dotenv>=1.0,<2
 requests>=2.32,<3
 sqlalchemy>=2.0,<3

@@ -15,10 +15,14 @@ if config.config_file_name is not None:
 database_url = os.environ.get("DATABASE_URL")
 if not database_url:
     raise RuntimeError("DATABASE_URL is required for database migrations")
-config.set_main_option(
-    "sqlalchemy.url",
-    database_url.replace("postgresql://", "postgresql+psycopg://", 1),
-)
+normalized_url = database_url
+if normalized_url.startswith("postgres://"):
+    normalized_url = normalized_url.replace("postgres://", "postgresql+psycopg://", 1)
+elif normalized_url.startswith("postgresql://"):
+    normalized_url = normalized_url.replace("postgresql://", "postgresql+psycopg://", 1)
+elif normalized_url.startswith("mysql://"):
+    normalized_url = normalized_url.replace("mysql://", "mysql+pymysql://", 1)
+config.set_main_option("sqlalchemy.url", normalized_url)
 target_metadata = metadata
 
 
@@ -54,4 +58,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-

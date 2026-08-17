@@ -1,6 +1,6 @@
 """Database schema shared by production adapters and migrations."""
 
-from sqlalchemy import Column, DateTime, MetaData, String, Table
+from sqlalchemy import JSON, Column, DateTime, MetaData, String, Table
 from sqlalchemy.dialects.postgresql import JSONB
 
 metadata = MetaData()
@@ -14,5 +14,5 @@ projects_table = Table(
     Column("region", String(300), nullable=False),
     Column("current_step", String(100), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False, index=True),
-    Column("payload_json", JSONB, nullable=False),
+    Column("payload_json", JSON().with_variant(JSONB, "postgresql"), nullable=False),
 )

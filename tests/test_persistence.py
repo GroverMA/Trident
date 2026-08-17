@@ -7,6 +7,7 @@ from src.persistence.factory import (
     create_project_repository,
 )
 from src.persistence.postgres_projects import PostgresProjectRepository
+from src.persistence.mysql_projects import MySQLProjectRepository
 from src.persistence.sqlite_projects import SQLiteProjectRepository
 from src.state.project import ProjectState
 
@@ -90,3 +91,20 @@ def test_unknown_environment_is_rejected(monkeypatch) -> None:
 def test_postgres_adapter_rejects_non_postgres_urls() -> None:
     with pytest.raises(ValueError, match="requires a PostgreSQL URL"):
         PostgresProjectRepository("sqlite:///unsafe.db")
+
+
+def test_mysql_adapter_rejects_non_mysql_urls() -> None:
+    with pytest.raises(ValueError, match="requires a MySQL URL"):
+        MySQLProjectRepository("sqlite:///unsafe.db")
+
+
+def test_factory_selects_mysql_adapter(monkeypatch) -> None:
+    sentinel = object()
+    monkeypatch.setenv("TRIDENT_ENV", "production")
+    monkeypatch.setenv("DATABASE_URL", "mysql://user:password@db.example/trident")
+    monkeypatch.setattr(
+        "src.persistence.factory.MySQLProjectRepository",
+        lambda database_url: sentinel,
+    )
+
+    assert create_project_repository() is sentinel

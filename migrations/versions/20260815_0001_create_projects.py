@@ -8,7 +8,6 @@ from typing import Sequence
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 revision: str = "20260815_0001"
 down_revision: str | None = None
@@ -25,7 +24,7 @@ def upgrade() -> None:
         sa.Column("region", sa.String(length=300), nullable=False),
         sa.Column("current_step", sa.String(length=100), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("payload_json", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("payload_json", sa.JSON(), nullable=False),
         sa.PrimaryKeyConstraint("project_id"),
     )
     op.create_index(

@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 from src.persistence.postgres_projects import PostgresProjectRepository
+from src.persistence.mysql_projects import MySQLProjectRepository
 from src.persistence.projects import ProjectRepository
 from src.persistence.sqlite_projects import SQLiteProjectRepository
 
@@ -24,13 +25,15 @@ def create_project_repository() -> ProjectRepository:
 
     database_url = os.getenv("DATABASE_URL", "").strip()
     if database_url:
-        if not database_url.startswith(
+        if database_url.startswith(
             ("postgres://", "postgresql://", "postgresql+psycopg://")
         ):
-            raise PersistenceConfigurationError(
-                "DATABASE_URL must be a PostgreSQL connection string"
-            )
-        return PostgresProjectRepository(database_url)
+            return PostgresProjectRepository(database_url)
+        if database_url.startswith(("mysql://", "mysql+pymysql://")):
+            return MySQLProjectRepository(database_url)
+        raise PersistenceConfigurationError(
+            "DATABASE_URL must be a PostgreSQL or MySQL connection string"
+        )
 
     if environment in {"staging", "production"}:
         raise PersistenceConfigurationError(
