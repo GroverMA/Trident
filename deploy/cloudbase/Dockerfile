@@ -33,6 +33,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 COPY --from=web-builder /build/web/.next/standalone ./cloudbase-web
 COPY --from=web-builder /build/web/.next/static ./cloudbase-web/.next/static
+# Next.js standalone output created by pnpm keeps symlinks into pnpm's virtual
+# store. Copy the store as well so those links still resolve at runtime.
+COPY --from=web-builder /build/web/node_modules/.pnpm ./cloudbase-web/node_modules/.pnpm
 COPY deploy/cloudbase/start.sh /app/deploy/cloudbase/start.sh
 
 EXPOSE 3000
