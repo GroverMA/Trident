@@ -117,6 +117,48 @@ export interface EvidenceCollectionArtifact {
   updated_at: string;
 }
 
+export type AnalysisReviewStatus = "needs_review" | "accepted" | "rejected";
+
+export interface AnalysisFinding {
+  finding_id: string;
+  subject: string;
+  finding_type: string;
+  statement: string;
+  mechanism: string;
+  evidence_ids: string[];
+  counter_evidence_ids: string[];
+  comparison_dimensions: Record<string, string>;
+  factor_role?: string | null;
+  impact_direction?: string | null;
+  confidence: number;
+  scope: string;
+  uncertainty: string;
+  boundary_condition: string;
+  review_status: AnalysisReviewStatus;
+  reviewer_note?: string | null;
+}
+
+export interface IndustryAnalysisModule {
+  module_id: string;
+  title: string;
+  executive_summary: string;
+  findings: AnalysisFinding[];
+  evidence_gaps: string[];
+  rejected_questions: string[];
+}
+
+export interface IndustryAnalysisArtifact {
+  artifact_id: string;
+  evidence_collection_id: string;
+  input_evidence_ids: string[];
+  modules: IndustryAnalysisModule[];
+  company_implications: AnalysisFinding[];
+  cross_module_conflicts: string[];
+  overall_evidence_limitations: string[];
+  human_confirmed: boolean;
+  updated_at: string;
+}
+
 export interface ProjectSummary {
   project_id: string;
   project_name: string;
@@ -137,6 +179,7 @@ export interface ProjectSummary {
   research_brief_artifact?: ResearchBriefArtifact | null;
   research_plan_artifact?: ResearchPlanArtifact | null;
   evidence_collection_artifact?: EvidenceCollectionArtifact | null;
+  industry_analysis_artifact?: IndustryAnalysisArtifact | null;
   created_at: string;
   updated_at: string;
 }

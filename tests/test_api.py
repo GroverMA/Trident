@@ -15,7 +15,19 @@ from src.models.research import (
     ResearchPlanArtifact,
     ResearchTask,
 )
-from src.models.evidence import EvidenceItem, EvidenceKind, TaskEvidenceRun
+from src.models.evidence import (
+    EvidenceCollectionArtifact,
+    EvidenceItem,
+    EvidenceKind,
+    EvidenceReviewStatus,
+    TaskEvidenceRun,
+)
+from src.models.analysis import (
+    AnalysisFinding,
+    AnalysisFindingType,
+    IndustryAnalysisArtifact,
+    IndustryAnalysisModule,
+)
 
 
 def methodology() -> MethodologyTrace:
@@ -99,6 +111,45 @@ class FakeEvidenceCollectionService:
                     qa_score=92,
                 )
             ],
+        )
+
+
+class FakeIndustryAnalysisService:
+    def generate(self, project, evidence):
+        accepted_id = next(
+            item.evidence_id
+            for item in evidence.evidence
+            if item.review_status == EvidenceReviewStatus.ACCEPTED
+        )
+        modules = []
+        for module_id, title in (
+            ("market_value_chain", "市场定义、行业赛道与价值链"),
+            ("market_status", "市场现状、规模与结构"),
+            ("competitive_landscape", "竞争格局与可比公司"),
+            ("drivers_constraints", "发展驱动、制约与关键条件"),
+            ("commercial_logic", "商业逻辑与客户需求"),
+        ):
+            modules.append(IndustryAnalysisModule(
+                module_id=module_id,
+                title=title,
+                executive_summary=f"{title}摘要",
+                findings=[AnalysisFinding(
+                    subject=project.industry,
+                    finding_type=AnalysisFindingType.ANALYST_INFERENCE,
+                    statement=f"{title}形成可审阅判断",
+                    mechanism="由人工接受证据支持",
+                    evidence_ids=[accepted_id],
+                    confidence=0.8,
+                    scope=project.region,
+                    uncertainty="样本有限",
+                    boundary_condition="市场口径变化时需重估",
+                )],
+            ))
+        return IndustryAnalysisArtifact(
+            evidence_collection_id=evidence.artifact_id,
+            input_evidence_ids=[accepted_id],
+            modules=modules,
+            methodology=methodology(),
         )
 
 def test_health_does_not_require_ai_credentials() -> None:
@@ -363,6 +414,88 @@ def test_build_first_evidence_gate_is_service_backed_and_persisted(tmp_path) -> 
 
             persisted = client.get(project_url).json()
             assert persisted["evidence_collection_artifact"]["task_runs"][0]["evidence"][0]["reviewer_note"] == "已核对来源"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_industry_analysis_generation_and_human_gate_are_persisted(tmp_path) -> None:
+    repository = SQLiteProjectRepository(tmp_path / "analysis-api.db")
+    item = EvidenceItem(
+        task_id="T01",
+        source_id="SRC-analysis",
+        kind=EvidenceKind.DATA,
+        statement="市场保持结构性增长",
+        supporting_excerpt="市场保持结构性增长",
+        geographic_scope="中国",
+        market_scope="IVD",
+        supports_or_challenges="supports",
+        model_confidence=0.9,
+        prompt_relevance=0.9,
+        qa_score=90,
+        review_status=EvidenceReviewStatus.ACCEPTED,
+    )
+    evidence = EvidenceCollectionArtifact(
+        research_plan_id="PLAN-1",
+        task_runs=[TaskEvidenceRun(
+            task_id="T01",
+            task_title="市场分析",
+            queries_used=["IVD市场"],
+            evidence=[item],
+        )],
+        human_confirmed=True,
+    )
+    statuses = dict(ProjectState(
+        project_name="占位",
+        industry="IVD",
+        region="中国",
+        research_objective="研究市场",
+        time_horizon="2026-2036",
+    ).workflow_status)
+    statuses["evidence_collection"] = WorkflowStatus.COMPLETED
+    statuses["evidence_qa"] = WorkflowStatus.COMPLETED
+    statuses["industry_analysis"] = WorkflowStatus.READY
+    project = repository.save(ProjectState(
+        project_name="中国IVD行业分析",
+        industry="IVD",
+        region="中国",
+        research_objective="研究市场结构和竞争格局",
+        time_horizon="2026-2036",
+        evidence_collection_artifact=evidence,
+        workflow_status=statuses,
+        current_step="industry_analysis",
+    ))
+    research = ResearchApplication(
+        projects=repository,
+        services=SimpleNamespace(industry_analysis=FakeIndustryAnalysisService()),
+    )
+    app.dependency_overrides[get_research_application] = lambda: research
+    try:
+        with TestClient(app) as client:
+            url = f"/v1/projects/{project.project_id}/industry-analysis"
+            generated = client.post(url)
+            assert generated.status_code == 200
+            body = generated.json()
+            findings = [
+                finding
+                for module in body["industry_analysis_artifact"]["modules"]
+                for finding in module["findings"]
+            ]
+            assert len(findings) == 5
+            assert body["workflow_status"]["industry_analysis"] == "needs_review"
+
+            reviewed = client.patch(url, json={
+                "decisions": [
+                    {"finding_id": finding["finding_id"], "status": "accepted"}
+                    for finding in findings
+                ],
+                "confirm": True,
+            })
+            assert reviewed.status_code == 200
+            result = reviewed.json()
+            assert result["industry_analysis_artifact"]["human_confirmed"] is True
+            assert result["workflow_status"]["industry_analysis"] == "completed"
+            assert result["workflow_status"]["future_intelligence"] == "ready"
+            assert result["current_step"] == "future_intelligence"
     finally:
         app.dependency_overrides.clear()
 

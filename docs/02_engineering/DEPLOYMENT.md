@@ -28,10 +28,14 @@
 - 2026-08-18 公网验收：首页与 `/api/projects` 均返回 HTTP 200。
 - FastAPI、数据库和长任务使用独立后端服务。
 - Vercel 版本与中国版本共用同一代码库，通过环境配置区分。
+- 当前融资与产品验证阶段以 Vercel 为主 Demo；可将自有品牌子域名通过 Vercel 提供的
+  CNAME 记录接入。自有域名只改变品牌入口，不把 Vercel 转换为中国大陆节点。
 
 ### China Demo
 
 - 腾讯云 CloudBase 云托管容器。
+- 2026-08-18 产品决策：当前阶段降级为中国大陆商业化部署预研和未来实现参考，不作为
+  融资 Demo 的发布阻塞条件；仍禁止建立独立业务分支或删减共享研究能力。
 - 当前默认域名：`https://trident-web-298210-7-1470031105.sh.run.tcloudbase.com`。
 - 仓库根目录 `Dockerfile` 是 CloudBase 实际构建入口，并与
   `deploy/cloudbase/Dockerfile` 保持同步；容器同时启动 Next.js（公网 3000）和

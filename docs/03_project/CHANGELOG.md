@@ -11,6 +11,7 @@
 - 共享 Web 研究流程的 Evidence Collection、Evidence Matrix 和 Gate 1 人工审核。
 - 前置的构建式/审阅式研究方式选择页，以及共享项目管理侧栏。
 - FastAPI 安全回退接口、Gate 1 证据缺口处理契约和手机端项目导航抽屉。
+- 共享 Web 研究流程的 Industry Analysis 五模块生成、Finding 接受/拒绝、审核备注与人工确认 Gate。
 
 ### Changed
 
@@ -18,6 +19,7 @@
   和版本，区域差异仅由部署配置与基础设施适配表达。
 - 构建式研究工作台恢复为 Streamlit 同源的八节点英文流程；Gate 0 恢复原 Prompt、AI 术语理解、完整市场边界和逐项人工确认。
 - Web 字体切换为 Streamlit 同源的 Source Sans 系列优先栈，桌面密度与手机端应用壳层按原版重新校准。
+- 当前融资与产品验证阶段以 Vercel 和后续自有域名为主 Demo 通路；CloudBase 保留为中国大陆商业化部署预研，不再阻塞当前 Demo 功能迁移。
 
 ### Improved
 

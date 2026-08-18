@@ -353,6 +353,20 @@ a { color: inherit; text-decoration: none; }
 .evidenceBulkActions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
 .evidenceStandard { flex-direction: column; }
 .evidenceStandard a { color: #0068c9; overflow-wrap: anywhere; }
+.analysisFinding { margin: 18px 0; padding: 20px; border: 1px solid #d9e1e5; border-radius: 12px; background: #fff; }
+.analysisFinding h3 { margin: 14px 0 10px; font-size: 18px; line-height: 1.55; }
+.analysisFinding p { color: #405267; line-height: 1.75; }
+.analysisFindingHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.analysisFindingHeader div { display: flex; flex-direction: column; gap: 5px; }
+.analysisFindingHeader span { color: #367483; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.analysisFindingHeader b { flex: 0 0 auto; color: #526579; font-size: 12px; }
+.analysisDimensions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 14px 0; }
+.analysisDimensions div { padding: 10px 12px; border-radius: 8px; background: #f5f8fa; }
+.analysisDimensions dt { color: #6b7c8f; font-size: 11px; }
+.analysisDimensions dd { margin: 5px 0 0; color: #172235; font-size: 13px; line-height: 1.5; }
+.analysisMeta { display: grid; gap: 6px; margin: 14px 0; padding: 12px 0; border-top: 1px solid #e5eaed; color: #68798c; font-size: 12px; line-height: 1.55; }
+.analysisBoundary { margin: 12px 0; padding: 14px 16px; border-left: 3px solid #88a9b2; background: #f5f9fa; color: #4f6173; }
+.analysisBoundary ul { margin-bottom: 0; }
 
 @media (max-width: 1040px) {
   .appShell { grid-template-columns: 230px minmax(0, 1fr); }
@@ -420,4 +434,6 @@ a { color: inherit; text-decoration: none; }
   .rewindPanel button { grid-column: 1; grid-row: auto; width: 100%; min-width: 0; }
   .gapResolution { align-items: flex-start; flex-direction: column; }
   .evidenceBulkActions { grid-template-columns: 1fr; }
+  .analysisFindingHeader { flex-direction: column; gap: 8px; }
+  .analysisDimensions { grid-template-columns: 1fr; }
 }

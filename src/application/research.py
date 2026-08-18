@@ -7,6 +7,7 @@ from typing import Callable, Mapping
 
 from src.core.container import ServiceContainer
 from src.models.evidence import EvidenceReviewStatus
+from src.models.analysis import AnalysisReviewStatus
 from src.models.research import MarketDefinition, ResearchBriefArtifact
 from src.persistence.projects import ProjectRepository
 from src.state.project import ProjectState, WorkflowStatus, default_workflow
@@ -15,6 +16,10 @@ from src.services.evidence_collection import (
     evidence_gate_reasons,
     review_evidence,
     upsert_task_run,
+)
+from src.services.industry_analysis import (
+    analysis_gate_reasons,
+    review_analysis_finding,
 )
 
 
@@ -387,6 +392,79 @@ class ResearchApplication:
             project.model_copy(
                 update={
                     "evidence_collection_artifact": reviewed,
+                    "workflow_status": statuses,
+                    "current_step": current_step,
+                    "updated_at": datetime.now(UTC),
+                }
+            )
+        )
+
+    def generate_industry_analysis(self, project_id: str) -> ProjectState:
+        """Generate the five evidence-grounded current-industry modules."""
+
+        project = self.get_project(project_id)
+        evidence = project.evidence_collection_artifact
+        if evidence is None or not evidence.human_confirmed:
+            raise ResearchWorkflowError("Gate 1证据必须先经过人工确认")
+        analysis = self.services.industry_analysis.generate(project, evidence)
+        statuses = dict(project.workflow_status)
+        statuses["industry_analysis"] = WorkflowStatus.NEEDS_REVIEW
+        statuses["future_intelligence"] = WorkflowStatus.NOT_STARTED
+        return self.projects.save(
+            project.model_copy(
+                update={
+                    "industry_analysis_artifact": analysis,
+                    "future_intelligence_artifact": None,
+                    "general_report_artifact": None,
+                    "workflow_status": statuses,
+                    "current_step": "industry_analysis",
+                    "updated_at": datetime.now(UTC),
+                }
+            )
+        )
+
+    def review_industry_analysis(
+        self,
+        project_id: str,
+        *,
+        decisions: list[tuple[str, AnalysisReviewStatus, str | None]],
+        confirm: bool,
+    ) -> ProjectState:
+        """Persist finding decisions and open Future Intelligence at the gate."""
+
+        project = self.get_project(project_id)
+        analysis = project.industry_analysis_artifact
+        evidence = project.evidence_collection_artifact
+        if analysis is None or evidence is None:
+            raise ResearchWorkflowError("请先生成行业分析")
+        if analysis.evidence_collection_id != evidence.artifact_id:
+            raise ResearchWorkflowError("Evidence Matrix已经变化，请重新生成行业分析")
+
+        reviewed = analysis
+        for finding_id, decision, note in decisions:
+            reviewed = review_analysis_finding(reviewed, finding_id, decision, note)
+
+        statuses = dict(project.workflow_status)
+        current_step = "industry_analysis"
+        if confirm:
+            reasons = analysis_gate_reasons(reviewed)
+            if reasons:
+                raise ResearchWorkflowError("；".join(reasons))
+            reviewed = reviewed.model_copy(
+                update={"human_confirmed": True, "updated_at": datetime.now(UTC)}
+            )
+            statuses["industry_analysis"] = WorkflowStatus.COMPLETED
+            statuses["future_intelligence"] = WorkflowStatus.READY
+            current_step = "future_intelligence"
+        else:
+            statuses["industry_analysis"] = WorkflowStatus.NEEDS_REVIEW
+
+        return self.projects.save(
+            project.model_copy(
+                update={
+                    "industry_analysis_artifact": reviewed,
+                    "future_intelligence_artifact": None,
+                    "general_report_artifact": None,
                     "workflow_status": statuses,
                     "current_step": current_step,
                     "updated_at": datetime.now(UTC),

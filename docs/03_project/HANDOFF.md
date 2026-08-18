@@ -2,8 +2,8 @@
 
 - **最后更新**：2026-08-18
 - **当前仓库**：Trident
-- **当前分支**：`codex/cloudbase-demo`
-- **当前里程碑**：海外与中国大陆双区域 Demo 基线
+- **当前分支**：`main`
+- **当前里程碑**：Vercel 主 Demo 完整研究流程迁移；CloudBase 商业化部署预研
 
 ## 最近完成
 
@@ -29,13 +29,16 @@
   假失败；项目状态现在由 API 返回值直接更新。
 - 手机端项目管理已改为可开启/关闭的抽屉导航，桌面端保持固定项目栏。
 - 建立本套产品、研究、工程、项目治理和 AI 记忆文档。
+- Industry Analysis 已迁入共享 Application/FastAPI/Next.js：五个模块、Finding 证据追溯、
+  接受/拒绝、审核备注和人工确认 Gate 均持久化；确认后开放 Future Intelligence。
 
 ## 当前重点
 
-完成本轮 Vercel/CloudBase 同提交发布后，继续迁移 Industry Analysis、Future Intelligence、Gate 2 和 General Report，随后把长任务迁移为可恢复的异步 Job。
+继续迁移 Future Intelligence、Gate 2 和 General Report，随后把长任务迁移为可恢复的异步 Job。
 
-所有迁移和新增功能必须同时进入海外 Vercel 与大陆 CloudBase。二者是同一产品的区域部署，
-不是独立版本；功能、研究流程、API/数据契约、Skill 与报告标准不得分叉。
+所有迁移和新增功能仍必须保持单一 `main`、共享功能、研究流程、API/数据契约、Skill 与
+报告标准。当前融资 Demo 只以 Vercel/自有域名作为上线验收通路；CloudBase 不再阻塞当前
+Demo，但其部署适配继续保留，未来进入中国大陆商业化阶段时恢复区域发布验收。
 
 ## 待完成
 

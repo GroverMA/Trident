@@ -18,9 +18,11 @@ from src.config import ConfigurationError
 from src.core.container import ServiceContainer
 from src.models.research import MarketDefinition
 from src.models.evidence import EvidenceReviewStatus
+from src.models.analysis import AnalysisReviewStatus
 from src.persistence.factory import create_project_repository
 from src.providers.base import ProviderError
 from src.services.research_planning import SOPComplianceError
+from src.services.industry_analysis import IndustryAnalysisError
 from src.services.reviewer_orchestration import ReviewerPipelineError
 from src.state.project import (
     ProjectState,
@@ -120,6 +122,24 @@ class EvidenceReviewRequest(BaseModel):
     coverage_gap_resolution: str | None = None
     coverage_gap_user_input: str | None = None
     coverage_gaps_acknowledged: bool = False
+
+
+class AnalysisDecision(BaseModel):
+    finding_id: str
+    status: AnalysisReviewStatus
+    note: str | None = None
+
+    @field_validator("status")
+    @classmethod
+    def require_human_decision(cls, value: AnalysisReviewStatus) -> AnalysisReviewStatus:
+        if value not in {AnalysisReviewStatus.ACCEPTED, AnalysisReviewStatus.REJECTED}:
+            raise ValueError("analysis decision must be accepted or rejected")
+        return value
+
+
+class IndustryAnalysisReviewRequest(BaseModel):
+    decisions: list[AnalysisDecision] = Field(default_factory=list)
+    confirm: bool = False
 
 
 class WorkflowRewindResponse(BaseModel):
@@ -358,6 +378,42 @@ def review_project_evidence(
             coverage_gap_resolution=payload.coverage_gap_resolution,
             coverage_gap_user_input=payload.coverage_gap_user_input,
             coverage_gaps_acknowledged=payload.coverage_gaps_acknowledged,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except (ResearchWorkflowError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/v1/projects/{project_id}/industry-analysis", response_model=ProjectState)
+def generate_project_industry_analysis(
+    project_id: str, research: ResearchApp
+) -> ProjectState:
+    try:
+        return research.generate_industry_analysis(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ResearchWorkflowError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except IndustryAnalysisError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ConfigurationError as exc:
+        raise HTTPException(status_code=503, detail="AI研究服务尚未完成配置") from exc
+    except ProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.patch("/v1/projects/{project_id}/industry-analysis", response_model=ProjectState)
+def review_project_industry_analysis(
+    project_id: str, payload: IndustryAnalysisReviewRequest, research: ResearchApp
+) -> ProjectState:
+    try:
+        return research.review_industry_analysis(
+            project_id,
+            decisions=[
+                (item.finding_id, item.status, item.note) for item in payload.decisions
+            ],
+            confirm=payload.confirm,
         )
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="project not found") from exc

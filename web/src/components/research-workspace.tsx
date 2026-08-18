@@ -17,6 +17,9 @@ type ActionState =
   | "evidence-collect"
   | "evidence-save"
   | "evidence-confirm"
+  | "analysis-generate"
+  | "analysis-save"
+  | "analysis-confirm"
   | "rewind";
 
 const BUILD_STEPS: WorkflowStep[] = [
@@ -75,6 +78,7 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
   const [gateZeroChecked, setGateZeroChecked] = useState(false);
   const [gateOneChecked, setGateOneChecked] = useState(false);
   const [gapAcknowledged, setGapAcknowledged] = useState(false);
+  const [analysisChecked, setAnalysisChecked] = useState(false);
   const [gapResolution, setGapResolution] = useState("accept_analyst_handling");
   const [evidenceSelections, setEvidenceSelections] = useState<Record<string, "accepted" | "rejected">>(() =>
     Object.fromEntries(initialProject.evidence_collection_artifact?.task_runs.flatMap((run) =>
@@ -86,11 +90,25 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
       ]),
     ) || []) as Record<string, "accepted" | "rejected">,
   );
+  const [analysisSelections, setAnalysisSelections] = useState<Record<string, "accepted" | "rejected">>(() =>
+    Object.fromEntries(initialProject.industry_analysis_artifact?.modules.flatMap((module) =>
+      module.findings.flatMap((item) => item.review_status === "accepted" || item.review_status === "rejected"
+        ? [[item.finding_id, item.review_status]]
+        : []),
+    ) || []) as Record<string, "accepted" | "rejected">,
+  );
   const steps = useMemo(() => stepsFor(project), [project]);
   const reviewFirst = project.research_path === "report_review_first";
 
   function acceptProject(result: ProjectSummary, success: string) {
     setProject(result);
+    if (result.industry_analysis_artifact) {
+      setAnalysisSelections(Object.fromEntries(result.industry_analysis_artifact.modules.flatMap((module) =>
+        module.findings.flatMap((item) => item.review_status === "accepted" || item.review_status === "rejected"
+          ? [[item.finding_id, item.review_status]]
+          : []),
+      )) as Record<string, "accepted" | "rejected">);
+    }
     setMessage(success);
     setError("");
   }
@@ -347,6 +365,57 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
     }
   }
 
+  async function generateIndustryAnalysis() {
+    setAction("analysis-generate");
+    setMessage("");
+    setError("");
+    try {
+      const result = await requestProject(
+        `/api/projects/${project.project_id}/industry-analysis`,
+        "POST",
+      );
+      acceptProject(result, "五个行业分析模块已经生成，请逐项审核判断、机制、证据和适用边界。");
+      setAnalysisChecked(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "行业分析暂时未能生成。");
+    } finally {
+      setAction(null);
+    }
+  }
+
+  async function reviewIndustryAnalysis(form: HTMLFormElement, confirm: boolean) {
+    const artifact = project.industry_analysis_artifact;
+    if (!artifact) return;
+    setAction(confirm ? "analysis-confirm" : "analysis-save");
+    setMessage("");
+    setError("");
+    const data = new FormData(form);
+    const decisions = artifact.modules.flatMap((module) => module.findings.flatMap((item) => {
+      const status = analysisSelections[item.finding_id];
+      if (status !== "accepted" && status !== "rejected") return [];
+      return [{
+        finding_id: item.finding_id,
+        status,
+        note: String(data.get(`analysis_note_${item.finding_id}`) || "").trim() || null,
+      }];
+    }));
+    try {
+      const result = await requestProject(
+        `/api/projects/${project.project_id}/industry-analysis`,
+        "PATCH",
+        { decisions, confirm },
+      );
+      acceptProject(
+        result,
+        confirm ? "行业分析已经人工确认，Future Intelligence 节点已开放。" : "行业判断审核决定已经保存。",
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "行业分析审核未能保存。");
+    } finally {
+      setAction(null);
+    }
+  }
+
   function selectEvidence(mode: "recommended" | "all" | "none") {
     const artifact = project.evidence_collection_artifact;
     if (!artifact) return;
@@ -363,6 +432,8 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
   const brief = project.research_brief_artifact;
   const plan = project.research_plan_artifact;
   const evidence = project.evidence_collection_artifact;
+  const analysis = project.industry_analysis_artifact;
+  const analysisFindings = analysis?.modules.flatMap((module) => module.findings) || [];
   const evidenceAdvisories = plan && evidence ? plan.tasks.flatMap((task) => {
     const run = evidence.task_runs.find((item) => item.task_id === task.task_id);
     const candidates = run?.evidence.filter((item) => item.qa_score >= 80 && item.prompt_relevance >= 0.7) || [];
@@ -718,6 +789,59 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
                 <button type="submit" className="primaryButton" disabled={action !== null || !gateOneChecked || (evidenceAdvisories.length > 0 && !gapAcknowledged)}>{action === "evidence-confirm" ? "正在确认…" : "确认 Gate 1 并进入行业分析"}</button>
               </div></>
             )}
+          </form>
+        </section>
+      )}
+
+      {!reviewFirst && evidence?.human_confirmed && !analysis && (
+        <section className="artifactPanel artifactStart">
+          <span className="eyebrow">INDUSTRY ANALYSIS</span>
+          <h2>生成当前行业分析</h2>
+          <p>系统只使用 Gate 1 已接受证据，依次形成行业定义与价值链、市场现状、竞争格局、驱动与制约以及商业逻辑；本节点不生成未来预测。</p>
+          {message && <div className="formSuccess" role="status">{message}</div>}
+          {error && <div className="formError" role="alert">{error}</div>}
+          <button className="primaryButton artifactPrimary" type="button" disabled={action !== null} onClick={() => void generateIndustryAnalysis()}>
+            {action === "analysis-generate" ? "AI 正在生成五个行业分析模块…" : "AI 生成行业分析"}
+          </button>
+        </section>
+      )}
+
+      {!reviewFirst && analysis && (
+        <section className="artifactPanel">
+          <div className="artifactHeading">
+            <div><span className="eyebrow">INDUSTRY ANALYSIS · HUMAN REVIEW</span><h2>{analysis.human_confirmed ? "当前行业分析已经确认" : "逐项审核行业判断"}</h2><p>事实综合、来源观点、分析师推断和商业判断保持分层；拒绝的判断保留审计记录但不会进入趋势或报告。</p></div>
+            <span className={analysis.human_confirmed ? "confirmedLabel" : "reviewRequired"}>{analysis.human_confirmed ? "已确认" : "人工确认 · 必选"}</span>
+          </div>
+          <div className="planStats"><div><span>使用证据</span><strong>{analysis.input_evidence_ids.length}</strong></div><div><span>分析模块</span><strong>{analysis.modules.length}</strong></div><div><span>行业判断</span><strong>{analysisFindings.length}</strong></div><div><span>已接受判断</span><strong>{analysisFindings.filter((item) => item.review_status === "accepted").length}</strong></div></div>
+          <form onSubmit={(event) => { event.preventDefault(); if (analysisChecked) void reviewIndustryAnalysis(event.currentTarget, true); }}>
+            <div className="taskList">
+              {analysis.modules.map((module, moduleIndex) => (
+                <details className="taskCard" key={module.module_id} open={moduleIndex === 0}>
+                  <summary><span>{moduleIndex + 1}</span><strong>{module.title}</strong><small>{module.findings.length} 项判断</small></summary>
+                  <div className="taskBody">
+                    <p>{module.executive_summary}</p>
+                    {module.evidence_gaps.length > 0 && <div className="analysisBoundary"><strong>证据缺口</strong><ul>{module.evidence_gaps.map((item) => <li key={item}>{item}</li>)}</ul></div>}
+                    {module.rejected_questions.length > 0 && <div className="analysisBoundary"><strong>当前证据无法回答</strong><ul>{module.rejected_questions.map((item) => <li key={item}>{item}</li>)}</ul></div>}
+                    {module.findings.map((item) => (
+                      <article className="analysisFinding" key={item.finding_id}>
+                        <div className="analysisFindingHeader"><div><span>{item.finding_type.replaceAll("_", " ")}</span><strong>{item.subject}</strong></div><b>{Math.round(item.confidence * 100)}% 置信度</b></div>
+                        <h3>{item.statement}</h3>
+                        <p><strong>判断机制：</strong>{item.mechanism}</p>
+                        {Object.keys(item.comparison_dimensions).length > 0 && <dl className="analysisDimensions">{Object.entries(item.comparison_dimensions).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>}
+                        <div className="analysisMeta"><span>适用范围：{item.scope}</span><span>不确定性：{item.uncertainty}</span><span>失效条件：{item.boundary_condition}</span><span>Evidence：{item.evidence_ids.join("、")}</span></div>
+                        {!analysis.human_confirmed && <div className="fieldGrid"><label className="field"><span>审核决定</span><select value={analysisSelections[item.finding_id] || ""} onChange={(event) => setAnalysisSelections((current) => ({ ...current, [item.finding_id]: event.target.value as "accepted" | "rejected" }))}><option value="">待决定</option><option value="accepted">接受并进入后续研究</option><option value="rejected">拒绝但保留审计记录</option></select></label><label className="field"><span>审核备注</span><input name={`analysis_note_${item.finding_id}`} defaultValue={item.reviewer_note || ""} /></label></div>}
+                      </article>
+                    ))}
+                  </div>
+                </details>
+              ))}
+            </div>
+            {analysis.cross_module_conflicts.length > 0 && <div className="evidenceGapPanel"><h3>跨模块冲突</h3><ul>{analysis.cross_module_conflicts.map((item) => <li key={item}>{item}</li>)}</ul></div>}
+            {analysis.overall_evidence_limitations.length > 0 && <div className="analysisBoundary"><h3>整体证据边界</h3><ul>{analysis.overall_evidence_limitations.map((item) => <li key={item}>{item}</li>)}</ul></div>}
+            {message && <div className="formSuccess" role="status">{message}</div>}
+            {error && <div className="formError" role="alert">{error}</div>}
+            {!analysis.human_confirmed && <><label className="gateConfirmation requiredConfirmation"><input type="checkbox" checked={analysisChecked} onChange={(event) => setAnalysisChecked(event.target.checked)} /><span>我已逐项审核所有行业判断、证据引用、适用范围和不确定性（必选）</span></label><div className="scopeActions"><button type="button" className="secondaryButton" disabled={action !== null} onClick={(event) => { const form = event.currentTarget.form; if (form) void reviewIndustryAnalysis(form, false); }}>{action === "analysis-save" ? "正在保存…" : "保存审核决定"}</button><button type="submit" className="primaryButton" disabled={action !== null || !analysisChecked || analysisFindings.some((item) => !analysisSelections[item.finding_id])}>{action === "analysis-confirm" ? "正在确认…" : "批准行业分析并进入 Future Intelligence"}</button></div></>}
+            {analysis.human_confirmed && <div className="nextStageNotice"><strong>Future Intelligence 节点已经就绪</strong><span>下一批将迁移驱动机制、弱信号、情景、领先指标和反证条件的生成与审核。</span></div>}
           </form>
         </section>
       )}

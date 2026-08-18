@@ -20,7 +20,8 @@
   研究路径均记录区域验收结果。
 - [ ] 将尚未服务化的研究步骤全部迁入 FastAPI 应用层。
 - [x] 迁移网页检索、Evidence Matrix 持久化与 Gate 1 人工审核至 Application/FastAPI/Next.js。
-- [ ] 迁移 Industry Analysis、Future Intelligence、Gate 2 与 General Report 至共享 Web 流程。
+- [x] 迁移 Industry Analysis 五模块生成、Finding 人工审核与确认 Gate 至共享 Web 流程。
+- [ ] 迁移 Future Intelligence、Gate 2 与 General Report 至共享 Web 流程。
 - [ ] 建立持久化 Job 状态机，覆盖排队、执行、人工等待、失败、重试、取消和完成。
 - [ ] 完成 PostgreSQL 规范化模型和 Alembic 迁移；保留显式 SQLite Demo 适配。
 - [ ] 为 CloudBase Demo 验证持久卷或数据库迁移方案，避免容器重启丢失项目。

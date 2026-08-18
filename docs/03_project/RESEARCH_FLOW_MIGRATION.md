@@ -28,7 +28,7 @@
 | Gate 1 证据接受/拒绝 | 已迁移；支持带限制继续和缺口确认 | 已迁移；系统推荐/全选/取消、缺口表、必选确认已恢复 | 已覆盖 | 完成（第二轮修复） |
 | 返回上一审核节点 | 领域回退规则与 FastAPI 已迁移 | Web Research/Gate 1 可返回最近 Gate，保留前序并清除失效产物 | 已覆盖 | 完成 |
 | 移动项目管理 | 共享数据/API | 手机端可收起抽屉导航 | 浏览器 390×844 验收 | 完成 |
-| Industry Analysis | 服务已存在，API 待迁移 | 待迁移 | 服务测试已有 | 下一批 |
+| Industry Analysis | 五模块生成、Finding 接受/拒绝、确认 Gate 与失效规则已迁移 | 五模块摘要、证据缺口、判断机制、置信度、Evidence ID、备注与逐项审核已迁移 | API Gate、服务与生产构建已覆盖 | 完成，待 Vercel 线上验收 |
 | Future Intelligence | 服务已存在，API 待迁移 | 待迁移 | 服务测试已有 | 待迁移 |
 | Gate 2 内容审核 | 规则已存在，API 待迁移 | 待迁移 | 部分覆盖 | 待迁移 |
 | General Report | 服务已存在，审阅式流水线可用 | 待迁移 | 服务测试已有 | 待迁移 |
@@ -52,12 +52,19 @@
 
 ## 后续实施顺序
 
-1. Industry Analysis 生成、Finding 审核与确认。
-2. Future Intelligence 生成、趋势/情景审核与 Gate 2。
-3. General Report 生成、内容版本和 Word/PDF 导出。
-4. Enterprise Sensing、Company Scorecard、Action Plan 与 Enterprise Report。
-5. 模块级修订、历史版本和恢复。
-6. 将同步长任务封装为持久化 Job/Worker，并为四条主路径建立双区域 E2E。
+1. Future Intelligence 生成、趋势/情景审核与 Gate 2。
+2. General Report 生成、内容版本和 Word/PDF 导出。
+3. Enterprise Sensing、Company Scorecard、Action Plan 与 Enterprise Report。
+4. 模块级修订、历史版本和恢复。
+5. 将同步长任务封装为持久化 Job/Worker，并为四条主路径建立区域 E2E。
+
+## 第二批接口
+
+- `POST /v1/projects/{project_id}/industry-analysis`：只读取 Gate 1 人工接受证据，生成市场与
+  价值链、市场现状、竞争格局、驱动与制约、商业逻辑五个当前行业模块。
+- `PATCH /v1/projects/{project_id}/industry-analysis`：逐项保存 Finding 接受/拒绝和备注；
+  每个模块至少一项判断被接受且不存在待审核项后，确认 Industry Analysis Gate 并开放
+  Future Intelligence。Evidence Matrix 变化时旧分析不得继续使用。
 
 ## 当前 Web 流程契约
 
