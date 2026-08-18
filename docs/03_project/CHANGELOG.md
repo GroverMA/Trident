@@ -23,7 +23,7 @@
 
 ### Fixed
 
-- 无。
+- 容器 CI 现在显式启用单实例 Demo 的 SQLite 模式，与 CloudBase 运行配置保持一致，避免生产环境安全检查拒绝启动。
 
 ### Removed
 

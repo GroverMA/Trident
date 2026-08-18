@@ -50,7 +50,9 @@ jobs:
           load: true
           push: false
           tags: trident-api:ci
-      - run: docker run --detach --publish 8000:8000 --name trident-api trident-api:ci
+      - run: >-
+          docker run --detach --publish 8000:8000 --name trident-api
+          --env TRIDENT_DATABASE_MODE=sqlite trident-api:ci
       - name: Verify container readiness
         run: |
           for attempt in {1..30}; do
