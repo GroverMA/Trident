@@ -14,17 +14,23 @@
 ### Overseas
 
 - Next.js 可继续使用 Vercel。
+- 当前公开地址：`https://trident-research.vercel.app`。
+- 2026-08-18 公网验收：首页与 `/api/projects` 均返回 HTTP 200。
 - FastAPI、数据库和长任务使用独立后端服务。
 - Vercel 版本与中国版本共用同一代码库，通过环境配置区分。
 
 ### China Demo
 
 - 腾讯云 CloudBase 云托管容器。
+- 当前默认域名：`https://trident-web-298210-7-1470031105.sh.run.tcloudbase.com`。
 - 仓库根目录 `Dockerfile` 是 CloudBase 实际构建入口，并与
   `deploy/cloudbase/Dockerfile` 保持同步；容器同时启动 Next.js（公网 3000）和
   FastAPI（内部 8000）。
 - CloudBase 公网访问端口映射至服务端口 3000。
 - SQLite Demo 需要持久挂载 `/app/data`、单实例写入和 `WEB_CONCURRENCY=1`。
+- 2026-08-18 状态：镜像已构建、容器显示运行正常，但默认域名的 HTTP/HTTPS
+  公网请求均超时，尚未通过公网验收。需在“服务设置 → 网络访问”确认公网开关，
+  确认服务端口为 `3000`，并检查默认域名或 HTTP 网关 `/` 路径已关联当前服务。
 
 ### Standard SaaS
 
@@ -111,3 +117,6 @@
 ## 11. Deployment Acceptance
 
 一次部署只有在以下条件满足后才算完成：两种研究路径能创建项目、确认范围、生成完整报告；企业路径能处理资料、生成 Scorecard 与 Action Plan；Word/PDF 可下载；历史项目可恢复；日志无明文密钥；线上 URL 可从目标地区访问。
+
+容器状态为“运行正常”只代表实例存活，不等于部署验收完成。公网域名必须能够完成
+TLS 握手、首页返回 200，且 `/api/projects` 可用，之后才能执行会写入测试数据的端到端验收。

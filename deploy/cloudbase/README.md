@@ -25,6 +25,14 @@ process inside the same container.
 - Health path: `/`
 - Public default domain: enabled
 
+Current trial domain:
+
+- `https://trident-web-298210-7-1470031105.sh.run.tcloudbase.com`
+
+After every deployment, verify that **Service Settings → Network Access** allows
+public access, the service port is `3000`, and the default domain (or HTTP
+Gateway `/` route) is associated with `trident-agent-cn`.
+
 ## Required environment variables
 
 - `TRIDENT_ENV=production`
