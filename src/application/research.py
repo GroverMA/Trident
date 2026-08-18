@@ -148,8 +148,6 @@ class ResearchApplication:
 
     def generate_brief(self, project_id: str) -> ProjectState:
         project = self.get_project(project_id)
-        if project.market_scope_confirmed_at is None:
-            raise ResearchWorkflowError("请先确认研究目标与市场范围")
         brief = self.services.research_planning.generate_brief(project)
         statuses = dict(project.workflow_status)
         statuses["research_brief"] = WorkflowStatus.NEEDS_REVIEW
@@ -159,6 +157,7 @@ class ResearchApplication:
                 update={
                     "research_brief_artifact": brief,
                     "research_plan_artifact": None,
+                    "market_scope_confirmed_at": None,
                     "workflow_status": statuses,
                     "current_step": "research_brief",
                     "updated_at": datetime.now(UTC),
@@ -204,6 +203,7 @@ class ResearchApplication:
                 update={
                     "research_brief_artifact": reviewed,
                     "research_plan_artifact": None,
+                    "market_scope_confirmed_at": now if confirm else None,
                     "workflow_status": statuses,
                     "current_step": "research_planning" if confirm else "research_brief",
                     "updated_at": now,

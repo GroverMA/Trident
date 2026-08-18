@@ -217,8 +217,10 @@ def test_research_brief_and_plan_workflow_persists_for_both_paths(
             project = client.post("/v1/projects", json=payload).json()
             project_url = f"/v1/projects/{project['project_id']}"
 
-            blocked = client.post(f"{project_url}/research-brief")
-            assert blocked.status_code == 409
+            generated_before_confirmation = client.post(f"{project_url}/research-brief")
+            assert generated_before_confirmation.status_code == 200
+            assert generated_before_confirmation.json()["market_scope_confirmed_at"] is None
+            assert client.post(f"{project_url}/research-plan").status_code == 409
 
             scope_payload = {
                 **{key: payload[key] for key in (
@@ -249,6 +251,7 @@ def test_research_brief_and_plan_workflow_persists_for_both_paths(
             reviewed = client.patch(f"{project_url}/research-brief", json=review_payload)
             assert reviewed.status_code == 200
             assert reviewed.json()["research_brief_artifact"]["human_confirmed"] is True
+            assert reviewed.json()["market_scope_confirmed_at"] is not None
             assert reviewed.json()["workflow_status"]["research_planning"] == "ready"
 
             planned = client.post(f"{project_url}/research-plan")

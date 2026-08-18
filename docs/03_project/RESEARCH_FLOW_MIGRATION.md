@@ -13,13 +13,16 @@
 3. FastAPI 是统一业务边界，Next.js 与未来客户端只调用 API，不直接编排研究服务。
 4. 长任务当前可同步迁移以恢复功能闭环，随后统一迁往可恢复 Job/Worker。
 5. 每一批迁移同时通过共享测试、Vercel 构建和 CloudBase 镜像构建。
+6. 原 Streamlit 版是功能一致性基准；Next.js 可以重构视觉和技术边界，但不得删除原有
+   字段、人工审核、回退、版本、企业流程或导出能力。详细差距见
+   [Streamlit 功能一致性审计](STREAMLIT_PARITY_AUDIT.md)。
 
 ## 当前矩阵
 
 | 阶段 | Application/FastAPI | Next.js | 持久化/测试 | 状态 |
 |---|---|---|---|---|
 | 项目与研究路径 | 已迁移 | 已迁移 | 已覆盖 | 完成 |
-| Gate 0 / Research Brief | 已迁移 | 已迁移 | 已覆盖 | 完成 |
+| Prompt Analysis / Gate 0 / Research Brief | AI 先分析、人工后确认的顺序已迁移 | 可逐项查看和修改范围 | 已覆盖 | 完成，待双端线上验收 |
 | Research Plan | 已迁移 | 已迁移 | 已覆盖 | 完成 |
 | 网页检索与 Evidence Matrix | 已迁移 | 已迁移 | 已覆盖 | 完成（第一批） |
 | Gate 1 证据接受/拒绝 | 已迁移 | 已迁移 | 已覆盖 | 完成（第一批） |

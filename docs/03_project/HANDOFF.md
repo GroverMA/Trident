@@ -19,6 +19,9 @@
 - 已新增公网 `/healthz` 与 `/readyz` 探针，并在本地生产形态验证均返回 HTTP 200。
 - 完整流程迁移第一批已完成：构建式路径可从 Research Plan 执行网页检索、持久化
   Evidence Matrix、逐条接受/拒绝证据，并在确认 Gate 1 后进入 Industry Analysis。
+- 已按原 Streamlit 版纠正 Prompt Analysis/Gate 0：AI 先解释 Prompt，用户再逐项修改
+  市场范围和研究问题，确认后才进入 Research Plan。
+- 已建立 `STREAMLIT_PARITY_AUDIT.md`，后续迁移以原版完整功能而非当前简化 Web 为基准。
 - 建立本套产品、研究、工程、项目治理和 AI 记忆文档。
 
 ## 当前重点

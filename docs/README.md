@@ -58,6 +58,7 @@
 - [DECISIONS.md](03_project/DECISIONS.md)
 - [TODO.md](03_project/TODO.md)
 - [RESEARCH_FLOW_MIGRATION.md](03_project/RESEARCH_FLOW_MIGRATION.md)：完整研究流程的迁移矩阵、阶段状态和实施顺序。
+- [STREAMLIT_PARITY_AUDIT.md](03_project/STREAMLIT_PARITY_AUDIT.md)：原 Streamlit 功能与共享 Web 的逐项一致性审计。
 - [HANDOFF.md](03_project/HANDOFF.md)
 - [CHANGELOG.md](03_project/CHANGELOG.md)
 - [RELEASES.md](03_project/RELEASES.md)

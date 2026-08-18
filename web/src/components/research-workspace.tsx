@@ -84,7 +84,9 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
   const router = useRouter();
   const [project, setProject] = useState(initialProject);
   const [action, setAction] = useState<ActionState | null>(null);
-  const [editingScope, setEditingScope] = useState(!initialProject.market_scope_confirmed_at);
+  const [editingScope, setEditingScope] = useState(
+    !initialProject.market_scope_confirmed_at && !initialProject.research_brief_artifact,
+  );
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const steps = useMemo(() => stepsFor(project), [project]);
@@ -156,8 +158,40 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
         "POST",
       );
       acceptProject(result, "AI 已完成研究简报，请核对市场边界、必答问题和待验证口径。");
+      setEditingScope(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "研究简报暂时未能生成。");
+    } finally {
+      setAction(null);
+    }
+  }
+
+  async function analyzePrompt(form: HTMLFormElement) {
+    setAction("brief-generate");
+    setMessage("");
+    setError("");
+    const data = new FormData(form);
+    const payload: ProjectScopePayload = {
+      project_name: String(data.get("project_name") || "").trim(),
+      industry: String(data.get("industry") || "").trim(),
+      region: String(data.get("region") || "").trim(),
+      research_objective: String(data.get("research_objective") || "").trim(),
+      time_horizon: String(data.get("time_horizon") || "").trim(),
+      output_language: String(data.get("output_language") || "简体中文"),
+      target_company: project.target_company || null,
+      company_strategy_objective: project.company_strategy_objective || null,
+      confirm: false,
+    };
+    try {
+      await requestProject(`/api/projects/${project.project_id}`, "PATCH", payload);
+      const result = await requestProject(
+        `/api/projects/${project.project_id}/research-brief`,
+        "POST",
+      );
+      acceptProject(result, "AI 已完成 Prompt Analysis。请逐项检查并修改研究范围，再确认 Gate 0。");
+      setEditingScope(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "AI 暂时未能完成 Prompt Analysis。");
     } finally {
       setAction(null);
     }
@@ -170,8 +204,11 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
     setMessage("");
     setError("");
     const data = new FormData(form);
+    const clarificationQuestions = brief.clarification_questions.map((question, index) =>
+      String(data.get(`clarification_question_${index}`) || question).trim(),
+    ).filter(Boolean);
     const clarificationResponses = Object.fromEntries(
-      brief.clarification_questions.map((question, index) => [
+      clarificationQuestions.map((question, index) => [
         question,
         String(data.get(`clarification_response_${index}`) || "").trim(),
       ]),
@@ -189,13 +226,13 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
         exclusions: lines(data.get("exclusions")),
         market_sizing_basis: String(data.get("market_sizing_basis") || "尚待明确").trim(),
         competitor_definition: String(data.get("competitor_definition") || "").trim(),
-        adjacent_markets: brief.market_definition.adjacent_markets,
-        ambiguities: brief.market_definition.ambiguities,
+        adjacent_markets: lines(data.get("adjacent_markets")),
+        ambiguities: lines(data.get("ambiguities")),
       },
       key_questions: lines(data.get("key_questions")),
       information_gaps: lines(data.get("information_gaps")),
       hypotheses: lines(data.get("hypotheses")),
-      clarification_questions: brief.clarification_questions,
+      clarification_questions: clarificationQuestions,
       clarification_responses: clarificationResponses,
       confidence_note: String(data.get("confidence_note") || "").trim(),
       confirm,
@@ -331,9 +368,7 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
         </div>
         <div className="cloudState">
           <span>云端项目</span>
-          <strong>
-            {project.market_scope_confirmed_at ? "研究范围已确认" : "研究范围待确认"}
-          </strong>
+          <strong>{project.market_scope_confirmed_at ? "研究范围已确认" : brief ? "AI 分析待审核" : "等待 Prompt Analysis"}</strong>
         </div>
       </div>
 
@@ -364,8 +399,8 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
         </div>
       </section>
 
-      {project.market_scope_confirmed_at && !editingScope ? (
-        <section className="confirmedScopeBar">
+      {!editingScope ? (
+        project.market_scope_confirmed_at ? <section className="confirmedScopeBar">
           <div>
             <span className="eyebrow">CONFIRMED SCOPE</span>
             <strong>{project.industry} · {project.region} · {project.time_horizon}</strong>
@@ -373,14 +408,14 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
           <button className="secondaryButton" type="button" onClick={() => setEditingScope(true)}>
             修改研究范围
           </button>
-        </section>
+        </section> : null
       ) : (
         <section className="scopePanel">
           <div className="scopeIntro">
             <div>
-              <span className="eyebrow">SCOPE GATE</span>
-              <h2>确认研究目标与市场范围</h2>
-              <p>这里决定后续检索、分析和报告使用的统一口径。保存草稿不会推进流程；确认后会进入下一节点。</p>
+              <span className="eyebrow">PROMPT ANALYSIS</span>
+              <h2>先让 AI 理解你的研究需求</h2>
+              <p>填写或修改原始 Prompt。AI 会先解释研究意图、市场边界、必答问题、信息缺口和待验证假设；下一步再由你逐项查看和修改，不会直接锁定范围。</p>
             </div>
             <div className="scopePathNote">
               <strong>{reviewFirst ? "自上而下审阅" : "自下而上构建"}</strong>
@@ -390,7 +425,7 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
           <form
             onSubmit={(event: FormEvent<HTMLFormElement>) => {
               event.preventDefault();
-              void updateScope(event.currentTarget, true);
+              void analyzePrompt(event.currentTarget);
             }}
           >
             <label className="field fieldWide">
@@ -452,11 +487,7 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
                 {action === "scope-draft" ? "正在保存…" : "保存范围草稿"}
               </button>
               <button type="submit" className="primaryButton" disabled={action !== null}>
-                {action === "scope-confirm"
-                  ? "正在确认…"
-                  : reviewFirst
-                    ? "确认范围并准备报告底稿"
-                    : "确认范围并进入研究规划"}
+                {action === "brief-generate" ? "AI 正在分析 Prompt…" : "AI 分析 Prompt 并生成可编辑范围"}
               </button>
             </div>
           </form>
@@ -519,6 +550,10 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
               <label className="field"><span>时间范围</span><input name="time_scope" required defaultValue={brief.market_definition.time_scope} /></label>
             </div>
             <div className="fieldGrid">
+              <label className="field"><span>相邻但不属于核心市场（每行一项）</span><textarea name="adjacent_markets" rows={5} defaultValue={brief.market_definition.adjacent_markets.join("\n")} /></label>
+              <label className="field"><span>仍需验证的市场口径（每行一项）</span><textarea name="ambiguities" rows={5} defaultValue={brief.market_definition.ambiguities.join("\n")} /></label>
+            </div>
+            <div className="fieldGrid">
               <label className="field"><span>纳入范围（每行一项）</span><textarea name="inclusions" required rows={6} defaultValue={brief.market_definition.inclusions.join("\n")} /></label>
               <label className="field"><span>排除范围（每行一项）</span><textarea name="exclusions" required rows={6} defaultValue={brief.market_definition.exclusions.join("\n")} /></label>
             </div>
@@ -535,7 +570,7 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
                 <div className="clarificationIntro"><h3>仍需确认的研究口径</h3><p>左侧是 AI 识别的问题，右侧填写你的确认口径。问题与回答会一并保存。</p></div>
                 {brief.clarification_questions.map((question, index) => (
                   <div className="clarificationRow" key={`${index}-${question}`}>
-                    <div><span>待确认问题 {index + 1}</span><p>{question}</p></div>
+                    <label className="field"><span>待确认问题 {index + 1}</span><textarea name={`clarification_question_${index}`} rows={3} defaultValue={question} /></label>
                     <label className="field"><span>研究者确认口径 {index + 1}</span><textarea name={`clarification_response_${index}`} rows={3} defaultValue={brief.clarification_responses[question] || ""} placeholder="在这里输入明确口径；暂不确定时可说明采用的默认假设。" /></label>
                   </div>
                 ))}
