@@ -22,7 +22,8 @@ process inside the same container.
   `deploy/cloudbase/Dockerfile`)
 - Access port: `80`
 - Service port: `3000`
-- Health path: `/`
+- Liveness path: `/healthz`
+- Readiness path for deployment verification: `/readyz`
 - Public default domain: enabled
 
 Current trial domain:
@@ -32,6 +33,10 @@ Current trial domain:
 After every deployment, verify that **Service Settings → Network Access** allows
 public access, the service port is `3000`, and the default domain (or HTTP
 Gateway `/` route) is associated with `trident-agent-cn`.
+
+`/healthz` traverses Next.js to FastAPI `/health`; `/readyz` additionally checks
+that the configured persistence layer can accept traffic. A healthy homepage
+alone is not sufficient for deployment acceptance.
 
 ## Required environment variables
 

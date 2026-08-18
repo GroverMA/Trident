@@ -74,6 +74,8 @@
 - 容器入口：首页或明确 health endpoint。
 - FastAPI `/health` 检查进程。
 - FastAPI `/ready` 检查数据库和关键依赖。
+- 单容器 CloudBase 对外提供 Next.js `/healthz` 与 `/readyz`，分别代理上述 FastAPI
+  探针，使公网和平台无需暴露内部 8000 端口即可检查完整服务链路。
 - 就绪检查失败的实例不接收流量。
 
 ## 6. CI/CD

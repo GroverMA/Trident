@@ -7,6 +7,7 @@
 ### Added
 
 - 产品、研究、工程、项目治理与 AI 记忆知识库。
+- CloudBase 单域名公开健康探针 `/healthz` 和就绪探针 `/readyz`。
 
 ### Changed
 
