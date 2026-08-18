@@ -9,6 +9,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from src.knowledge.skills import ResearchSkillRegistry
+
 
 DEFAULT_SOP_PATH = (
     Path(__file__).resolve().parents[2]
@@ -67,12 +69,15 @@ class ResearchSOPPack(BaseModel):
     rules: list[SOPRule] = Field(min_length=1)
     constraints: SOPConstraints = Field(default_factory=SOPConstraints)
     content_hash: str = ""
+    skill_registry: ResearchSkillRegistry | None = Field(default=None, exclude=True)
+
+    model_config = {"arbitrary_types_allowed": True}
 
     @property
     def rule_ids(self) -> list[str]:
         return [rule.rule_id for rule in self.rules]
 
-    def prompt_context(self, artifact: str) -> str:
+    def prompt_context(self, artifact: str, *, module_id: str | None = None) -> str:
         relevant = [
             rule
             for rule in self.rules
@@ -82,7 +87,7 @@ class ResearchSOPPack(BaseModel):
             f"- [{rule.rule_id}] {rule.title}: {rule.instruction}"
             for rule in relevant
         )
-        return (
+        base = (
             f"SOP ID: {self.sop_id}\n"
             f"SOP name: {self.display_name}\n"
             f"Version: {self.version}\n"
@@ -90,13 +95,24 @@ class ResearchSOPPack(BaseModel):
             f"Rules:\n{rules}\n"
             f"Constraints: {self.constraints.model_dump_json()}"
         )
+        if self.skill_registry is None:
+            return base
+        skills = self.skill_registry.prompt_context(artifact, module_id=module_id)
+        return base if not skills else f"{base}\n\nMandatory professional research skills:\n{skills}"
+
+    def skill_versions(self, artifact: str, *, module_id: str | None = None) -> dict[str, str]:
+        return {} if self.skill_registry is None else self.skill_registry.versions(artifact, module_id=module_id)
+
+    def skill_hashes(self, artifact: str, *, module_id: str | None = None) -> dict[str, str]:
+        return {} if self.skill_registry is None else self.skill_registry.hashes(artifact, module_id=module_id)
 
 
 def load_sop_pack(path: Path) -> ResearchSOPPack:
     raw = path.read_bytes()
     payload = json.loads(raw.decode("utf-8"))
     payload["content_hash"] = hashlib.sha256(raw).hexdigest()
-    return ResearchSOPPack.model_validate(payload)
+    pack = ResearchSOPPack.model_validate(payload)
+    return pack.model_copy(update={"skill_registry": ResearchSkillRegistry.load()})
 
 
 def load_active_sop() -> ResearchSOPPack:

@@ -1,0 +1,12 @@
+{
+  "skill_id": "sizing-industry-markets",
+  "version": "1.0.0",
+  "display_name": "市场规模测算",
+  "description": "以可复算模型、明确口径和交叉验证测算历史与预测市场规模。",
+  "applies_to": ["plan", "analysis", "future", "report"],
+  "module_ids": ["market_status"],
+  "required_inputs": ["scope_contract", "accepted_evidence"],
+  "produced_artifacts": ["market_size_model", "sensitivity_range"],
+  "hard_failures": ["unreproducible_math", "scope_mismatch", "hidden_assumptions"],
+  "quality_rubric_version": "1.0"
+}

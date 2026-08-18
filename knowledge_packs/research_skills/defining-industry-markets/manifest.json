@@ -1,0 +1,12 @@
+{
+  "skill_id": "defining-industry-markets",
+  "version": "1.0.0",
+  "display_name": "行业与市场定义",
+  "description": "建立并锁定研究范围、统计口径、纳入排除项与相邻市场。",
+  "applies_to": ["brief", "plan", "analysis", "future", "report"],
+  "module_ids": ["market_value_chain"],
+  "required_inputs": ["user_prompt", "geography", "time_range"],
+  "produced_artifacts": ["scope_contract", "unresolved_scope_questions"],
+  "hard_failures": ["missing_inclusions_exclusions", "silent_scope_change"],
+  "quality_rubric_version": "1.0"
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "行业驱动与制约因素"
+  short_description: "构建驱动因素因果链与双评分"
+  default_prompt: "Apply $analyzing-industry-drivers to analyze drivers and constraints."

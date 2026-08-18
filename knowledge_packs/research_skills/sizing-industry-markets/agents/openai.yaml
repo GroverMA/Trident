@@ -1,0 +1,4 @@
+interface:
+  display_name: "市场规模测算"
+  short_description: "建立可复算的市场规模模型"
+  default_prompt: "Apply $sizing-industry-markets to estimate and validate this market."

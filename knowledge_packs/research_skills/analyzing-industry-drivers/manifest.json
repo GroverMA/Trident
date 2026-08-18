@@ -1,0 +1,12 @@
+{
+  "skill_id": "analyzing-industry-drivers",
+  "version": "1.0.0",
+  "display_name": "行业驱动与制约因素",
+  "description": "以六向扫描、因果链、双重影响评分和反证条件分析驱动与制约。",
+  "applies_to": ["plan", "analysis", "future", "report"],
+  "module_ids": ["drivers_constraints"],
+  "required_inputs": ["scope_contract", "accepted_evidence"],
+  "produced_artifacts": ["driver_map", "causal_chains", "leading_indicators"],
+  "hard_failures": ["generic_factor_list", "missing_causal_chain", "single_impact_score"],
+  "quality_rubric_version": "1.0"
+}

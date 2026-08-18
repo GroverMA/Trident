@@ -21,7 +21,7 @@
 - [ ] 将尚未服务化的研究步骤全部迁入 FastAPI 应用层。
 - [x] 迁移网页检索、Evidence Matrix 持久化与 Gate 1 人工审核至 Application/FastAPI/Next.js。
 - [x] 迁移 Industry Analysis 五模块生成、Finding 人工审核与确认 Gate 至共享 Web 流程。
-- [ ] 迁移 Future Intelligence、Gate 2 与 General Report 至共享 Web 流程。
+- [ ] 迁移 Gate 2 与 General Report 至共享 Web 流程（Future Intelligence 生成与逐项审核已完成）。
 - [ ] 建立持久化 Job 状态机，覆盖排队、执行、人工等待、失败、重试、取消和完成。
 - [ ] 完成 PostgreSQL 规范化模型和 Alembic 迁移；保留显式 SQLite Demo 适配。
 - [ ] 为 CloudBase Demo 验证持久卷或数据库迁移方案，避免容器重启丢失项目。
@@ -38,7 +38,8 @@
 - [ ] 上线持续感知：行业新闻、政策、竞争者、客户和企业经营信号。
 - [ ] 将 Company Scorecard 升级为动态维度、三线雷达图和可解释指标体系。
 - [ ] 将 Action Plan 固化为“做什么、谁负责、何时开始、验证指标”，只分短期和长期。
-- [ ] 建立 Skill Registry、版本管理、回归评估和场景包加载机制。
+- [x] 建立核心专业研究 Skill Registry、版本与哈希审计、模块级运行加载和基础回归测试。
+- [ ] 扩充 Skill 代表性案例评测、质量量表自动化与场景包加载机制。
 - [ ] 开发 PE/VC 场景包和中小企业增长决策场景包。
 - [ ] 完成项目文件夹、版本对比、审阅会话和通知功能。
 - [ ] 增加模型调用、搜索、抓取和文档处理的成本治理。

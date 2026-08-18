@@ -776,6 +776,8 @@ class CompanyAssessmentService:
                 "市场吸引力与企业能力已分离",
                 "行业关键趋势、公司当前市场位置、目标状态与战略差距已形成闭环",
             ],
+            skill_versions=self.sop.skill_versions("company_assessment"),
+            skill_hashes=self.sop.skill_hashes("company_assessment"),
         )
 
 

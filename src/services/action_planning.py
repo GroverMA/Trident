@@ -516,6 +516,8 @@ class ActionPlanningService:
                 "模型结构失败时仍生成可审阅、可追溯的非空行动组合",
                 "高影响建议需人工审核后方可进入报告",
             ],
+            skill_versions=self.sop.skill_versions("action_plan"),
+            skill_hashes=self.sop.skill_hashes("action_plan"),
         )
 
 

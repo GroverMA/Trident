@@ -627,6 +627,8 @@ class FutureIntelligenceService:
                 "数据不足时明确降级为因果情景法",
                 "驱动因素分别评价市场规模和行业平均盈利能力净影响",
             ],
+            skill_versions=self.sop.skill_versions("future"),
+            skill_hashes=self.sop.skill_hashes("future"),
         )
 
     @staticmethod

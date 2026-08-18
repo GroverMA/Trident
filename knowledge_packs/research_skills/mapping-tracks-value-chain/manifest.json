@@ -1,0 +1,12 @@
+{
+  "skill_id": "mapping-tracks-value-chain",
+  "version": "1.0.0",
+  "display_name": "行业赛道与产业链",
+  "description": "区分赛道分类与产业链，刻画参与者、流向、价值捕获和瓶颈。",
+  "applies_to": ["plan", "analysis", "future", "report"],
+  "module_ids": ["market_value_chain", "commercial_logic"],
+  "required_inputs": ["scope_contract", "accepted_evidence"],
+  "produced_artifacts": ["track_map", "value_chain_map"],
+  "hard_failures": ["track_chain_conflation", "missing_flow_logic"],
+  "quality_rubric_version": "1.0"
+}

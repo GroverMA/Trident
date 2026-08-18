@@ -19,10 +19,12 @@ from src.core.container import ServiceContainer
 from src.models.research import MarketDefinition
 from src.models.evidence import EvidenceReviewStatus
 from src.models.analysis import AnalysisReviewStatus
+from src.models.future import ForecastReviewStatus
 from src.persistence.factory import create_project_repository
 from src.providers.base import ProviderError
 from src.services.research_planning import SOPComplianceError
 from src.services.industry_analysis import IndustryAnalysisError
+from src.services.errors import FutureIntelligenceError
 from src.services.reviewer_orchestration import ReviewerPipelineError
 from src.state.project import (
     ProjectState,
@@ -139,6 +141,24 @@ class AnalysisDecision(BaseModel):
 
 class IndustryAnalysisReviewRequest(BaseModel):
     decisions: list[AnalysisDecision] = Field(default_factory=list)
+    confirm: bool = False
+
+
+class ForecastDecision(BaseModel):
+    item_id: str
+    status: ForecastReviewStatus
+    note: str | None = None
+
+    @field_validator("status")
+    @classmethod
+    def require_human_decision(cls, value: ForecastReviewStatus) -> ForecastReviewStatus:
+        if value not in {ForecastReviewStatus.ACCEPTED, ForecastReviewStatus.REJECTED}:
+            raise ValueError("forecast decision must be accepted or rejected")
+        return value
+
+
+class FutureIntelligenceReviewRequest(BaseModel):
+    decisions: list[ForecastDecision] = Field(default_factory=list)
     confirm: bool = False
 
 
@@ -413,6 +433,40 @@ def review_project_industry_analysis(
             decisions=[
                 (item.finding_id, item.status, item.note) for item in payload.decisions
             ],
+            confirm=payload.confirm,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except (ResearchWorkflowError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/v1/projects/{project_id}/future-intelligence", response_model=ProjectState)
+def generate_project_future_intelligence(
+    project_id: str, research: ResearchApp
+) -> ProjectState:
+    try:
+        return research.generate_future_intelligence(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ResearchWorkflowError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except FutureIntelligenceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ConfigurationError as exc:
+        raise HTTPException(status_code=503, detail="AI研究服务尚未完成配置") from exc
+    except ProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.patch("/v1/projects/{project_id}/future-intelligence", response_model=ProjectState)
+def review_project_future_intelligence(
+    project_id: str, payload: FutureIntelligenceReviewRequest, research: ResearchApp
+) -> ProjectState:
+    try:
+        return research.review_future_intelligence(
+            project_id,
+            decisions=[(item.item_id, item.status, item.note) for item in payload.decisions],
             confirm=payload.confirm,
         )
     except ProjectNotFoundError as exc:

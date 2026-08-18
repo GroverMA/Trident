@@ -225,6 +225,8 @@ class ResearchPlanningService:
             locked=self.sop.locked,
             rule_ids=relevant_ids,
             compliance_checks=checks,
+            skill_versions=self.sop.skill_versions(artifact),
+            skill_hashes=self.sop.skill_hashes(artifact),
         )
 
     def _validate_brief_payload(self, payload: dict[str, Any]) -> None:

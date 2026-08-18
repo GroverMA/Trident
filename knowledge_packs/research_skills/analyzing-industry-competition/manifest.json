@@ -1,0 +1,12 @@
+{
+  "skill_id": "analyzing-industry-competition",
+  "version": "1.0.0",
+  "display_name": "行业竞争格局",
+  "description": "建立公司全集与可比口径，分析定位、份额、集中度和战略动作。",
+  "applies_to": ["plan", "analysis", "future", "report"],
+  "module_ids": ["competitive_landscape"],
+  "required_inputs": ["scope_contract", "accepted_evidence"],
+  "produced_artifacts": ["company_universe", "comparability_matrix", "competition_analysis"],
+  "hard_failures": ["noncomparable_ranking", "invalid_share_denominator"],
+  "quality_rubric_version": "1.0"
+}

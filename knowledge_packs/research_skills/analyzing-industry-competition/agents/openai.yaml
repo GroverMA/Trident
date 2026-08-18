@@ -1,0 +1,4 @@
+interface:
+  display_name: "行业竞争格局"
+  short_description: "用可比口径审查竞争格局"
+  default_prompt: "Apply $analyzing-industry-competition to assess this competitive landscape."

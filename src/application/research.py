@@ -8,6 +8,7 @@ from typing import Callable, Mapping
 from src.core.container import ServiceContainer
 from src.models.evidence import EvidenceReviewStatus
 from src.models.analysis import AnalysisReviewStatus
+from src.models.future import ForecastReviewStatus
 from src.models.research import MarketDefinition, ResearchBriefArtifact
 from src.persistence.projects import ProjectRepository
 from src.state.project import ProjectState, WorkflowStatus, default_workflow
@@ -21,6 +22,7 @@ from src.services.industry_analysis import (
     analysis_gate_reasons,
     review_analysis_finding,
 )
+from src.services.future_intelligence import forecast_gate_reasons, review_forecast_item
 
 
 class ProjectNotFoundError(LookupError):
@@ -471,6 +473,82 @@ class ResearchApplication:
                 }
             )
         )
+
+    def generate_future_intelligence(self, project_id: str) -> ProjectState:
+        """Generate evidence-linked trends and scenarios after Industry Analysis."""
+
+        project = self.get_project(project_id)
+        evidence = project.evidence_collection_artifact
+        analysis = project.industry_analysis_artifact
+        if evidence is None or analysis is None or not analysis.human_confirmed:
+            raise ResearchWorkflowError("请先完成人工确认的行业分析")
+        future = self.services.future_intelligence.generate(project, evidence, analysis)
+        statuses = dict(project.workflow_status)
+        statuses["future_intelligence"] = WorkflowStatus.NEEDS_REVIEW
+        statuses["human_review"] = WorkflowStatus.NOT_STARTED
+        statuses["decision_report"] = WorkflowStatus.NOT_STARTED
+        return self.projects.save(project.model_copy(update={
+            "future_intelligence_artifact": future,
+            "general_report_artifact": None,
+            "workflow_status": statuses,
+            "current_step": "future_intelligence",
+            "updated_at": datetime.now(UTC),
+        }))
+
+    def review_future_intelligence(
+        self,
+        project_id: str,
+        *,
+        decisions: list[tuple[str, ForecastReviewStatus, str | None]],
+        confirm: bool,
+    ) -> ProjectState:
+        """Persist trend/scenario decisions and open Gate 2 or strategy work."""
+
+        project = self.get_project(project_id)
+        future = project.future_intelligence_artifact
+        analysis = project.industry_analysis_artifact
+        evidence = project.evidence_collection_artifact
+        if future is None or analysis is None or evidence is None:
+            raise ResearchWorkflowError("请先生成Future Intelligence")
+        if (
+            future.industry_analysis_id != analysis.artifact_id
+            or future.evidence_collection_id != evidence.artifact_id
+        ):
+            raise ResearchWorkflowError("上游研究产物已经变化，请重新生成Future Intelligence")
+
+        reviewed = future
+        for item_id, decision, note in decisions:
+            reviewed = review_forecast_item(reviewed, item_id, decision, note)
+
+        statuses = dict(project.workflow_status)
+        current_step = "future_intelligence"
+        if confirm:
+            reasons = forecast_gate_reasons(reviewed)
+            if reasons:
+                raise ResearchWorkflowError("；".join(reasons))
+            reviewed = reviewed.model_copy(update={
+                "human_confirmed": True,
+                "updated_at": datetime.now(UTC),
+            })
+            statuses["future_intelligence"] = WorkflowStatus.COMPLETED
+            if project.company_strategy_enabled:
+                statuses["company_assessment"] = WorkflowStatus.READY
+                current_step = "company_assessment"
+            else:
+                statuses["company_assessment"] = WorkflowStatus.NOT_APPLICABLE
+                statuses["action_plan"] = WorkflowStatus.NOT_APPLICABLE
+                statuses["human_review"] = WorkflowStatus.READY
+                current_step = "human_review"
+        else:
+            statuses["future_intelligence"] = WorkflowStatus.NEEDS_REVIEW
+
+        return self.projects.save(project.model_copy(update={
+            "future_intelligence_artifact": reviewed,
+            "general_report_artifact": None,
+            "workflow_status": statuses,
+            "current_step": current_step,
+            "updated_at": datetime.now(UTC),
+        }))
 
     async def run_report_first(
         self, project_id: str, *, enterprise: bool | None = None

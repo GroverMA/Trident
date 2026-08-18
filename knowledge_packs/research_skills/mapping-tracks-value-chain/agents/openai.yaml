@@ -1,0 +1,4 @@
+interface:
+  display_name: "赛道与产业链梳理"
+  short_description: "拆分赛道并追踪产业链流向"
+  default_prompt: "Apply $mapping-tracks-value-chain to map tracks and the value chain."

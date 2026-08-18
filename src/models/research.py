@@ -16,6 +16,8 @@ class MethodologyTrace(BaseModel):
     locked: bool = True
     rule_ids: list[str] = Field(min_length=1)
     compliance_checks: list[str] = Field(default_factory=list)
+    skill_versions: dict[str, str] = Field(default_factory=dict)
+    skill_hashes: dict[str, str] = Field(default_factory=dict)
 
 
 class ResearchIntent(BaseModel):

@@ -326,7 +326,7 @@ class IndustryAnalysisService:
                     "每个模块必须至少形成一项可审阅判断。资料覆盖有限时，可基于最相关证据形成"
                     "分析师推断、区间估计或代表性样本判断，并降低confidence；不得输出空模块。"
                     "当前阶段不生成趋势、概率、资源配置建议或Action Plan。只输出合法JSON对象。\n\n"
-                    + self.sop.prompt_context("analysis")
+                    + self.sop.prompt_context("analysis", module_id=module_id)
                 ),
             ),
             ChatMessage(
@@ -678,6 +678,8 @@ class IndustryAnalysisService:
                 "竞争关系包含可解释的比较依据",
                 "当前行业分析与未来趋势预测已分离",
             ],
+            skill_versions=self.sop.skill_versions("analysis"),
+            skill_hashes=self.sop.skill_hashes("analysis"),
         )
 
     @staticmethod

@@ -12,6 +12,8 @@
 - 前置的构建式/审阅式研究方式选择页，以及共享项目管理侧栏。
 - FastAPI 安全回退接口、Gate 1 证据缺口处理契约和手机端项目导航抽屉。
 - 共享 Web 研究流程的 Industry Analysis 五模块生成、Finding 接受/拒绝、审核备注与人工确认 Gate。
+- 五个版本化专业研究 Skill、运行时 Registry、模块级 Prompt 绑定和产物版本/哈希审计。
+- 共享 Web 研究流程的 Future Intelligence 生成、趋势/情景逐项审核与 Gate 2 准入。
 
 ### Changed
 

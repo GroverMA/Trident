@@ -159,6 +159,60 @@ export interface IndustryAnalysisArtifact {
   updated_at: string;
 }
 
+export type ForecastReviewStatus = "needs_review" | "accepted" | "rejected";
+
+export interface FutureTrend {
+  trend_id: string;
+  title: string;
+  category: string;
+  forecast_horizon: string;
+  forecast_statement: string;
+  causal_mechanism: string[];
+  assumptions: string[];
+  leading_indicators: Array<{ name: string; definition: string; trigger_condition: string }>;
+  falsification_conditions: string[];
+  evidence_ids: string[];
+  confidence: { overall: number };
+  confidence_note: string;
+  market_size_net_impact_score: number;
+  profitability_net_impact_score: number;
+  review_status: ForecastReviewStatus;
+  reviewer_note?: string | null;
+}
+
+export interface FutureScenario {
+  scenario_id: string;
+  scenario_type: string;
+  title: string;
+  narrative: string;
+  trigger_conditions: string[];
+  expected_outcomes: string[];
+  leading_indicators: string[];
+  falsification_conditions: string[];
+  review_status: ForecastReviewStatus;
+  reviewer_note?: string | null;
+}
+
+export interface FutureIntelligenceArtifact {
+  artifact_id: string;
+  industry_analysis_id: string;
+  evidence_collection_id: string;
+  trends: FutureTrend[];
+  scenarios: FutureScenario[];
+  monitoring_priorities: string[];
+  forecast_gaps: string[];
+  forecast_methodology: {
+    data_sufficiency: string;
+    selected_method: string;
+    validation_design: string;
+    quantitative_forecast_used: boolean;
+    selection_rationale: string;
+    model_limitations: string[];
+  };
+  human_confirmed: boolean;
+  updated_at: string;
+}
+
 export interface ProjectSummary {
   project_id: string;
   project_name: string;
@@ -180,6 +234,7 @@ export interface ProjectSummary {
   research_plan_artifact?: ResearchPlanArtifact | null;
   evidence_collection_artifact?: EvidenceCollectionArtifact | null;
   industry_analysis_artifact?: IndustryAnalysisArtifact | null;
+  future_intelligence_artifact?: FutureIntelligenceArtifact | null;
   created_at: string;
   updated_at: string;
 }
