@@ -56,6 +56,53 @@ export interface ResearchPlanArtifact {
   generated_at: string;
 }
 
+export type EvidenceReviewStatus = "needs_review" | "accepted" | "rejected";
+
+export interface EvidenceItem {
+  evidence_id: string;
+  task_id: string;
+  source_id: string;
+  kind: string;
+  statement: string;
+  supporting_excerpt: string;
+  source_date?: string | null;
+  geographic_scope: string;
+  market_scope: string;
+  prompt_relevance: number;
+  qa_score: number;
+  qa_flags: string[];
+  review_status: EvidenceReviewStatus;
+  reviewer_note?: string | null;
+}
+
+export interface EvidenceSource {
+  source_id: string;
+  title: string;
+  url: string;
+  domain: string;
+  source_tier: string;
+  tier_reason: string;
+}
+
+export interface TaskEvidenceRun {
+  run_id: string;
+  task_id: string;
+  task_title: string;
+  queries_used: string[];
+  sources: EvidenceSource[];
+  evidence: EvidenceItem[];
+  information_gaps: string[];
+  search_errors: string[];
+}
+
+export interface EvidenceCollectionArtifact {
+  artifact_id: string;
+  research_plan_id: string;
+  task_runs: TaskEvidenceRun[];
+  human_confirmed: boolean;
+  updated_at: string;
+}
+
 export interface ProjectSummary {
   project_id: string;
   project_name: string;
@@ -75,6 +122,7 @@ export interface ProjectSummary {
   market_scope_confirmed_at?: string | null;
   research_brief_artifact?: ResearchBriefArtifact | null;
   research_plan_artifact?: ResearchPlanArtifact | null;
+  evidence_collection_artifact?: EvidenceCollectionArtifact | null;
   created_at: string;
   updated_at: string;
 }

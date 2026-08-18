@@ -6,9 +6,15 @@ from datetime import UTC, datetime
 from typing import Callable, Mapping
 
 from src.core.container import ServiceContainer
+from src.models.evidence import EvidenceReviewStatus
 from src.models.research import MarketDefinition, ResearchBriefArtifact
 from src.persistence.projects import ProjectRepository
 from src.state.project import ProjectState, WorkflowStatus, default_workflow
+from src.services.evidence_collection import (
+    evidence_gate_reasons,
+    review_evidence,
+    upsert_task_run,
+)
 
 
 class ProjectNotFoundError(LookupError):
@@ -244,6 +250,116 @@ class ResearchApplication:
                     ),
                     "workflow_status": statuses,
                     "current_step": next_step,
+                    "updated_at": datetime.now(UTC),
+                }
+            )
+        )
+
+    async def collect_evidence(
+        self,
+        project_id: str,
+        *,
+        task_ids: list[str] | None = None,
+        query_override: str | None = None,
+    ) -> ProjectState:
+        """Execute one or all approved research tasks and persist Gate 1 evidence."""
+
+        project = self.get_project(project_id)
+        plan = project.research_plan_artifact
+        if plan is None or not plan.human_confirmed:
+            raise ResearchWorkflowError("Research Plan必须先经过人工确认")
+
+        available = {task.task_id for task in plan.tasks}
+        selected = task_ids or [task.task_id for task in plan.tasks]
+        unknown = [task_id for task_id in selected if task_id not in available]
+        if unknown:
+            raise ResearchWorkflowError(f"研究计划中不存在任务：{', '.join(unknown)}")
+        if query_override and len(selected) != 1:
+            raise ResearchWorkflowError("自定义检索式只能用于单个研究任务")
+
+        statuses = dict(project.workflow_status)
+        statuses["evidence_collection"] = WorkflowStatus.IN_PROGRESS
+        active = self.projects.save(
+            project.model_copy(
+                update={
+                    "workflow_status": statuses,
+                    "current_step": "evidence_collection",
+                    "last_pipeline_error": None,
+                    "updated_at": datetime.now(UTC),
+                }
+            )
+        )
+        artifact = active.evidence_collection_artifact
+        for task_id in selected:
+            run = await self.services.evidence_collection.collect_task(
+                active,
+                plan,
+                task_id,
+                query_override=query_override,
+            )
+            artifact = upsert_task_run(artifact, plan.artifact_id, run)
+            active = self.projects.save(
+                active.model_copy(
+                    update={
+                        "evidence_collection_artifact": artifact,
+                        "updated_at": datetime.now(UTC),
+                    }
+                )
+            )
+
+        statuses = dict(active.workflow_status)
+        statuses["evidence_collection"] = WorkflowStatus.NEEDS_REVIEW
+        statuses["evidence_qa"] = WorkflowStatus.NEEDS_REVIEW
+        return self.projects.save(
+            active.model_copy(
+                update={
+                    "workflow_status": statuses,
+                    "current_step": "evidence_qa",
+                    "updated_at": datetime.now(UTC),
+                }
+            )
+        )
+
+    def review_evidence(
+        self,
+        project_id: str,
+        *,
+        decisions: list[tuple[str, EvidenceReviewStatus, str | None]],
+        confirm: bool,
+    ) -> ProjectState:
+        """Persist Gate 1 decisions and open analysis only after human confirmation."""
+
+        project = self.get_project(project_id)
+        plan = project.research_plan_artifact
+        artifact = project.evidence_collection_artifact
+        if plan is None or artifact is None:
+            raise ResearchWorkflowError("请先完成证据检索")
+
+        reviewed = artifact
+        for evidence_id, decision, note in decisions:
+            reviewed = review_evidence(reviewed, evidence_id, decision, note)
+
+        statuses = dict(project.workflow_status)
+        current_step = "evidence_qa"
+        if confirm:
+            reasons = evidence_gate_reasons(reviewed, plan)
+            if reasons:
+                raise ResearchWorkflowError("；".join(reasons))
+            reviewed = reviewed.model_copy(update={"human_confirmed": True})
+            statuses["evidence_collection"] = WorkflowStatus.COMPLETED
+            statuses["evidence_qa"] = WorkflowStatus.COMPLETED
+            statuses["industry_analysis"] = WorkflowStatus.READY
+            current_step = "industry_analysis"
+        else:
+            statuses["evidence_collection"] = WorkflowStatus.NEEDS_REVIEW
+            statuses["evidence_qa"] = WorkflowStatus.NEEDS_REVIEW
+
+        return self.projects.save(
+            project.model_copy(
+                update={
+                    "evidence_collection_artifact": reviewed,
+                    "workflow_status": statuses,
+                    "current_step": current_step,
                     "updated_at": datetime.now(UTC),
                 }
             )

@@ -8,6 +8,7 @@
 
 - 产品、研究、工程、项目治理与 AI 记忆知识库。
 - CloudBase 单域名公开健康探针 `/healthz` 和就绪探针 `/readyz`。
+- 共享 Web 研究流程的 Evidence Collection、Evidence Matrix 和 Gate 1 人工审核。
 
 ### Changed
 

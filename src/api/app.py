@@ -17,6 +17,7 @@ from src.application.research import (
 from src.config import ConfigurationError
 from src.core.container import ServiceContainer
 from src.models.research import MarketDefinition
+from src.models.evidence import EvidenceReviewStatus
 from src.persistence.factory import create_project_repository
 from src.providers.base import ProviderError
 from src.services.research_planning import SOPComplianceError
@@ -92,6 +93,29 @@ class ResearchBriefReview(BaseModel):
 
 class PlanConfirmation(BaseModel):
     confirm: bool = True
+
+
+class EvidenceCollectionRequest(BaseModel):
+    task_ids: list[str] | None = None
+    query_override: str | None = None
+
+
+class EvidenceDecision(BaseModel):
+    evidence_id: str
+    status: EvidenceReviewStatus
+    note: str | None = None
+
+    @field_validator("status")
+    @classmethod
+    def require_human_decision(cls, value: EvidenceReviewStatus) -> EvidenceReviewStatus:
+        if value not in {EvidenceReviewStatus.ACCEPTED, EvidenceReviewStatus.REJECTED}:
+            raise ValueError("evidence decision must be accepted or rejected")
+        return value
+
+
+class EvidenceReviewRequest(BaseModel):
+    decisions: list[EvidenceDecision] = Field(default_factory=list)
+    confirm: bool = False
 
 
 @lru_cache(maxsize=1)
@@ -287,6 +311,45 @@ def confirm_research_plan(
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="project not found") from exc
     except ResearchWorkflowError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/v1/projects/{project_id}/evidence", response_model=ProjectState)
+async def collect_project_evidence(
+    project_id: str, payload: EvidenceCollectionRequest, research: ResearchApp
+) -> ProjectState:
+    try:
+        return await research.collect_evidence(
+            project_id,
+            task_ids=payload.task_ids,
+            query_override=payload.query_override,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ResearchWorkflowError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ConfigurationError as exc:
+        raise HTTPException(status_code=503, detail="AI研究服务尚未完成配置") from exc
+    except ProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.patch("/v1/projects/{project_id}/evidence", response_model=ProjectState)
+def review_project_evidence(
+    project_id: str, payload: EvidenceReviewRequest, research: ResearchApp
+) -> ProjectState:
+    try:
+        return research.review_evidence(
+            project_id,
+            decisions=[
+                (item.evidence_id, item.status, item.note)
+                for item in payload.decisions
+            ],
+            confirm=payload.confirm,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except (ResearchWorkflowError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 

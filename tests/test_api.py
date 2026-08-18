@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from src.api.app import app, build_application, get_research_application
 from src.application.research import ResearchApplication
 from src.persistence.sqlite_projects import SQLiteProjectRepository
+from src.state.project import ProjectState, WorkflowStatus
 from src.models.research import (
     MarketDefinition,
     MethodologyTrace,
@@ -14,6 +15,7 @@ from src.models.research import (
     ResearchPlanArtifact,
     ResearchTask,
 )
+from src.models.evidence import EvidenceItem, EvidenceKind, TaskEvidenceRun
 
 
 def methodology() -> MethodologyTrace:
@@ -75,6 +77,29 @@ class FakeResearchPlanningService:
             methodology=methodology(),
         )
 
+
+class FakeEvidenceCollectionService:
+    async def collect_task(self, project, plan, task_id, *, query_override=None):
+        return TaskEvidenceRun(
+            task_id=task_id,
+            task_title=plan.tasks[0].title,
+            queries_used=[query_override or plan.tasks[0].search_queries[0]],
+            evidence=[
+                EvidenceItem(
+                    task_id=task_id,
+                    source_id="SRC-api-test",
+                    kind=EvidenceKind.DATA,
+                    statement="官方披露显示该市场保持结构性增长。",
+                    supporting_excerpt="该市场保持结构性增长",
+                    geographic_scope=project.region,
+                    market_scope=project.industry,
+                    supports_or_challenges="supports",
+                    model_confidence=0.9,
+                    prompt_relevance=0.95,
+                    qa_score=92,
+                )
+            ],
+        )
 
 def test_health_does_not_require_ai_credentials() -> None:
     with TestClient(app) as client:
@@ -257,6 +282,84 @@ def test_research_brief_and_plan_workflow_persists_for_both_paths(
             assert reconfirmed_body["research_brief_artifact"]["human_confirmed"] is True
             assert reconfirmed_body["research_plan_artifact"]["human_confirmed"] is True
             assert reconfirmed_body["workflow_status"]["research_planning"] == "completed"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_build_first_evidence_gate_is_service_backed_and_persisted(tmp_path) -> None:
+    repository = SQLiteProjectRepository(tmp_path / "evidence-api.db")
+    research_plan = FakeResearchPlanningService().generate_plan(
+        ProjectState(
+            project_name="IVD研究",
+            industry="IVD",
+            region="中国",
+            research_objective="研究竞争格局",
+            time_horizon="2026-2036",
+        ),
+        None,
+    ).model_copy(update={"human_confirmed": True})
+    statuses = {
+        key: WorkflowStatus.NOT_STARTED
+        for key in ProjectState(
+            project_name="占位",
+            industry="IVD",
+            region="中国",
+            research_objective="研究",
+            time_horizon="2026-2036",
+        ).workflow_status
+    }
+    statuses["research_planning"] = WorkflowStatus.COMPLETED
+    statuses["evidence_collection"] = WorkflowStatus.READY
+    project = repository.save(
+        ProjectState(
+            project_name="IVD研究",
+            industry="IVD",
+            region="中国",
+            research_objective="研究竞争格局",
+            time_horizon="2026-2036",
+            research_plan_artifact=research_plan,
+            workflow_status=statuses,
+            current_step="evidence_collection",
+        )
+    )
+    services = SimpleNamespace(
+        evidence_collection=FakeEvidenceCollectionService(),
+    )
+    research = ResearchApplication(projects=repository, services=services)
+    app.dependency_overrides[get_research_application] = lambda: research
+
+    try:
+        with TestClient(app) as client:
+            project_url = f"/v1/projects/{project.project_id}"
+            collected = client.post(f"{project_url}/evidence", json={})
+            assert collected.status_code == 200
+            body = collected.json()
+            assert body["current_step"] == "evidence_qa"
+            assert body["workflow_status"]["evidence_collection"] == "needs_review"
+            evidence = body["evidence_collection_artifact"]["task_runs"][0]["evidence"][0]
+
+            reviewed = client.patch(
+                f"{project_url}/evidence",
+                json={
+                    "decisions": [
+                        {
+                            "evidence_id": evidence["evidence_id"],
+                            "status": "accepted",
+                            "note": "已核对来源",
+                        }
+                    ],
+                    "confirm": True,
+                },
+            )
+            assert reviewed.status_code == 200
+            result = reviewed.json()
+            assert result["evidence_collection_artifact"]["human_confirmed"] is True
+            assert result["workflow_status"]["evidence_qa"] == "completed"
+            assert result["workflow_status"]["industry_analysis"] == "ready"
+            assert result["current_step"] == "industry_analysis"
+
+            persisted = client.get(project_url).json()
+            assert persisted["evidence_collection_artifact"]["task_runs"][0]["evidence"][0]["reviewer_note"] == "已核对来源"
     finally:
         app.dependency_overrides.clear()
 

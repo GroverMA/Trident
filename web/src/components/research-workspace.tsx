@@ -16,7 +16,10 @@ type ActionState =
   | "brief-save"
   | "brief-confirm"
   | "plan-generate"
-  | "plan-confirm";
+  | "plan-confirm"
+  | "evidence-collect"
+  | "evidence-save"
+  | "evidence-confirm";
 
 const BUILD_STEPS: WorkflowStep[] = [
   { key: "research_brief", label: "研究范围", description: "确认目标、市场边界与时间口径" },
@@ -256,11 +259,67 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
     }
   }
 
+  async function collectEvidence() {
+    setAction("evidence-collect");
+    setMessage("");
+    setError("");
+    try {
+      const result = await requestProject(
+        `/api/projects/${project.project_id}/evidence`,
+        "POST",
+        {},
+      );
+      acceptProject(result, "网页检索和证据结构化已经完成，请逐条接受或拒绝候选证据。");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "网页证据研究暂时未能完成。");
+    } finally {
+      setAction(null);
+    }
+  }
+
+  async function reviewEvidence(form: HTMLFormElement, confirm: boolean) {
+    const artifact = project.evidence_collection_artifact;
+    if (!artifact) return;
+    setAction(confirm ? "evidence-confirm" : "evidence-save");
+    setMessage("");
+    setError("");
+    const data = new FormData(form);
+    const decisions = artifact.task_runs.flatMap((run) =>
+      run.evidence.flatMap((item) => {
+        const status = String(data.get(`evidence_status_${item.evidence_id}`) || "");
+        if (status !== "accepted" && status !== "rejected") return [];
+        return [{
+          evidence_id: item.evidence_id,
+          status,
+          note: String(data.get(`evidence_note_${item.evidence_id}`) || "").trim() || null,
+        }];
+      }),
+    );
+    try {
+      const result = await requestProject(
+        `/api/projects/${project.project_id}/evidence`,
+        "PATCH",
+        { decisions, confirm },
+      );
+      acceptProject(
+        result,
+        confirm
+          ? "Gate 1 已确认，项目可以进入行业分析。"
+          : "证据审核决定已经保存。",
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "证据审核未能保存。");
+    } finally {
+      setAction(null);
+    }
+  }
+
   const completed = steps.filter(
     (step) => project.workflow_status[step.key] === "completed",
   ).length;
   const brief = project.research_brief_artifact;
   const plan = project.research_plan_artifact;
+  const evidence = project.evidence_collection_artifact;
 
   return (
     <main className="workflowCanvas">
@@ -538,6 +597,69 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
           ) : (
             <div className="nextStageNotice"><strong>{reviewFirst ? "报告初稿节点已经就绪" : "网页证据研究节点已经就绪"}</strong><span>{reviewFirst ? "下一阶段将接入完整报告编排、引用追溯与内容修订工作台。" : "下一阶段将接入搜索、抓取、证据结构化与批量人工审核。"}</span></div>
           )}
+        </section>
+      )}
+
+      {!reviewFirst && plan?.human_confirmed && !evidence && (
+        <section className="artifactPanel artifactStart">
+          <span className="eyebrow">EVIDENCE COLLECTION</span>
+          <h2>执行网页研究并建立证据矩阵</h2>
+          <p>系统将按照已确认的 Research Plan 搜索、抓取和结构化来源。候选内容不会自动成为报告证据，必须经过人工接受。</p>
+          {message && <div className="formSuccess" role="status">{message}</div>}
+          {error && <div className="formError" role="alert">{error}</div>}
+          <button className="primaryButton artifactPrimary" type="button" disabled={action !== null} onClick={() => void collectEvidence()}>
+            {action === "evidence-collect" ? "正在检索和核验证据…" : "开始网页证据研究"}
+          </button>
+        </section>
+      )}
+
+      {!reviewFirst && evidence && (
+        <section className="artifactPanel">
+          <div className="artifactHeading">
+            <div>
+              <span className="eyebrow">GATE 1 · EVIDENCE REVIEW</span>
+              <h2>{evidence.human_confirmed ? "证据矩阵已经确认" : "逐条审核候选证据"}</h2>
+              <p>接受表示该陈述可进入后续分析；拒绝表示保留审计记录但不用于形成判断。</p>
+            </div>
+            <span className={evidence.human_confirmed ? "confirmedLabel" : "reviewRequired"}>{evidence.human_confirmed ? "已确认" : "人工确认 · 必选"}</span>
+          </div>
+          <form onSubmit={(event) => { event.preventDefault(); void reviewEvidence(event.currentTarget, true); }}>
+            <div className="taskList">
+              {evidence.task_runs.map((run) => (
+                <details className="taskCard" key={run.run_id} open>
+                  <summary><span>{run.task_id}</span><strong>{run.task_title}</strong><small>{run.evidence.length} 条候选证据</small></summary>
+                  <div className="taskBody">
+                    {run.evidence.map((item) => {
+                      const source = run.sources.find((candidate) => candidate.source_id === item.source_id);
+                      return (
+                        <div className="evidenceStandard" key={item.evidence_id}>
+                          <strong>{item.kind} · QA {item.qa_score}</strong>
+                          <span>{item.statement}</span>
+                          <small>{item.supporting_excerpt}</small>
+                          {source && <a href={source.url} target="_blank" rel="noreferrer">{source.title} · {source.domain}</a>}
+                          {!evidence.human_confirmed && (
+                            <div className="fieldGrid">
+                              <label className="field"><span>审核决定</span><select name={`evidence_status_${item.evidence_id}`} defaultValue={item.review_status === "needs_review" ? "" : item.review_status}><option value="">待决定</option><option value="accepted">接受</option><option value="rejected">拒绝</option></select></label>
+                              <label className="field"><span>审核备注</span><input name={`evidence_note_${item.evidence_id}`} defaultValue={item.reviewer_note || ""} /></label>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {run.information_gaps.length > 0 && <div><h4>仍有信息缺口</h4><ul>{run.information_gaps.map((item) => <li key={item}>{item}</li>)}</ul></div>}
+                  </div>
+                </details>
+              ))}
+            </div>
+            {message && <div className="formSuccess" role="status">{message}</div>}
+            {error && <div className="formError" role="alert">{error}</div>}
+            {!evidence.human_confirmed && (
+              <div className="scopeActions">
+                <button type="button" className="secondaryButton" disabled={action !== null} onClick={(event) => { const form = event.currentTarget.form; if (form) void reviewEvidence(form, false); }}>{action === "evidence-save" ? "正在保存…" : "保存审核决定"}</button>
+                <button type="submit" className="primaryButton" disabled={action !== null}>{action === "evidence-confirm" ? "正在确认…" : "确认 Gate 1 并进入行业分析"}</button>
+              </div>
+            )}
+          </form>
         </section>
       )}
     </main>
