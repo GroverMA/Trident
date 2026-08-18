@@ -23,6 +23,7 @@ type ActionState =
   | "future-generate"
   | "future-save"
   | "future-confirm"
+  | "report-generate"
   | "rewind";
 
 const BUILD_STEPS: WorkflowStep[] = [
@@ -104,8 +105,8 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
   const [futureSelections, setFutureSelections] = useState<Record<string, "accepted" | "rejected">>(() => {
     const artifact = initialProject.future_intelligence_artifact;
     return Object.fromEntries([
-      ...(artifact?.trends || []).flatMap((item) => item.review_status === "accepted" || item.review_status === "rejected" ? [[item.trend_id, item.review_status]] : []),
-      ...(artifact?.scenarios || []).flatMap((item) => item.review_status === "accepted" || item.review_status === "rejected" ? [[item.scenario_id, item.review_status]] : []),
+      ...(artifact?.trends || []).map((item) => [item.trend_id, item.review_status === "rejected" ? "rejected" : "accepted"]),
+      ...(artifact?.scenarios || []).map((item) => [item.scenario_id, item.review_status === "rejected" ? "rejected" : "accepted"]),
     ]) as Record<string, "accepted" | "rejected">;
   });
   const steps = useMemo(() => stepsFor(project), [project]);
@@ -123,8 +124,8 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
     if (result.future_intelligence_artifact) {
       const artifact = result.future_intelligence_artifact;
       setFutureSelections(Object.fromEntries([
-        ...artifact.trends.flatMap((item) => item.review_status === "accepted" || item.review_status === "rejected" ? [[item.trend_id, item.review_status]] : []),
-        ...artifact.scenarios.flatMap((item) => item.review_status === "accepted" || item.review_status === "rejected" ? [[item.scenario_id, item.review_status]] : []),
+        ...artifact.trends.map((item) => [item.trend_id, item.review_status === "rejected" ? "rejected" : "accepted"]),
+        ...artifact.scenarios.map((item) => [item.scenario_id, item.review_status === "rejected" ? "rejected" : "accepted"]),
       ]) as Record<string, "accepted" | "rejected">);
     }
     setMessage(success);
@@ -463,6 +464,16 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
     } finally { setAction(null); }
   }
 
+  async function generateGeneralReport() {
+    setAction("report-generate"); setMessage(""); setError("");
+    try {
+      const result = await requestProject(`/api/projects/${project.project_id}/general-report`, "POST");
+      acceptProject(result, "Gate 2 已完成，General Report 已根据批准内容生成。");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "General Report 暂时未能生成，已审核内容不会丢失。");
+    } finally { setAction(null); }
+  }
+
   function selectEvidence(mode: "recommended" | "all" | "none") {
     const artifact = project.evidence_collection_artifact;
     if (!artifact) return;
@@ -481,6 +492,7 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
   const evidence = project.evidence_collection_artifact;
   const analysis = project.industry_analysis_artifact;
   const future = project.future_intelligence_artifact;
+  const report = project.general_report_artifact;
   const analysisFindings = analysis?.modules.flatMap((module) => module.findings) || [];
   const evidenceAdvisories = plan && evidence ? plan.tasks.flatMap((task) => {
     const run = evidence.task_runs.find((item) => item.task_id === task.task_id);
@@ -917,10 +929,23 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
             </div>
             {future.forecast_gaps.length > 0 && <div className="evidenceGapPanel"><h3>预测证据缺口</h3><ul>{future.forecast_gaps.map((item) => <li key={item}>{item}</li>)}</ul></div>}
             {message && <div className="formSuccess" role="status">{message}</div>}{error && <div className="formError" role="alert">{error}</div>}
-            {!future.human_confirmed && <><label className="gateConfirmation requiredConfirmation"><input type="checkbox" checked={futureChecked} onChange={(event) => setFutureChecked(event.target.checked)} /><span>我已审核趋势、三种情景、领先指标、假设和反证条件（必选）</span></label><div className="scopeActions"><button type="button" className="secondaryButton" disabled={action !== null} onClick={(event) => { const form = event.currentTarget.form; if (form) void reviewFutureIntelligence(form, false); }}>{action === "future-save" ? "正在保存…" : "保存审核决定"}</button><button type="submit" className="primaryButton" disabled={action !== null || !futureChecked || [...future.trends, ...future.scenarios].some((item) => !futureSelections["trend_id" in item ? item.trend_id : item.scenario_id])}>{action === "future-confirm" ? "正在确认…" : "批准 Future Intelligence 并进入 Gate 2"}</button></div></>}
+            {!future.human_confirmed && <><div className="nextStageNotice"><strong>默认采用全部未明确拒绝的内容</strong><span>你只需把不希望进入报告的趋势或情景改为“拒绝”，无需逐项重复确认。</span></div><label className="gateConfirmation requiredConfirmation"><input type="checkbox" checked={futureChecked} onChange={(event) => setFutureChecked(event.target.checked)} /><span>我已审阅拟进入报告的趋势、情景、风险和局限（必选）</span></label><div className="scopeActions"><button type="button" className="secondaryButton" disabled={action !== null} onClick={(event) => { const form = event.currentTarget.form; if (form) void reviewFutureIntelligence(form, false); }}>{action === "future-save" ? "正在保存…" : "保存排除项"}</button><button type="submit" className="primaryButton" disabled={action !== null || !futureChecked}>{action === "future-confirm" ? "正在确认…" : "确认 Future Intelligence 并进入 Gate 2"}</button></div></>}
             {future.human_confirmed && <div className="nextStageNotice"><strong>Gate 2 内容审核已经就绪</strong><span>已批准趋势和情景将与行业分析共同进入报告内容审核。</span></div>}
           </form>
         </section>
+      )}
+
+      {!reviewFirst && future?.human_confirmed && !report && (
+        <section className="artifactPanel artifactStart">
+          <span className="eyebrow">GATE 2 · CONTENT</span><h2>确认内容并生成 General Report</h2>
+          <p>行业判断、趋势和情景已经完成内容选择。报告只组合已批准材料，生成失败不会清除任何审核结果，可以安全重试。</p>
+          {message && <div className="formSuccess" role="status">{message}</div>}{error && <div className="formError" role="alert">{error}</div>}
+          <button className="primaryButton artifactPrimary" type="button" disabled={action !== null} onClick={() => void generateGeneralReport()}>{action === "report-generate" ? "AI 正在组织完整报告…" : "确认 Gate 2 并生成 General Report"}</button>
+        </section>
+      )}
+
+      {!reviewFirst && report && (
+        <section className="artifactPanel"><div className="artifactHeading"><div><span className="eyebrow">GENERAL REPORT</span><h2>{report.title}</h2><p>{report.source_count} 个来源 · {report.accepted_finding_ids.length} 项行业判断 · {report.accepted_trend_ids.length} 项趋势</p></div><span className="confirmedLabel">报告已生成</span></div>{report.unresolved_prompt_questions.length > 0 && <div className="evidenceGapPanel"><h3>仍未完全回答的问题</h3><ul>{report.unresolved_prompt_questions.map((item) => <li key={item}>{item}</li>)}</ul></div>}<article className="reportMarkdown"><pre>{report.markdown}</pre></article></section>
       )}
     </main>
   );

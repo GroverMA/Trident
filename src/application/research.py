@@ -523,6 +523,18 @@ class ResearchApplication:
         statuses = dict(project.workflow_status)
         current_step = "future_intelligence"
         if confirm:
+            # Streamlit parity: Gate 2 defaults every non-rejected item to
+            # included. Reviewers only need to act when they want to exclude
+            # content; untouched items must never create an accidental block.
+            for item in [*reviewed.trends, *reviewed.scenarios]:
+                if item.review_status == ForecastReviewStatus.NEEDS_REVIEW:
+                    item_id = getattr(item, "trend_id", None) or getattr(item, "scenario_id")
+                    reviewed = review_forecast_item(
+                        reviewed,
+                        item_id,
+                        ForecastReviewStatus.ACCEPTED,
+                        "Gate 2默认采用；用户未明确排除",
+                    )
             reasons = forecast_gate_reasons(reviewed)
             if reasons:
                 raise ResearchWorkflowError("；".join(reasons))
@@ -547,6 +559,27 @@ class ResearchApplication:
             "general_report_artifact": None,
             "workflow_status": statuses,
             "current_step": current_step,
+            "updated_at": datetime.now(UTC),
+        }))
+
+    def generate_general_report(self, project_id: str) -> ProjectState:
+        """Complete Gate 2 and compose a report from approved content only."""
+
+        project = self.get_project(project_id)
+        analysis = project.industry_analysis_artifact
+        future = project.future_intelligence_artifact
+        if analysis is None or not analysis.human_confirmed:
+            raise ResearchWorkflowError("行业分析尚未通过人工审核")
+        if future is None or not future.human_confirmed:
+            raise ResearchWorkflowError("Future Intelligence尚未通过人工审核")
+        report = self.services.report_generation.generate(project)
+        statuses = dict(project.workflow_status)
+        statuses["human_review"] = WorkflowStatus.COMPLETED
+        statuses["decision_report"] = WorkflowStatus.COMPLETED
+        return self.projects.save(project.model_copy(update={
+            "general_report_artifact": report,
+            "workflow_status": statuses,
+            "current_step": "decision_report",
             "updated_at": datetime.now(UTC),
         }))
 

@@ -14,6 +14,7 @@
 - 共享 Web 研究流程的 Industry Analysis 五模块生成、Finding 接受/拒绝、审核备注与人工确认 Gate。
 - 五个版本化专业研究 Skill、运行时 Registry、模块级 Prompt 绑定和产物版本/哈希审计。
 - 共享 Web 研究流程的 Future Intelligence 生成、趋势/情景逐项审核与 Gate 2 准入。
+- Gate 2 内容确认与 General Report 生成、失败后保留审核状态的安全重试通路。
 
 ### Changed
 
@@ -33,6 +34,7 @@
 - 修复研究操作成功后重复刷新路由造成的字符串格式假错误。
 - Gate 1 在证据覆盖不完整时可由用户明确选择“带限制继续”，同时保留缺口、处理建议和确认审计记录。
 - CloudBase 未随 Vercel 更新的原因已定位为缺少实际发布触发/凭证，而非代码或镜像构建失败。
+- 修复 Web 版要求逐项点击趋势/情景才可继续的迁移偏差；恢复 Streamlit 的“默认采用、明确排除”语义，未操作项不再无故阻断流程。
 
 ### Removed
 

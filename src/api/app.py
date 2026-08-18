@@ -25,6 +25,7 @@ from src.providers.base import ProviderError
 from src.services.research_planning import SOPComplianceError
 from src.services.industry_analysis import IndustryAnalysisError
 from src.services.errors import FutureIntelligenceError
+from src.services.report_generation import ReportGenerationError
 from src.services.reviewer_orchestration import ReviewerPipelineError
 from src.state.project import (
     ProjectState,
@@ -473,6 +474,24 @@ def review_project_future_intelligence(
         raise HTTPException(status_code=404, detail="project not found") from exc
     except (ResearchWorkflowError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/v1/projects/{project_id}/general-report", response_model=ProjectState)
+def generate_project_general_report(
+    project_id: str, research: ResearchApp
+) -> ProjectState:
+    try:
+        return research.generate_general_report(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ResearchWorkflowError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ReportGenerationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ConfigurationError as exc:
+        raise HTTPException(status_code=503, detail="AI研究服务尚未完成配置") from exc
+    except ProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.post(

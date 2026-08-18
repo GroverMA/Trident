@@ -213,6 +213,20 @@ export interface FutureIntelligenceArtifact {
   updated_at: string;
 }
 
+export interface GeneralReportArtifact {
+  report_id: string;
+  title: string;
+  report_status: string;
+  markdown: string;
+  accepted_evidence_ids: string[];
+  accepted_finding_ids: string[];
+  accepted_trend_ids: string[];
+  accepted_scenario_ids: string[];
+  unresolved_prompt_questions: string[];
+  source_count: number;
+  generated_at: string;
+}
+
 export interface ProjectSummary {
   project_id: string;
   project_name: string;
@@ -235,6 +249,7 @@ export interface ProjectSummary {
   evidence_collection_artifact?: EvidenceCollectionArtifact | null;
   industry_analysis_artifact?: IndustryAnalysisArtifact | null;
   future_intelligence_artifact?: FutureIntelligenceArtifact | null;
+  general_report_artifact?: GeneralReportArtifact | null;
   created_at: string;
   updated_at: string;
 }
