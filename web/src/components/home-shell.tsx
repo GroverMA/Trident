@@ -1,53 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Brand } from "@/components/brand";
 import { PathSelector } from "@/components/path-selector";
 import { ProjectForm } from "@/components/project-form";
-import type { ProjectSummary, ResearchPath } from "@/lib/types";
+import { ProjectSidebar } from "@/components/project-sidebar";
+import type { ResearchPath } from "@/lib/types";
 
 export function HomeShell() {
   const [researchPath, setResearchPath] = useState<ResearchPath | null>(null);
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  useEffect(() => { window.scrollTo(0, 0); }, [researchPath]);
 
-  useEffect(() => {
-    fetch("/api/projects")
-      .then((response) => (response.ok ? response.json() : []))
-      .then((items: ProjectSummary[]) => setProjects(items.slice(0, 5)))
-      .catch(() => setProjects([]));
-  }, []);
+  if (!researchPath) {
+    return <PathSelector onSelect={setResearchPath} />;
+  }
 
   return (
-    <>
-      {!researchPath && <PathSelector onSelect={setResearchPath} />}
-      <div
-        aria-hidden={!researchPath}
-        className={researchPath ? "appShell" : "appShell appShellHidden"}
-      >
-      <aside className="sidebar">
-        <Brand compact />
-        <button className="primaryButton sidebarButton" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-          新建研究
-        </button>
-        <button className="pathSwitch" onClick={() => setResearchPath(null)}>
-          <span>当前研究方式</span>
-          <strong>{researchPath === "report_review_first" ? "审阅式研究" : "构建式研究"}</strong>
-          <small>点击切换，不会清空项目</small>
-        </button>
-        <div className="sidebarSection">
-          <div className="sidebarTitle">最近项目</div>
-          {projects.length ? (
-            projects.map((project) => (
-              <a className="projectRow" href={`/projects/${project.project_id}`} key={project.project_id}>
-                <strong>{project.project_name}</strong>
-                <span>{project.industry} · {project.region}</span>
-              </a>
-            ))
-          ) : (
-            <p className="emptyCopy">创建后的研究项目会显示在这里。</p>
-          )}
-        </div>
-      </aside>
+    <div className="appShell">
+      <ProjectSidebar researchPath={researchPath} />
 
       <main className="workspace">
         <section className="hero">
@@ -60,7 +29,7 @@ export function HomeShell() {
         </section>
 
         <div className="homeGrid">
-          <ProjectForm researchPath={researchPath ?? "research_build_first"} />
+          <ProjectForm researchPath={researchPath} />
           <aside className="infoColumn">
             <div className="sectionHeading">
               <span className="badge">仅供浏览</span>
@@ -90,7 +59,6 @@ export function HomeShell() {
           </aside>
         </div>
       </main>
-      </div>
-    </>
+    </div>
   );
 }

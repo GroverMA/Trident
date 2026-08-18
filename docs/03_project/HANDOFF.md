@@ -22,11 +22,12 @@
 - 已按原 Streamlit 版纠正 Prompt Analysis/Gate 0：AI 先解释 Prompt，用户再逐项修改
   市场范围和研究问题，确认后才进入 Research Plan。
 - 已建立 `STREAMLIT_PARITY_AUDIT.md`，后续迁移以原版完整功能而非当前简化 Web 为基准。
+- 已按 Streamlit 截图恢复前置研究方式选择、共享项目管理侧栏、构建式八节点工作台和完整 Gate 0；本地浏览器桌面/移动验收通过。
 - 建立本套产品、研究、工程、项目治理和 AI 记忆文档。
 
 ## 当前重点
 
-验证 CloudBase 部署可稳定启动，并把完整研究任务从同步请求迁移为可恢复的异步 Job。下一步应优先跑通四条核心路径，而不是继续增加表层功能。
+完成本轮 Vercel/CloudBase 同提交发布后，继续迁移 Industry Analysis、Future Intelligence、Gate 2 和 General Report，随后把长任务迁移为可恢复的异步 Job。
 
 所有迁移和新增功能必须同时进入海外 Vercel 与大陆 CloudBase。二者是同一产品的区域部署，
 不是独立版本；功能、研究流程、API/数据契约、Skill 与报告标准不得分叉。

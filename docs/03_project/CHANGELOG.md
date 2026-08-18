@@ -9,11 +9,13 @@
 - 产品、研究、工程、项目治理与 AI 记忆知识库。
 - CloudBase 单域名公开健康探针 `/healthz` 和就绪探针 `/readyz`。
 - 共享 Web 研究流程的 Evidence Collection、Evidence Matrix 和 Gate 1 人工审核。
+- 前置的构建式/审阅式研究方式选择页，以及共享项目管理侧栏。
 
 ### Changed
 
 - 确立 Vercel 海外版与腾讯云大陆版的双区域同源原则：共享研究流程、功能、契约、Skill
   和版本，区域差异仅由部署配置与基础设施适配表达。
+- 构建式研究工作台恢复为 Streamlit 同源的八节点英文流程；Gate 0 恢复原 Prompt、AI 术语理解、完整市场边界和逐项人工确认。
 
 ### Improved
 

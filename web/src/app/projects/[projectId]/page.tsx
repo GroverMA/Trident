@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Brand } from "@/components/brand";
+import { ProjectSidebar } from "@/components/project-sidebar";
 import { ResearchWorkspace } from "@/components/research-workspace";
 import { tridentApiUrl } from "@/lib/api";
 import type { ProjectSummary } from "@/lib/types";
@@ -22,13 +22,10 @@ export default async function ProjectPage(
   const project = await getProject(projectId);
 
   return (
-    <div className="projectPage">
-      <header className="projectTopbar">
-        <Brand compact />
-        <Link className="secondaryButton linkButton" href="/">新建研究</Link>
-      </header>
+    <div className="appShell projectAppShell">
+      {project && <ProjectSidebar activeProject={project} researchPath={project.research_path} />}
       {project ? (
-        <ResearchWorkspace initialProject={project} />
+        <div className="projectWorkspace"><ResearchWorkspace initialProject={project} /></div>
       ) : (
         <main className="projectCanvas">
           <h1>暂时无法读取这个项目</h1>

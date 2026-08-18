@@ -10,8 +10,6 @@ import type {
 
 type WorkflowStep = { key: string; label: string; description: string };
 type ActionState =
-  | "scope-draft"
-  | "scope-confirm"
   | "brief-generate"
   | "brief-save"
   | "brief-confirm"
@@ -22,13 +20,14 @@ type ActionState =
   | "evidence-confirm";
 
 const BUILD_STEPS: WorkflowStep[] = [
-  { key: "research_brief", label: "研究范围", description: "确认目标、市场边界与时间口径" },
-  { key: "research_planning", label: "研究规划", description: "拆解问题、信息需求和校验节点" },
-  { key: "evidence_collection", label: "网页研究", description: "检索并收集公开证据" },
-  { key: "evidence_qa", label: "证据审核", description: "确认来源、口径与可用性" },
-  { key: "industry_analysis", label: "行业分析", description: "形成市场、产业链与竞争判断" },
-  { key: "future_intelligence", label: "趋势预测", description: "形成未来趋势、情景与反证条件" },
-  { key: "decision_report", label: "研究报告", description: "生成可追溯的完整报告" },
+  { key: "prompt_analysis", label: "Prompt Analysis", description: "AI 理解原始研究需求" },
+  { key: "gate_zero", label: "Gate 0 · Scope", description: "确认目标、市场边界与统计口径" },
+  { key: "web_research", label: "Web Research", description: "检索并收集公开证据" },
+  { key: "gate_one", label: "Gate 1 · Evidence", description: "确认来源、口径与可用性" },
+  { key: "industry_analysis", label: "Industry Analysis", description: "形成市场、产业链与竞争判断" },
+  { key: "future_intelligence", label: "Future Intelligence", description: "形成未来趋势、情景与反证条件" },
+  { key: "gate_two", label: "Gate 2 · Content", description: "人工审核核心分析和未来判断" },
+  { key: "decision_report", label: "General Report", description: "生成可追溯的完整报告" },
 ];
 
 const REVIEW_STEPS: WorkflowStep[] = [
@@ -52,19 +51,6 @@ function stepsFor(project: ProjectSummary): WorkflowStep[] {
     : [...base.slice(0, -1), ...strategy, base.at(-1)!];
 }
 
-function statusLabel(status: string | undefined): string {
-  const labels: Record<string, string> = {
-    completed: "已完成",
-    ready: "可开始",
-    in_progress: "进行中",
-    needs_review: "待确认",
-    blocked: "需处理",
-    not_applicable: "不适用",
-    not_started: "待开始",
-  };
-  return labels[status || "not_started"] || "待开始";
-}
-
 function lines(value: FormDataEntryValue | null): string[] {
   return String(value || "")
     .split(/\r?\n/)
@@ -84,11 +70,10 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
   const router = useRouter();
   const [project, setProject] = useState(initialProject);
   const [action, setAction] = useState<ActionState | null>(null);
-  const [editingScope, setEditingScope] = useState(
-    !initialProject.market_scope_confirmed_at && !initialProject.research_brief_artifact,
-  );
+  const [editingScope, setEditingScope] = useState(!initialProject.research_brief_artifact);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [gateZeroChecked, setGateZeroChecked] = useState(false);
   const steps = useMemo(() => stepsFor(project), [project]);
   const reviewFirst = project.research_path === "report_review_first";
 
@@ -110,42 +95,6 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
       throw new Error(errorMessage(result.detail, "研究服务暂时未能完成本次操作。"));
     }
     return result;
-  }
-
-  async function updateScope(form: HTMLFormElement, confirm: boolean) {
-    setAction(confirm ? "scope-confirm" : "scope-draft");
-    setMessage("");
-    setError("");
-    const data = new FormData(form);
-    const payload: ProjectScopePayload = {
-      project_name: String(data.get("project_name") || "").trim(),
-      industry: String(data.get("industry") || "").trim(),
-      region: String(data.get("region") || "").trim(),
-      research_objective: String(data.get("research_objective") || "").trim(),
-      time_horizon: String(data.get("time_horizon") || "").trim(),
-      output_language: String(data.get("output_language") || "简体中文"),
-      target_company: project.target_company || null,
-      company_strategy_objective: project.company_strategy_objective || null,
-      confirm,
-    };
-    try {
-      const result = await requestProject(
-        `/api/projects/${project.project_id}`,
-        "PATCH",
-        payload,
-      );
-      acceptProject(
-        result,
-        confirm
-          ? "研究范围已确认，下一步由 AI 形成结构化研究简报。"
-          : "研究范围草稿已保存到云端。",
-      );
-      if (confirm) setEditingScope(false);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "研究范围未能保存，请稍后重试。");
-    } finally {
-      setAction(null);
-    }
   }
 
   async function generateBrief() {
@@ -351,26 +300,32 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
     }
   }
 
-  const completed = steps.filter(
-    (step) => project.workflow_status[step.key] === "completed",
-  ).length;
   const brief = project.research_brief_artifact;
   const plan = project.research_plan_artifact;
   const evidence = project.evidence_collection_artifact;
+  const buildStepDone: Record<string, boolean> = {
+    prompt_analysis: Boolean(brief),
+    gate_zero: Boolean(brief?.human_confirmed),
+    web_research: Boolean(evidence),
+    gate_one: Boolean(evidence?.human_confirmed),
+    industry_analysis: project.workflow_status.industry_analysis === "completed",
+    future_intelligence: project.workflow_status.future_intelligence === "completed",
+    gate_two: project.workflow_status.human_review === "completed",
+    decision_report: project.workflow_status.decision_report === "completed",
+  };
+  const completed = reviewFirst
+    ? steps.filter((step) => project.workflow_status[step.key] === "completed").length
+    : BUILD_STEPS.filter((step) => buildStepDone[step.key]).length;
 
   return (
     <main className="workflowCanvas">
-      <div className="projectHeading">
-        <div>
-          <div className="badge badgeAccent">{reviewFirst ? "审阅式研究" : "构建式研究"}</div>
-          <h1>{project.project_name}</h1>
-          <p>{project.research_objective}</p>
-        </div>
-        <div className="cloudState">
-          <span>云端项目</span>
-          <strong>{project.market_scope_confirmed_at ? "研究范围已确认" : brief ? "AI 分析待审核" : "等待 Prompt Analysis"}</strong>
-        </div>
-      </div>
+      <div className="workspaceTags"><span>General Research</span><span>{project.industry}</span><span>{project.region}</span><span>No Industry Pack</span></div>
+      <header className="studioHeading">
+        <div className="eyebrow">RESEARCH STUDIO · THREE HUMAN GATES</div>
+        <h1>行业研究工作台</h1>
+        <p>通用报告与高级分析师模式可以相互切换，且已经完成的研究部分不会丢失</p>
+      </header>
+      <div className="workspaceMode"><span>工作模式</span><div><button className="active" type="button">快速通用报告</button><button type="button">高级分析师工作台</button></div><p>快速通用报告：依次确认市场口径、网页证据和报告内容，其他步骤自动衔接。</p></div>
 
       <section className="workflowSection" aria-label="研究进度">
         <div className="workflowSummary">
@@ -382,8 +337,9 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
         </div>
         <div className="workflowTrack">
           {steps.map((step, index) => {
-            const status = project.workflow_status[step.key] || "not_started";
-            const active = project.current_step === step.key;
+            const done = !reviewFirst && buildStepDone[step.key];
+            const status = done ? "completed" : (project.workflow_status[step.key] || "not_started");
+            const active = !done && index === completed;
             return (
               <div
                 className={`workflowNode workflowNode-${status} ${active ? "workflowNodeActive" : ""}`}
@@ -392,7 +348,6 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
               >
                 <div className="workflowDot">{index + 1}</div>
                 <strong>{step.label}</strong>
-                <span>{statusLabel(status)}</span>
               </div>
             );
           })}
@@ -414,8 +369,8 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
           <div className="scopeIntro">
             <div>
               <span className="eyebrow">PROMPT ANALYSIS</span>
-              <h2>先让 AI 理解你的研究需求</h2>
-              <p>填写或修改原始 Prompt。AI 会先解释研究意图、市场边界、必答问题、信息缺口和待验证假设；下一步再由你逐项查看和修改，不会直接锁定范围。</p>
+              <h2>研究目标与执行边界</h2>
+              <p>第一步只调用语言模型理解原始 Prompt 并生成市场描述，不会立即搜索网页。</p>
             </div>
             <div className="scopePathNote">
               <strong>{reviewFirst ? "自上而下审阅" : "自下而上构建"}</strong>
@@ -428,43 +383,16 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
               void analyzePrompt(event.currentTarget);
             }}
           >
-            <label className="field fieldWide">
-              <span>项目名称</span>
-              <input name="project_name" required defaultValue={project.project_name} />
-            </label>
-            <div className="fieldGrid">
-              <label className="field">
-                <span>行业</span>
-                <input name="industry" required defaultValue={project.industry} />
-              </label>
-              <label className="field">
-                <span>国家或地区</span>
-                <input name="region" required defaultValue={project.region} />
-              </label>
-            </div>
-            <label className="field fieldWide scopePrompt">
-              <span>核心研究目标（主要 Prompt）</span>
-              <textarea
-                name="research_objective"
-                required
-                rows={7}
-                defaultValue={project.research_objective}
-              />
-            </label>
-            <div className="fieldGrid">
-              <label className="field">
-                <span>时间范围</span>
-                <input name="time_horizon" required defaultValue={project.time_horizon} />
-              </label>
-              <label className="field">
-                <span>输出语言</span>
-                <select name="output_language" defaultValue={project.output_language}>
-                  <option>简体中文</option>
-                  <option>English</option>
-                  <option>中英双语</option>
-                </select>
-              </label>
-            </div>
+            <input type="hidden" name="project_name" value={project.project_name} />
+            <input type="hidden" name="industry" value={project.industry} />
+            <input type="hidden" name="region" value={project.region} />
+            <input type="hidden" name="research_objective" value={project.research_objective} />
+            <input type="hidden" name="time_horizon" value={project.time_horizon} />
+            <input type="hidden" name="output_language" value={project.output_language} />
+            <details className="researchBoundary" open>
+              <summary>研究目标与执行边界</summary>
+              <div><p><strong>行业：</strong>{project.industry} · <strong>地区：</strong>{project.region}</p><p><strong>研究目标：</strong>{project.research_objective}</p><p><strong>时间范围：</strong>{project.time_horizon}</p><small>第一步只调用语言模型理解原始Prompt并生成市场描述，不会立即搜索网页。</small></div>
+            </details>
             {project.company_strategy_enabled && (
               <div className="strategyContext">
                 <span>企业战略决策支持</span>
@@ -474,20 +402,9 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
             )}
             {message && <div className="formSuccess" role="status">{message}</div>}
             {error && <div className="formError" role="alert">{error}</div>}
-            <div className="scopeActions">
-              <button
-                type="button"
-                className="secondaryButton"
-                disabled={action !== null}
-                onClick={(event) => {
-                  const form = event.currentTarget.form;
-                  if (form) void updateScope(form, false);
-                }}
-              >
-                {action === "scope-draft" ? "正在保存…" : "保存范围草稿"}
-              </button>
+            <div className="scopeActions singleAction">
               <button type="submit" className="primaryButton" disabled={action !== null}>
-                {action === "brief-generate" ? "AI 正在分析 Prompt…" : "AI 分析 Prompt 并生成可编辑范围"}
+                {action === "brief-generate" ? "AI 正在理解原始 Prompt，并形成可审阅的市场描述与研究口径…" : "AI分析研究需求并生成市场描述"}
               </button>
             </div>
           </form>
@@ -524,50 +441,52 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
         <section className="artifactPanel">
           <div className="artifactHeading">
             <div>
-              <span className="eyebrow">HUMAN REVIEW</span>
-              <h2>核对 AI 对研究问题的理解</h2>
-              <p>所有字段都可修改。确认后，这份简报将成为后续任务拆解和报告生成的统一依据。</p>
+              <h2>Gate 0 · 对齐AI对研究问题和市场口径的理解</h2>
+              <p>AI已经根据你的原始Prompt生成市场描述。请修改任何不准确的定义；确认后的版本将成为检索、分析、趋势和报告的共同口径。</p>
             </div>
-            <span className="reviewRequired">人工确认 · 必选</span>
           </div>
+          <section className="promptInterpretation">
+            <h3>用户原始Prompt</h3>
+            <p>{brief.original_prompt || project.research_objective}</p>
+            {brief.interpreted_intent && Object.keys(brief.interpreted_intent.terminology_map).length > 0 && <><strong>AI术语理解</strong><ul>{Object.entries(brief.interpreted_intent.terminology_map).map(([term, meaning]) => <li key={term}>{term} → {meaning}</li>)}</ul></>}
+          </section>
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              void reviewBrief(event.currentTarget, true);
+              if (gateZeroChecked) void reviewBrief(event.currentTarget, true);
             }}
           >
-            <label className="field fieldWide scopePrompt">
-              <span>本次研究需要支持的核心判断</span>
+            <label className="field fieldWide">
+              <span>AI理解后的研究目标</span>
               <textarea name="decision_statement" required rows={4} defaultValue={brief.decision_statement} />
             </label>
-            <h3 className="formSectionTitle">市场定义与边界</h3>
+            <label className="field fieldWide"><span>最终报告必须回答的问题（每行一项）</span><textarea name="key_questions" required rows={7} defaultValue={brief.key_questions.join("\n")} /></label>
+            <h3 className="formSectionTitle">市场描述与统计口径</h3>
             <div className="fieldGrid">
-              <label className="field"><span>核心市场</span><input name="core_market" required defaultValue={brief.market_definition.core_market} /></label>
-              <label className="field"><span>产品与服务范围</span><input name="product_scope" required defaultValue={brief.market_definition.product_scope} /></label>
-              <label className="field"><span>客户范围</span><input name="customer_scope" required defaultValue={brief.market_definition.customer_scope} /></label>
+              <label className="field fieldWide"><span>核心市场定义</span><textarea name="core_market" required rows={3} defaultValue={brief.market_definition.core_market} /></label>
+            </div>
+            <div className="fieldGrid">
+              <label className="field"><span>产品/服务范围</span><textarea name="product_scope" required rows={4} defaultValue={brief.market_definition.product_scope} /></label>
+              <label className="field"><span>客户与应用范围</span><textarea name="customer_scope" required rows={4} defaultValue={brief.market_definition.customer_scope} /></label>
               <label className="field"><span>地理范围</span><input name="geography_scope" required defaultValue={brief.market_definition.geography_scope} /></label>
-              <label className="field"><span>产业链范围</span><input name="value_chain_scope" required defaultValue={brief.market_definition.value_chain_scope} /></label>
               <label className="field"><span>时间范围</span><input name="time_scope" required defaultValue={brief.market_definition.time_scope} /></label>
             </div>
-            <div className="fieldGrid">
-              <label className="field"><span>相邻但不属于核心市场（每行一项）</span><textarea name="adjacent_markets" rows={5} defaultValue={brief.market_definition.adjacent_markets.join("\n")} /></label>
-              <label className="field"><span>仍需验证的市场口径（每行一项）</span><textarea name="ambiguities" rows={5} defaultValue={brief.market_definition.ambiguities.join("\n")} /></label>
-            </div>
+            <label className="field fieldWide"><span>价值链范围</span><textarea name="value_chain_scope" required rows={4} defaultValue={brief.market_definition.value_chain_scope} /></label>
+            <label className="field fieldWide"><span>市场规模统计口径</span><textarea name="market_sizing_basis" rows={4} defaultValue={brief.market_definition.market_sizing_basis} /></label>
+            <label className="field fieldWide"><span>竞争者与可比公司识别口径</span><textarea name="competitor_definition" required rows={4} defaultValue={brief.market_definition.competitor_definition} /></label>
             <div className="fieldGrid">
               <label className="field"><span>纳入范围（每行一项）</span><textarea name="inclusions" required rows={6} defaultValue={brief.market_definition.inclusions.join("\n")} /></label>
               <label className="field"><span>排除范围（每行一项）</span><textarea name="exclusions" required rows={6} defaultValue={brief.market_definition.exclusions.join("\n")} /></label>
             </div>
-            <label className="field fieldWide"><span>市场规模计量口径</span><textarea name="market_sizing_basis" rows={3} defaultValue={brief.market_definition.market_sizing_basis} /></label>
-            <label className="field fieldWide"><span>竞争者与可比公司识别口径</span><textarea name="competitor_definition" required rows={3} defaultValue={brief.market_definition.competitor_definition} /></label>
-            <h3 className="formSectionTitle">研究问题与分析假设</h3>
-            <label className="field fieldWide"><span>报告必须回答的问题（每行一项）</span><textarea name="key_questions" required rows={7} defaultValue={brief.key_questions.join("\n")} /></label>
+            <label className="field fieldWide"><span>相邻但不属于核心市场的领域（每行一项）</span><textarea name="adjacent_markets" rows={5} defaultValue={brief.market_definition.adjacent_markets.join("\n")} /></label>
+            <label className="field fieldWide"><span>仍需验证的市场口径（每行一项）</span><textarea name="ambiguities" rows={5} defaultValue={brief.market_definition.ambiguities.join("\n")} /></label>
             <div className="fieldGrid">
               <label className="field"><span>当前信息缺口（每行一项）</span><textarea name="information_gaps" required rows={6} defaultValue={brief.information_gaps.join("\n")} /></label>
               <label className="field"><span>待验证假设（每行一项）</span><textarea name="hypotheses" required rows={6} defaultValue={brief.hypotheses.join("\n")} /></label>
             </div>
             {brief.clarification_questions.length > 0 && (
               <div className="clarificationBlock">
-                <div className="clarificationIntro"><h3>仍需确认的研究口径</h3><p>左侧是 AI 识别的问题，右侧填写你的确认口径。问题与回答会一并保存。</p></div>
+                <div className="clarificationIntro"><h3>仍需在研究中验证的口径问题</h3><p>左侧为AI识别的待验证问题，右侧为研究者的对应确认口径。问题和回答均可修改。</p></div>
                 {brief.clarification_questions.map((question, index) => (
                   <div className="clarificationRow" key={`${index}-${question}`}>
                     <label className="field"><span>待确认问题 {index + 1}</span><textarea name={`clarification_question_${index}`} rows={3} defaultValue={question} /></label>
@@ -577,11 +496,12 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
               </div>
             )}
             <label className="field fieldWide"><span>当前置信度说明</span><textarea name="confidence_note" required rows={3} defaultValue={brief.confidence_note} /></label>
+            <label className="gateConfirmation"><input type="checkbox" checked={gateZeroChecked} onChange={(event) => setGateZeroChecked(event.target.checked)} /><span>我已核对并确认上述市场定义、纳入排除范围和报告必答问题</span></label>
             {message && <div className="formSuccess" role="status">{message}</div>}
             {error && <div className="formError" role="alert">{error}</div>}
             <div className="scopeActions">
               <button type="button" className="secondaryButton" disabled={action !== null} onClick={(event) => { const form = event.currentTarget.form; if (form) void reviewBrief(form, false); }}>{action === "brief-save" ? "正在保存…" : "保存简报草稿"}</button>
-              <button className="primaryButton" type="submit" disabled={action !== null}>{action === "brief-confirm" ? "正在确认…" : "确认研究简报并生成计划"}</button>
+              <button className="primaryButton" type="submit" disabled={action !== null || !gateZeroChecked}>{action === "brief-confirm" ? "正在确认…" : "确认Gate 0并开始网页研究"}</button>
             </div>
           </form>
         </section>

@@ -1,39 +1,41 @@
-# Trident Research Paths and Report Export Design QA
+# Trident Streamlit parity design QA
 
-- Source visual truth: `/var/folders/dp/dwbdn3jx1j36lscl0cpz0g5w0000gn/T/codex-clipboard-6b4e4d95-da40-4720-b8c9-6167008c1626.png`
-- Browser-rendered implementation: `/private/tmp/trident-research-paths.png`
-- Implementation URL: `http://127.0.0.1:8502/`
-- Viewport: 1600 x 1000 CSS px.
-- State: first-entry research-path selection, followed by the build-first project home.
+- Source visual truth: the five user-supplied Streamlit screenshots under `/var/folders/dp/dwbdn3jx1j36lscl0cpz0g5w0000gn/T/`.
+- Implementation screenshots: `/private/tmp/trident-design-create.png`, `/private/tmp/trident-design-build-workspace.png`, `/private/tmp/trident-design-gate0-viewport.png`, `/private/tmp/trident-design-mobile-path.png`.
+- Desktop viewport: 1440 × 1000 CSS pixels, device scale factor 1.
+- Mobile viewport: 390 × 844 CSS pixels, device scale factor 1.
+- States: research-path entry, build-first project home, pre-analysis workbench, Gate 0 review.
 
 ## Full-view comparison evidence
 
-The source showed two identity cards with role and permission language. The implementation keeps the balanced two-card composition while reframing the choice as two research paths. Both cards have equal size, border, typography, content density, and button weight. The page now uses the required `CHOOSE YOUR RESEARCH PATH` eyebrow, title, subtitle, path descriptions, five-step summaries, and persistence statement.
+The source and implementation were opened together for the project workbench and Gate 0 comparisons. The implementation preserves the Streamlit desktop composition: fixed project-management rail, restrained off-white canvas, teal primary actions, low-elevation white surfaces, two-mode segmented control, and the eight-node English workflow. The Gate 0 implementation preserves the long-form editable research boundary rather than reducing it to a short scope card.
 
-The project home was checked after entering build-first research. The hero displays the `Trident` brand, the slogan `Dive Deep into Industries. Surface with Direction.`, and the English descriptor `ENTERPRISE INDUSTRY RESEARCH & STRATEGIC DECISION INTELLIGENCE`. The sidebar exposes a persistent research-path switch without presenting the paths as user roles.
+## Focused comparison evidence
 
-## Report display and export evidence
+Focused inspection covered the eight workflow labels, Prompt interpretation block, market-definition fields, inclusion/exclusion grids, ambiguity question/answer pairs, and confirmation control. This was necessary because the full Gate 0 page exceeds one viewport.
 
-- The report display panel controls font family, title and body colors, report title, level-one and level-two heading sizes, body size, and line height.
-- The same immutable style object is passed to the web preview, Word builder, and PDF builder for build-first and review-first flows, including general and enterprise reports.
-- A deliberately customized report was exported to Word and PDF. The PDF was rendered to page images and visually checked for title hierarchy, color, body size, and line spacing.
-- Word content, paragraph hierarchy, font sizes, colors, and line spacing were inspected programmatically after export. The text and styling are present in the generated DOCX package.
-- A deliberately malformed sample containing sentence-closing punctuation at the beginning of paragraphs, headings, bullets, quotes, and table cells was exported. Shared normalization removed those leading marks before web rendering and both document exports.
+## Fidelity surfaces
 
-## Interaction and runtime checks
-
-- Entered the build-first path through `从问题开始` and confirmed the existing project home rendered without a Streamlit error component.
-- Confirmed the sidebar presents `当前研究方式 · 构建式研究` and retains the in-project switch entry.
-- Confirmed project data is not recreated by a path switch; both views operate on the same project object, evidence collection, report artifact, and revision state.
-- Confirmed the report settings panel is used by every Word/PDF download call site in both research paths.
-- Automated application, workflow, report-generation, Word-export, and PDF-export tests passed.
+- Typography: PingFang/Inter system stack, weight hierarchy, compact English labels, and Chinese form copy align with the source.
+- Spacing/layout: sidebar/content ratio, workflow density, field grids, borders, and radii align with the screenshots; narrow screens collapse to one column.
+- Colors/tokens: neutral canvas, white surfaces, muted slate copy, blue information band, and Trident teal actions are retained.
+- Image quality: the target contains no product imagery or custom illustration; no substitute assets were introduced.
+- Copy/content: all eight English steps and the complete Gate 0 field vocabulary are present.
+- Accessibility/interactions: semantic buttons, links, labeled inputs, details controls, checkbox gating, disabled confirmation state, desktop and mobile path selection were verified.
 
 ## Findings
 
-- No P0, P1, or P2 issue remains in the tested path-selection, project-home, web-preview, Word-export, or PDF-export states.
-- The prohibited identity wording is absent from user-facing application code.
-- The two research paths retain equal visual priority and make their opposite research order explicit.
-- Typography controls now affect downloadable deliverables instead of changing only the browser preview.
-- Paragraph-start punctuation is normalized at the final rendering boundary, protecting all three formats from upstream model variation.
+No actionable P0/P1/P2 visual mismatch remains in the migrated screens. The source screenshots use a wider capture than the 1440 px QA viewport, so line lengths differ while hierarchy and responsive proportions remain equivalent.
+
+## Comparison history
+
+- Pass 1: the rebuilt implementation was compared with the workbench and Gate 0 source screenshots. No P0/P1/P2 issue was found; no post-comparison visual fix was required.
+
+## Runtime evidence
+
+- Primary interactions: both mode CTAs, mode-to-home transition, project navigation, sidebar search rendering, Gate 0 editable controls, and confirmation disabled state.
+- Console errors checked: none.
+- Next.js lint/build: passed.
+- Python tests: 170 passed.
 
 final result: passed

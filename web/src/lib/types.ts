@@ -19,6 +19,14 @@ export interface ResearchBriefArtifact {
   artifact_id: string;
   decision_statement: string;
   original_prompt: string;
+  interpreted_intent?: {
+    interpreted_objective: string;
+    requested_topics: string[];
+    must_answer_questions: string[];
+    terminology_map: Record<string, string>;
+    explicit_exclusions: string[];
+    ambiguities: string[];
+  };
   market_definition: MarketDefinition;
   key_questions: string[];
   information_gaps: string[];

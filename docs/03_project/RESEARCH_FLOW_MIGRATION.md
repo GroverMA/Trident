@@ -21,8 +21,8 @@
 
 | 阶段 | Application/FastAPI | Next.js | 持久化/测试 | 状态 |
 |---|---|---|---|---|
-| 项目与研究路径 | 已迁移 | 已迁移 | 已覆盖 | 完成 |
-| Prompt Analysis / Gate 0 / Research Brief | AI 先分析、人工后确认的顺序已迁移 | 可逐项查看和修改范围 | 已覆盖 | 完成，待双端线上验收 |
+| 项目与研究路径 | 已迁移 | 模式选择前置、项目管理侧栏和创建首页已恢复 | 已覆盖 | 完成，待双端线上验收 |
+| Prompt Analysis / Gate 0 / Research Brief | AI 先分析、人工后确认的顺序已迁移 | 原 Prompt、术语理解、完整市场边界、歧义问答和确认动作已恢复 | 已覆盖 | 完成，待双端线上验收 |
 | Research Plan | 已迁移 | 已迁移 | 已覆盖 | 完成 |
 | 网页检索与 Evidence Matrix | 已迁移 | 已迁移 | 已覆盖 | 完成（第一批） |
 | Gate 1 证据接受/拒绝 | 已迁移 | 已迁移 | 已覆盖 | 完成（第一批） |
@@ -53,3 +53,9 @@
 4. Enterprise Sensing、Company Scorecard、Action Plan 与 Enterprise Report。
 5. 模块级修订、历史版本和恢复。
 6. 将同步长任务封装为持久化 Job/Worker，并为四条主路径建立双区域 E2E。
+
+## 当前 Web 流程契约
+
+构建式研究界面的八个共享节点不得改名、删除或合并：Prompt Analysis、Gate 0 · Scope、
+Web Research、Gate 1 · Evidence、Industry Analysis、Future Intelligence、Gate 2 · Content、
+General Report。项目管理侧栏与研究方式切换属于所有节点共享的应用壳层，不是首页的临时组件。
