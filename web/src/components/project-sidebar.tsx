@@ -38,6 +38,7 @@ export function ProjectSidebar({
 }) {
   const [projects, setProjects] = useState<ProjectSummary[]>(activeProject ? [activeProject] : []);
   const [search, setSearch] = useState("");
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/projects")
@@ -68,7 +69,11 @@ export function ProjectSidebar({
   )) : <p className="emptyCopy">{empty}</p>;
 
   return (
-    <aside className="sidebar projectManager">
+    <>
+    <button className="mobileNavButton" type="button" aria-expanded={drawerOpen} aria-controls="project-navigation" onClick={() => setDrawerOpen(true)}>项目导航</button>
+    {drawerOpen && <button className="mobileNavBackdrop" type="button" aria-label="关闭项目导航" onClick={() => setDrawerOpen(false)} />}
+    <aside id="project-navigation" className={`sidebar projectManager ${drawerOpen ? "mobileDrawerOpen" : ""}`}>
+      <div className="mobileNavHeader"><strong>项目管理</strong><button type="button" onClick={() => setDrawerOpen(false)}>关闭</button></div>
       <Brand compact />
       <Link className="modeSwitcher" href="/">
         当前研究方式 · {researchPath === "report_review_first" ? "审阅式研究" : "构建式研究"}
@@ -95,5 +100,6 @@ export function ProjectSidebar({
       {activeProject && <section className="sidebarWorkspace"><div className="sidebarTitle">当前项目工作台</div><select defaultValue="research"><option value="research">Research Studio · 研究主流程</option></select><details><summary>流程控制</summary><p>可在各人工审核节点返回修改前序内容。</p></details></section>}
       <footer>项目内容保存在云端项目空间。<br />Stage 7B · Strategy-to-Action Studio</footer>
     </aside>
+    </>
   );
 }

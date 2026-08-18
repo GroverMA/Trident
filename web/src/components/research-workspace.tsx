@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import type {
   ProjectScopePayload,
   ProjectSummary,
@@ -17,7 +16,8 @@ type ActionState =
   | "plan-confirm"
   | "evidence-collect"
   | "evidence-save"
-  | "evidence-confirm";
+  | "evidence-confirm"
+  | "rewind";
 
 const BUILD_STEPS: WorkflowStep[] = [
   { key: "prompt_analysis", label: "Prompt Analysis", description: "AI 理解原始研究需求" },
@@ -67,13 +67,25 @@ function errorMessage(detail: unknown, fallback: string): string {
 }
 
 export function ResearchWorkspace({ initialProject }: { initialProject: ProjectSummary }) {
-  const router = useRouter();
   const [project, setProject] = useState(initialProject);
   const [action, setAction] = useState<ActionState | null>(null);
   const [editingScope, setEditingScope] = useState(!initialProject.research_brief_artifact);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [gateZeroChecked, setGateZeroChecked] = useState(false);
+  const [gateOneChecked, setGateOneChecked] = useState(false);
+  const [gapAcknowledged, setGapAcknowledged] = useState(false);
+  const [gapResolution, setGapResolution] = useState("accept_analyst_handling");
+  const [evidenceSelections, setEvidenceSelections] = useState<Record<string, "accepted" | "rejected">>(() =>
+    Object.fromEntries(initialProject.evidence_collection_artifact?.task_runs.flatMap((run) =>
+      run.evidence.map((item) => [
+        item.evidence_id,
+        item.review_status === "accepted" || item.review_status === "rejected"
+          ? item.review_status
+          : (item.qa_score >= 80 && item.prompt_relevance >= 0.7 ? "accepted" : "rejected"),
+      ]),
+    ) || []) as Record<string, "accepted" | "rejected">,
+  );
   const steps = useMemo(() => stepsFor(project), [project]);
   const reviewFirst = project.research_path === "report_review_first";
 
@@ -81,7 +93,6 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
     setProject(result);
     setMessage(success);
     setError("");
-    router.refresh();
   }
 
   async function requestProject(path: string, method: "POST" | "PATCH", body?: unknown) {
@@ -255,6 +266,15 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
         "POST",
         {},
       );
+      const artifact = result.evidence_collection_artifact;
+      if (artifact) {
+        setEvidenceSelections(Object.fromEntries(artifact.task_runs.flatMap((run) =>
+          run.evidence.map((item) => [
+            item.evidence_id,
+            item.qa_score >= 80 && item.prompt_relevance >= 0.7 ? "accepted" : "rejected",
+          ]),
+        )) as Record<string, "accepted" | "rejected">);
+      }
       acceptProject(result, "网页检索和证据结构化已经完成，请逐条接受或拒绝候选证据。");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "网页证据研究暂时未能完成。");
@@ -272,7 +292,7 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
     const data = new FormData(form);
     const decisions = artifact.task_runs.flatMap((run) =>
       run.evidence.flatMap((item) => {
-        const status = String(data.get(`evidence_status_${item.evidence_id}`) || "");
+        const status = evidenceSelections[item.evidence_id] || String(data.get(`evidence_status_${item.evidence_id}`) || "");
         if (status !== "accepted" && status !== "rejected") return [];
         return [{
           evidence_id: item.evidence_id,
@@ -285,7 +305,13 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
       const result = await requestProject(
         `/api/projects/${project.project_id}/evidence`,
         "PATCH",
-        { decisions, confirm },
+        {
+          decisions,
+          confirm,
+          coverage_gap_resolution: gapResolution,
+          coverage_gap_user_input: String(data.get("coverage_gap_user_input") || "").trim() || null,
+          coverage_gaps_acknowledged: gapAcknowledged,
+        },
       );
       acceptProject(
         result,
@@ -300,9 +326,70 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
     }
   }
 
+  async function rewindWorkflow() {
+    setAction("rewind");
+    setMessage("");
+    setError("");
+    try {
+      const response = await fetch(`/api/projects/${project.project_id}/rewind`, { method: "POST" });
+      const result = await response.json() as { project?: ProjectSummary; message?: string; detail?: unknown };
+      if (!response.ok || !result.project) throw new Error(errorMessage(result.detail, "暂时无法返回上一审核节点。"));
+      setProject(result.project);
+      setMessage(result.message || "已返回上一审核节点。");
+      setEditingScope(false);
+      setGateZeroChecked(false);
+      setGateOneChecked(false);
+      setError("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "暂时无法返回上一审核节点。");
+    } finally {
+      setAction(null);
+    }
+  }
+
+  function selectEvidence(mode: "recommended" | "all" | "none") {
+    const artifact = project.evidence_collection_artifact;
+    if (!artifact) return;
+    setEvidenceSelections(Object.fromEntries(artifact.task_runs.flatMap((run) =>
+      run.evidence.map((item) => [
+        item.evidence_id,
+        mode === "all" || (mode === "recommended" && item.qa_score >= 80 && item.prompt_relevance >= 0.7)
+          ? "accepted"
+          : "rejected",
+      ]),
+    )) as Record<string, "accepted" | "rejected">);
+  }
+
   const brief = project.research_brief_artifact;
   const plan = project.research_plan_artifact;
   const evidence = project.evidence_collection_artifact;
+  const evidenceAdvisories = plan && evidence ? plan.tasks.flatMap((task) => {
+    const run = evidence.task_runs.find((item) => item.task_id === task.task_id);
+    const candidates = run?.evidence.filter((item) => item.qa_score >= 80 && item.prompt_relevance >= 0.7) || [];
+    const covered = new Set(candidates.flatMap((item) => item.question_ids || []));
+    const coveredPrompts = new Set(candidates.flatMap((item) => item.prompt_question_ids || []));
+    if (candidates.length && !candidates.some((item) => item.question_ids?.length)) {
+      task.questions.forEach((_question, index) => covered.add(`${task.task_id}-Q${index + 1}`));
+    }
+    if (candidates.length && !candidates.some((item) => item.prompt_question_ids?.length)) {
+      task.prompt_question_ids.forEach((id) => coveredPrompts.add(id));
+    }
+    const missing = candidates.length ? task.questions.flatMap((question, index) => {
+      const id = `${task.task_id}-Q${index + 1}`;
+      return covered.has(id) ? [] : [`${id}：${question}`];
+    }) : [`没有同时达到质量分80和Prompt相关性70%的证据`];
+    missing.push(...task.prompt_question_ids.filter((id) => !coveredPrompts.has(id)).map((id) => `用户必答问题${id}尚无高质量直接证据`));
+    const issues = [...missing, ...(run?.search_errors || [])];
+    return issues.length ? [{
+      taskId: task.task_id,
+      priority: issues.some((item) => item.includes("用户必答问题")) ? "核心问题重点审阅" : "一般重点审阅",
+      issue: issues.join("；"),
+      recommendation: "现有材料将按证据边界形成限制性结论，并在报告中标注部分回答与建议补数路径。",
+    }] : [];
+  }) : [];
+  const canRewind = Boolean(
+    brief?.human_confirmed || plan || evidence || project.workflow_status.industry_analysis === "completed",
+  );
   const buildStepDone: Record<string, boolean> = {
     prompt_analysis: Boolean(brief),
     gate_zero: Boolean(brief?.human_confirmed),
@@ -353,6 +440,14 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
           })}
         </div>
       </section>
+
+      {canRewind && !reviewFirst && (
+        <section className="rewindPanel">
+          <div><strong>需要修改前序内容？</strong><span>返回最近的人工审核节点后，已保存的前序资料会保留；该节点之后不再有效的分析、趋势或报告会被清除。</span></div>
+          <small>{evidence?.human_confirmed ? "将返回 Gate 1 证据审核。" : "将返回 Gate 0 市场口径；确认修改后需要重新执行研究。"}</small>
+          <button type="button" className="secondaryButton" disabled={action !== null} onClick={() => void rewindWorkflow()}>{action === "rewind" ? "正在返回…" : "← 返回上一审核节点"}</button>
+        </section>
+      )}
 
       {!editingScope ? (
         project.market_scope_confirmed_at ? <section className="confirmedScopeBar">
@@ -570,6 +665,14 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
 
       {!reviewFirst && evidence && (
         <section className="artifactPanel">
+          {evidenceAdvisories.length > 0 && !evidence.human_confirmed && <section className="evidenceGapPanel">
+            <h2>证据缺口与分析师处理建议</h2>
+            <p>本轮检索未完全覆盖 AI 拆解出的所有问题，但证据缺口不会阻断研究。后续分析会降低相关结论置信度，并在报告中明确标注证据边界。</p>
+            <div className="evidenceTableWrap"><table className="evidenceTable"><thead><tr><th>任务</th><th>缺口类型</th><th>相对缺失的问题</th><th>分析师处理建议</th></tr></thead><tbody>{evidenceAdvisories.map((item) => <tr key={item.taskId}><td>{item.taskId}</td><td>{item.priority}</td><td>{item.issue}</td><td>{item.recommendation}</td></tr>)}</tbody></table></div>
+            <fieldset className="gapResolution"><legend>如何处理本轮证据缺口</legend><label><input type="radio" name="gap_resolution" checked={gapResolution === "accept_analyst_handling"} onChange={() => setGapResolution("accept_analyst_handling")} />接受分析师处理建议并带限制继续</label><label><input type="radio" name="gap_resolution" checked={gapResolution === "user_input"} onChange={() => setGapResolution("user_input")} />补充我的判断后继续</label></fieldset>
+            {gapResolution === "user_input" && <label className="field"><span>补充你的行业判断、内部观察或建议采用的口径</span><textarea name="coverage_gap_user_input" form="gate-one-form" rows={4} /></label>}
+            <label className="gateConfirmation requiredConfirmation"><input type="checkbox" checked={gapAcknowledged} onChange={(event) => setGapAcknowledged(event.target.checked)} /><span>我已阅读上述缺口及处理方式，并确认可以在这些证据边界下继续研究（必选）</span></label>
+          </section>}
           <div className="artifactHeading">
             <div>
               <span className="eyebrow">GATE 1 · EVIDENCE REVIEW</span>
@@ -578,7 +681,8 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
             </div>
             <span className={evidence.human_confirmed ? "confirmedLabel" : "reviewRequired"}>{evidence.human_confirmed ? "已确认" : "人工确认 · 必选"}</span>
           </div>
-          <form onSubmit={(event) => { event.preventDefault(); void reviewEvidence(event.currentTarget, true); }}>
+          <form id="gate-one-form" onSubmit={(event) => { event.preventDefault(); if (gateOneChecked) void reviewEvidence(event.currentTarget, true); }}>
+            {!evidence.human_confirmed && <div className="evidenceBulkActions"><button type="button" className="secondaryButton" onClick={() => selectEvidence("recommended")}>采用全部系统推荐</button><button type="button" className="secondaryButton" onClick={() => selectEvidence("all")}>一键全选</button><button type="button" className="secondaryButton" onClick={() => selectEvidence("none")}>全部取消</button></div>}
             <div className="taskList">
               {evidence.task_runs.map((run) => (
                 <details className="taskCard" key={run.run_id} open>
@@ -594,7 +698,7 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
                           {source && <a href={source.url} target="_blank" rel="noreferrer">{source.title} · {source.domain}</a>}
                           {!evidence.human_confirmed && (
                             <div className="fieldGrid">
-                              <label className="field"><span>审核决定</span><select name={`evidence_status_${item.evidence_id}`} defaultValue={item.review_status === "needs_review" ? "" : item.review_status}><option value="">待决定</option><option value="accepted">接受</option><option value="rejected">拒绝</option></select></label>
+                              <label className="field"><span>审核决定</span><select name={`evidence_status_${item.evidence_id}`} value={evidenceSelections[item.evidence_id] || ""} onChange={(event) => setEvidenceSelections((current) => ({ ...current, [item.evidence_id]: event.target.value as "accepted" | "rejected" }))}><option value="">待决定</option><option value="accepted">接受</option><option value="rejected">拒绝</option></select></label>
                               <label className="field"><span>审核备注</span><input name={`evidence_note_${item.evidence_id}`} defaultValue={item.reviewer_note || ""} /></label>
                             </div>
                           )}
@@ -609,10 +713,10 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
             {message && <div className="formSuccess" role="status">{message}</div>}
             {error && <div className="formError" role="alert">{error}</div>}
             {!evidence.human_confirmed && (
-              <div className="scopeActions">
+              <><label className="gateConfirmation requiredConfirmation"><input type="checkbox" checked={gateOneChecked} onChange={(event) => setGateOneChecked(event.target.checked)} /><span>我已检查拟采用证据的来源、原文和适用范围，并确认其可用于本次研究（必选）</span></label><div className="scopeActions">
                 <button type="button" className="secondaryButton" disabled={action !== null} onClick={(event) => { const form = event.currentTarget.form; if (form) void reviewEvidence(form, false); }}>{action === "evidence-save" ? "正在保存…" : "保存审核决定"}</button>
-                <button type="submit" className="primaryButton" disabled={action !== null}>{action === "evidence-confirm" ? "正在确认…" : "确认 Gate 1 并进入行业分析"}</button>
-              </div>
+                <button type="submit" className="primaryButton" disabled={action !== null || !gateOneChecked || (evidenceAdvisories.length > 0 && !gapAcknowledged)}>{action === "evidence-confirm" ? "正在确认…" : "确认 Gate 1 并进入行业分析"}</button>
+              </div></>
             )}
           </form>
         </section>

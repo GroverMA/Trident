@@ -11,6 +11,7 @@ from src.models.research import MarketDefinition, ResearchBriefArtifact
 from src.persistence.projects import ProjectRepository
 from src.state.project import ProjectState, WorkflowStatus, default_workflow
 from src.services.evidence_collection import (
+    evidence_coverage_advisories,
     evidence_gate_reasons,
     review_evidence,
     upsert_task_run,
@@ -326,6 +327,9 @@ class ResearchApplication:
         *,
         decisions: list[tuple[str, EvidenceReviewStatus, str | None]],
         confirm: bool,
+        coverage_gap_resolution: str | None = None,
+        coverage_gap_user_input: str | None = None,
+        coverage_gaps_acknowledged: bool = False,
     ) -> ProjectState:
         """Persist Gate 1 decisions and open analysis only after human confirmation."""
 
@@ -345,7 +349,32 @@ class ResearchApplication:
             reasons = evidence_gate_reasons(reviewed, plan)
             if reasons:
                 raise ResearchWorkflowError("；".join(reasons))
-            reviewed = reviewed.model_copy(update={"human_confirmed": True})
+            advisories = evidence_coverage_advisories(reviewed, plan)
+            if advisories:
+                if not coverage_gaps_acknowledged:
+                    raise ResearchWorkflowError("请先确认已阅读证据缺口及处理方式")
+                if coverage_gap_resolution not in {
+                    "accept_analyst_handling",
+                    "user_input",
+                }:
+                    raise ResearchWorkflowError("请选择证据缺口处理方式")
+                if (
+                    coverage_gap_resolution == "user_input"
+                    and not (coverage_gap_user_input or "").strip()
+                ):
+                    raise ResearchWorkflowError("请补充你的行业判断或采用口径")
+            reviewed = reviewed.model_copy(
+                update={
+                    "human_confirmed": True,
+                    "coverage_gap_resolution": coverage_gap_resolution,
+                    "coverage_gap_user_input": (
+                        (coverage_gap_user_input or "").strip() or None
+                    ),
+                    "coverage_gaps_acknowledged_at": (
+                        datetime.now(UTC) if advisories else None
+                    ),
+                }
+            )
             statuses["evidence_collection"] = WorkflowStatus.COMPLETED
             statuses["evidence_qa"] = WorkflowStatus.COMPLETED
             statuses["industry_analysis"] = WorkflowStatus.READY

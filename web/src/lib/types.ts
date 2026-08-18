@@ -52,6 +52,7 @@ export interface ResearchTask {
   counter_evidence_required: boolean;
   validation_gate: string;
   depends_on: string[];
+  prompt_question_ids: string[];
 }
 
 export interface ResearchPlanArtifact {
@@ -77,6 +78,8 @@ export interface EvidenceItem {
   geographic_scope: string;
   market_scope: string;
   prompt_relevance: number;
+  question_ids: string[];
+  prompt_question_ids: string[];
   qa_score: number;
   qa_flags: string[];
   review_status: EvidenceReviewStatus;
@@ -108,6 +111,9 @@ export interface EvidenceCollectionArtifact {
   research_plan_id: string;
   task_runs: TaskEvidenceRun[];
   human_confirmed: boolean;
+  coverage_gap_resolution?: string | null;
+  coverage_gap_user_input?: string | null;
+  coverage_gaps_acknowledged_at?: string | null;
   updated_at: string;
 }
 

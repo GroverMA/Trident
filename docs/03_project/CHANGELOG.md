@@ -10,12 +10,14 @@
 - CloudBase 单域名公开健康探针 `/healthz` 和就绪探针 `/readyz`。
 - 共享 Web 研究流程的 Evidence Collection、Evidence Matrix 和 Gate 1 人工审核。
 - 前置的构建式/审阅式研究方式选择页，以及共享项目管理侧栏。
+- FastAPI 安全回退接口、Gate 1 证据缺口处理契约和手机端项目导航抽屉。
 
 ### Changed
 
 - 确立 Vercel 海外版与腾讯云大陆版的双区域同源原则：共享研究流程、功能、契约、Skill
   和版本，区域差异仅由部署配置与基础设施适配表达。
 - 构建式研究工作台恢复为 Streamlit 同源的八节点英文流程；Gate 0 恢复原 Prompt、AI 术语理解、完整市场边界和逐项人工确认。
+- Web 字体切换为 Streamlit 同源的 Source Sans 系列优先栈，桌面密度与手机端应用壳层按原版重新校准。
 
 ### Improved
 
@@ -24,6 +26,9 @@
 ### Fixed
 
 - 容器 CI 现在显式启用单实例 Demo 的 SQLite 模式，与 CloudBase 运行配置保持一致，避免生产环境安全检查拒绝启动。
+- 修复研究操作成功后重复刷新路由造成的字符串格式假错误。
+- Gate 1 在证据覆盖不完整时可由用户明确选择“带限制继续”，同时保留缺口、处理建议和确认审计记录。
+- CloudBase 未随 Vercel 更新的原因已定位为缺少实际发布触发/凭证，而非代码或镜像构建失败。
 
 ### Removed
 

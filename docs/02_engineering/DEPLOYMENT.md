@@ -41,6 +41,15 @@
 - 2026-08-18 状态：镜像已构建、容器运行正常，用户从中国大陆本地网络确认默认域名
   可访问。CloudBase 会隔离部分境外或自动化网络，因此外部 TLS 超时不等于服务故障；
   大陆版健康和端到端验收必须从目标区域网络执行。
+- 2026-08-18 发布排查：GitHub 当前没有 `TCB_SECRET_ID`、`TCB_SECRET_KEY`、
+  `TCB_ENV_ID`，也没有执行 `tcb cloudrun deploy` 的工作流。现有 CI 的 `container`
+  job 只证明 CloudBase 镜像可以构建和启动，不会创建云托管新版本。因此 Vercel 自动更新而
+  CloudBase 保持旧版本是发布触发缺失，不是业务代码分叉。
+- 解决方式二选一，但必须固定一种并纳入发布清单：在 CloudBase 服务设置中把公开仓库
+  `GroverMA/Trident` 的 `main` 绑定为自动部署分支；或在 GitHub Secrets 配置上述三个
+  Secret，并由受保护的 GitHub Actions 执行
+  `tcb cloudrun deploy -e "$TCB_ENV_ID" -s trident-agent-cn --port 3000 --force`。
+  Secret 只允许进入平台密钥库，不写入仓库、日志或 Knowledge Base。
 
 ### Standard SaaS
 
@@ -103,6 +112,10 @@
 双区域发布矩阵要求每个功能提交记录以下结果：共享单元/合同测试、海外构建、CloudBase
 镜像构建、两个区域健康/就绪检查，以及受影响研究路径的端到端测试。任一格未通过，发布
 状态为“部分部署”而非“完成”。
+
+同提交门禁：Vercel 和 CloudBase 必须记录同一个 Git SHA；CloudBase 不能再以“容器 CI
+通过”代替“新版本已创建且流量已切换”。如果 CloudBase 控制台使用 Git 自动部署，服务
+必须绑定 `main`，避免主干已更新但试验分支/旧构建仍被发布。
 
 ## 7. Database Modes
 

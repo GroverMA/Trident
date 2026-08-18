@@ -1,3 +1,5 @@
+# CloudBase build entrypoint. Keep this file at the repository root because
+# CloudBase resolves the Dockerfile relative to the selected build directory.
 FROM node:22-bookworm-slim AS web-dependencies
 WORKDIR /build/web
 RUN corepack enable

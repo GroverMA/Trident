@@ -27,6 +27,7 @@ from src.state.project import (
     ResearchMode,
     ResearchPath,
     WorkspaceMode,
+    rewind_to_previous_review_gate,
 )
 
 
@@ -116,6 +117,14 @@ class EvidenceDecision(BaseModel):
 class EvidenceReviewRequest(BaseModel):
     decisions: list[EvidenceDecision] = Field(default_factory=list)
     confirm: bool = False
+    coverage_gap_resolution: str | None = None
+    coverage_gap_user_input: str | None = None
+    coverage_gaps_acknowledged: bool = False
+
+
+class WorkflowRewindResponse(BaseModel):
+    project: ProjectState
+    message: str
 
 
 @lru_cache(maxsize=1)
@@ -346,11 +355,34 @@ def review_project_evidence(
                 for item in payload.decisions
             ],
             confirm=payload.confirm,
+            coverage_gap_resolution=payload.coverage_gap_resolution,
+            coverage_gap_user_input=payload.coverage_gap_user_input,
+            coverage_gaps_acknowledged=payload.coverage_gaps_acknowledged,
         )
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="project not found") from exc
     except (ResearchWorkflowError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post(
+    "/v1/projects/{project_id}/rewind",
+    response_model=WorkflowRewindResponse,
+)
+def rewind_project_workflow(
+    project_id: str, research: ResearchApp
+) -> WorkflowRewindResponse:
+    """Return to the most recent human gate and invalidate only stale outputs."""
+
+    try:
+        project = research.get_project(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    result = rewind_to_previous_review_gate(project)
+    if result is None:
+        raise HTTPException(status_code=409, detail="当前没有可返回的上一审核节点")
+    rewound, message = result
+    return WorkflowRewindResponse(project=research.save_project(rewound), message=message)
 
 
 @app.post("/v1/projects/{project_id}/report-first", response_model=ProjectState)
