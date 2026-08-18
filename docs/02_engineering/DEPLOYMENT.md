@@ -11,6 +11,16 @@
 
 ## 2. Current Deployment Paths
 
+### Dual-region invariant
+
+- Vercel 与 CloudBase 是同一应用版本的不同区域承载方式。
+- 两者必须共享研究流程、产品功能、FastAPI/Next.js 代码、领域与 API 契约、数据库迁移、
+  Skill/Prompt 版本及回归测试。
+- 允许不同的只有域名、构建清单、云资源、环境变量、Secret、Provider Endpoint、数据库/
+  对象存储实例、扩缩容和合规设置。
+- 不允许使用长期存在的 `china-feature` / `overseas-feature` 业务分支；区域兼容由配置和
+  Adapter 解决，并在同一主干测试。
+
 ### Overseas
 
 - Next.js 可继续使用 Vercel。
@@ -28,9 +38,9 @@
   FastAPI（内部 8000）。
 - CloudBase 公网访问端口映射至服务端口 3000。
 - SQLite Demo 需要持久挂载 `/app/data`、单实例写入和 `WEB_CONCURRENCY=1`。
-- 2026-08-18 状态：镜像已构建、容器显示运行正常，但默认域名的 HTTP/HTTPS
-  公网请求均超时，尚未通过公网验收。需在“服务设置 → 网络访问”确认公网开关，
-  确认服务端口为 `3000`，并检查默认域名或 HTTP 网关 `/` 路径已关联当前服务。
+- 2026-08-18 状态：镜像已构建、容器运行正常，用户从中国大陆本地网络确认默认域名
+  可访问。CloudBase 会隔离部分境外或自动化网络，因此外部 TLS 超时不等于服务故障；
+  大陆版健康和端到端验收必须从目标区域网络执行。
 
 ### Standard SaaS
 
@@ -89,6 +99,10 @@
 5. 部署 staging。
 6. 运行端到端报告生成和回滚检查。
 7. 人工批准 production。
+
+双区域发布矩阵要求每个功能提交记录以下结果：共享单元/合同测试、海外构建、CloudBase
+镜像构建、两个区域健康/就绪检查，以及受影响研究路径的端到端测试。任一格未通过，发布
+状态为“部分部署”而非“完成”。
 
 ## 7. Database Modes
 
