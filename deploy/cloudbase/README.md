@@ -1,7 +1,7 @@
 # Trident CloudBase China Demo (SQLite)
 
 This deployment keeps the existing Vercel deployment unchanged. CloudBase builds
-the same repository with `deploy/cloudbase/Dockerfile` and exposes one default
+the same repository with the root `Dockerfile` and exposes one default
 CloudBase domain. The Next.js web workspace proxies API requests to the FastAPI
 process inside the same container.
 
@@ -18,7 +18,8 @@ process inside the same container.
 - Branch: `codex/cloudbase-demo` for trial deployment
 - Service name: `trident-agent-cn`
 - Target directory / build context: leave blank (repository root)
-- Dockerfile: `deploy/cloudbase/Dockerfile`
+- Dockerfile: `Dockerfile` (repository root; keep it synchronized with
+  `deploy/cloudbase/Dockerfile`)
 - Access port: `80`
 - Service port: `3000`
 - Health path: `/`
