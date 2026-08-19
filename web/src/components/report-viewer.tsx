@@ -30,8 +30,13 @@ function inlineMarkdown(value: string): ReactNode[] {
   return nodes;
 }
 
-function MarkdownReport({ markdown }: { markdown: string }) {
-  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+function MarkdownReport({ markdown, title }: { markdown: string; title: string }) {
+  const rawLines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const firstContent = rawLines.findIndex((line) => line.trim());
+  const firstHeading = firstContent >= 0 ? /^#\s+(.+)$/.exec(rawLines[firstContent].trim()) : null;
+  const lines = firstHeading?.[1].trim() === title.trim()
+    ? rawLines.filter((_line, index) => index !== firstContent)
+    : rawLines;
   const output: ReactNode[] = [];
   let index = 0;
   while (index < lines.length) {
@@ -129,7 +134,7 @@ export function ReportViewer({ project }: { project: ProjectSummary }) {
     <article className={`reportDocument reportWidth-${pageWidth}`} style={style}>
       <div className="reportMasthead"><span>GENERAL REPORT</span><h1>{report.title}</h1><p>{report.source_count} 个来源 · {report.accepted_finding_ids.length} 项行业判断 · {report.accepted_trend_ids.length} 项趋势 · {new Date(report.generated_at).toLocaleDateString("zh-CN")}</p></div>
       {report.unresolved_prompt_questions.length > 0 && <aside className="reportUnresolved"><h2>仍未完全回答的问题</h2><ul>{report.unresolved_prompt_questions.map((item) => <li key={item}>{item}</li>)}</ul></aside>}
-      <div className="reportContent"><MarkdownReport markdown={report.markdown} /></div>
+      <div className="reportContent"><MarkdownReport markdown={report.markdown} title={report.title} /></div>
     </article>
   </main>;
 }
