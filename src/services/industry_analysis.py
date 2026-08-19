@@ -81,6 +81,38 @@ FINDING_CONTRACT = {
     "boundary_condition": "condition under which the finding does not hold",
 }
 
+MARKET_SIZING_CONTRACT = {
+    "scope": "与Gate 0完全一致的市场、地区和价值链位置",
+    "currency": "CNY|USD等",
+    "unit": "亿元|十亿美元等",
+    "price_basis": "出厂收入|终端支出等",
+    "base_year": "当前年份或最新可估算年份，整数",
+    "base_size": 100.0,
+    "low_size": 85.0,
+    "high_size": 115.0,
+    "forecast_year": "预测末年，整数",
+    "forecast_size": 160.0,
+    "forecast_cagr": "由系统按base_size和forecast_size复算，小数形式",
+    "primary_method": "bottom_up|top_down|demand_side|supply_side|enumeration",
+    "validation_method": "与主方法不同的独立方法",
+    "primary_equation": "带变量名称的可复算公式",
+    "validation_equation": "独立验证公式",
+    "inputs": [{
+        "name": "输入变量",
+        "value": 1.0,
+        "unit": "单位",
+        "year": 2026,
+        "evidence_id": "EVD-...或假设时为null",
+        "input_type": "observed|derived|assumption",
+        "rationale": "来源、变换或假设依据",
+    }],
+    "reconciliation": "主方法与验证方法的差异、覆盖率、重叠和最终取值理由",
+    "sensitivities": ["关键变量变化对结果的影响"],
+    "limitations": ["估算边界与不确定性"],
+    "evidence_ids": ["EVD-..."],
+    "analyst_estimate": True,
+}
+
 ANALYSIS_CONTRACT = {
     "modules": [
         {
@@ -283,6 +315,8 @@ class IndustryAnalysisService:
             "evidence_gaps": ["string"],
             "rejected_questions": ["string"],
         }
+        if module_id == "market_status":
+            module_contract["market_sizing"] = MARKET_SIZING_CONTRACT
         module_rules = {
             "market_value_chain": (
                 "先形成行业范围定义，再分别研究赛道和产业链。赛道须使用同一分类维度建立"
@@ -335,6 +369,9 @@ class IndustryAnalysisService:
                     f"只生成模块：{module_id}（{titles[module_id]}）。{module_rules}\n"
                     f"项目：{project.project_name}\n行业：{project.industry}\n地区：{project.region}\n"
                     f"研究目标：{project.research_objective}\n时间范围：{project.time_horizon}\n"
+                    f"当前年份：{datetime.now(UTC).year}。market_status必须输出该年份的Trident分析师"
+                    "市场规模估算；若最新观测年份更早，必须通过明确的数量、渗透率、价格或覆盖率"
+                    "假设滚动到当前年。预测末年应取项目时间范围末年，并由系统复算CAGR。\n"
                     "已确认Research Brief：\n"
                     f"{brief.model_dump_json(exclude={'methodology', 'generated_at'}, ensure_ascii=False)}\n\n"
                     f"已接受证据：\n{json.dumps(module_evidence, ensure_ascii=False)}\n\n"
@@ -356,6 +393,8 @@ class IndustryAnalysisService:
                 module = self._extract_module(payload, module_id)
                 wrapper = self._normalize_factor_fields({"modules": [module]})
                 module = wrapper["modules"][0]
+                if module_id == "market_status":
+                    self._normalize_market_sizing(module, allowed_ids)
                 self._validate_single_module(module, allowed_ids)
                 return module
             except (ProviderError, IndustryAnalysisError, ValidationError) as exc:
@@ -389,6 +428,34 @@ class IndustryAnalysisService:
             last_error,
             project,
         )
+
+    @staticmethod
+    def _normalize_market_sizing(module: dict[str, Any], allowed_ids: set[str]) -> None:
+        sizing = module.get("market_sizing")
+        if not isinstance(sizing, dict):
+            raise IndustryAnalysisError("市场规模模块缺少Trident自有测算")
+        evidence_ids = [value for value in sizing.get("evidence_ids", []) if value in allowed_ids]
+        inputs = sizing.get("inputs")
+        if not isinstance(inputs, list):
+            raise IndustryAnalysisError("市场规模测算缺少底层输入")
+        for item in inputs:
+            if not isinstance(item, dict):
+                continue
+            evidence_id = item.get("evidence_id")
+            if evidence_id not in allowed_ids:
+                item["evidence_id"] = None
+                item["input_type"] = "assumption"
+        sizing["evidence_ids"] = list(dict.fromkeys(evidence_ids))
+        try:
+            base_size = float(sizing["base_size"])
+            forecast_size = float(sizing["forecast_size"])
+            years = int(sizing["forecast_year"]) - int(sizing["base_year"])
+            if base_size <= 0 or forecast_size <= 0 or years <= 0:
+                raise ValueError
+        except (KeyError, TypeError, ValueError) as exc:
+            raise IndustryAnalysisError("市场规模基准年或预测期数值无效") from exc
+        sizing["forecast_cagr"] = round((forecast_size / base_size) ** (1 / years) - 1, 6)
+        sizing["analyst_estimate"] = True
 
     @staticmethod
     def _augment_cross_task_evidence(
@@ -612,6 +679,14 @@ class IndustryAnalysisService:
                     item.value for item in ImpactDirection
                 }:
                     raise IndustryAnalysisError("发展条件与影响因素缺少impact_direction")
+        if module_id == "market_status":
+            sizing = module.get("market_sizing")
+            if not isinstance(sizing, dict):
+                raise IndustryAnalysisError("市场规模模块缺少Trident自有测算")
+            if not set(sizing.get("evidence_ids", [])).issubset(allowed_ids):
+                raise IndustryAnalysisError("市场规模测算引用了未知Evidence ID")
+            if sizing.get("primary_method") == sizing.get("validation_method"):
+                raise IndustryAnalysisError("市场规模主方法与验证方法必须独立")
         valid_types = {item.value for item in AnalysisFindingType}
         for finding in findings:
             if not isinstance(finding, dict):

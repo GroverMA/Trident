@@ -145,6 +145,29 @@ export interface IndustryAnalysisModule {
   findings: AnalysisFinding[];
   evidence_gaps: string[];
   rejected_questions: string[];
+  market_sizing?: MarketSizingEstimate | null;
+}
+
+export interface MarketSizingEstimate {
+  scope: string;
+  currency: string;
+  unit: string;
+  price_basis: string;
+  base_year: number;
+  base_size: number;
+  low_size: number;
+  high_size: number;
+  forecast_year: number;
+  forecast_size: number;
+  forecast_cagr: number;
+  primary_method: string;
+  validation_method: string;
+  primary_equation: string;
+  validation_equation: string;
+  inputs: Array<{ name: string; value: number; unit: string; year: number; input_type: string; rationale: string }>;
+  reconciliation: string;
+  sensitivities: string[];
+  limitations: string[];
 }
 
 export interface IndustryAnalysisArtifact {

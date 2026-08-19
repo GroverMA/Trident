@@ -988,6 +988,24 @@ def _first_dimension(dimensions: dict[str, str], *keys: str) -> str:
 def _market_sizing_rows(module: Any) -> list[list[str]]:
     """Translate sizing workpaper fields into an auditable reader-facing formula table."""
 
+    sizing = getattr(module, "market_sizing", None) if module is not None else None
+    if sizing is not None:
+        years = sizing.forecast_year - sizing.base_year
+        return [[
+            sizing.scope,
+            "；".join(
+                f"{item.name}={item.value:g}{item.unit}（{item.year}，{item.input_type}）"
+                for item in sizing.inputs
+            ),
+            f"{sizing.currency} · {sizing.price_basis}",
+            f"主方法[{sizing.primary_method}]：{sizing.primary_equation}；"
+            f"验证[{sizing.validation_method}]：{sizing.validation_equation}",
+            f"{sizing.base_year}年 {sizing.base_size:g}{sizing.unit}"
+            f"（{sizing.low_size:g}–{sizing.high_size:g}）；"
+            f"{sizing.forecast_year}年 {sizing.forecast_size:g}{sizing.unit}；"
+            f"未来{years}年CAGR {sizing.forecast_cagr:.1%}",
+            sizing.reconciliation,
+        ]]
     rows: list[list[str]] = []
     findings = getattr(module, "findings", []) if module is not None else []
     for finding in findings:

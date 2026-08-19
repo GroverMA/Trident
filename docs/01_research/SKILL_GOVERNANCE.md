@@ -13,6 +13,8 @@ Trident 的行业定义、赛道与产业链、市场规模、竞争格局、驱
 | `defining-industry-markets` | 行业定义、边界与统计口径 | 1.0.0 |
 | `mapping-tracks-value-chain` | 赛道分类、产业链、价值流与瓶颈 | 1.0.0 |
 | `sizing-industry-markets` | 市场规模模型、交叉验证与敏感性 | 1.0.0 |
+
+市场规模 Skill 的运行结果必须形成 Trident 自有估算，不得把第三方报告数字直接当作最终市场规模。最低产物包括当前年 Size、合理区间、预测末年 Size、由系统按两端规模与年数复算的 CAGR、主测公式、独立验证公式、底层变量及其 observed/derived/assumption 状态、口径校准和敏感性。第三方数字只作为模型输入或交叉验证。
 | `analyzing-industry-competition` | 公司全集、业务映射、可比口径与竞争格局 | 1.0.0 |
 | `analyzing-industry-drivers` | 六向扫描、因果链、双重影响与反证 | 1.0.0 |
 

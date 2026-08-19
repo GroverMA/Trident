@@ -142,18 +142,46 @@ def finding(evidence_id: str, module_id: str) -> dict:
 
 
 def valid_payload(evidence_id: str) -> dict:
-    return {
-        "modules": [
-            {
+    modules = []
+    for module_id in EXPECTED_MODULES:
+        module = {
                 "module_id": module_id,
                 "title": module_id,
                 "executive_summary": "当前证据支持有限的结构判断。",
                 "findings": [finding(evidence_id, module_id)],
                 "evidence_gaps": ["缺少更多独立来源"],
                 "rejected_questions": [],
+        }
+        if module_id == "market_status":
+            module["market_sizing"] = {
+                "scope": "中国分子诊断市场",
+                "currency": "CNY",
+                "unit": "亿元",
+                "price_basis": "出厂收入",
+                "base_year": 2026,
+                "base_size": 100,
+                "low_size": 85,
+                "high_size": 115,
+                "forecast_year": 2031,
+                "forecast_size": 150,
+                "forecast_cagr": 0.99,
+                "primary_method": "bottom_up",
+                "validation_method": "supply_side",
+                "primary_equation": "检测量×单次价格",
+                "validation_equation": "企业收入加总÷覆盖率",
+                "inputs": [
+                    {"name": "检测量", "value": 10, "unit": "亿次", "year": 2026, "evidence_id": evidence_id, "input_type": "observed", "rationale": "已接受证据"},
+                    {"name": "单次价格", "value": 10, "unit": "元", "year": 2026, "evidence_id": None, "input_type": "assumption", "rationale": "分析师假设"},
+                ],
+                "reconciliation": "按同一出厂口径校准覆盖率并剔除重复收入",
+                "sensitivities": ["检测量", "单次价格"],
+                "limitations": ["细分数据有限"],
+                "evidence_ids": [evidence_id],
+                "analyst_estimate": True,
             }
-            for module_id in EXPECTED_MODULES
-        ],
+        modules.append(module)
+    return {
+        "modules": modules,
         "company_implications": [],
         "cross_module_conflicts": [],
         "overall_evidence_limitations": ["仅有一个来源"],
@@ -191,6 +219,9 @@ def test_analysis_only_sends_human_accepted_evidence() -> None:
     assert analysis.input_evidence_ids == [accepted_id]
     assert rejected_id not in model.last_messages[-1].content
     assert len(analysis.modules) == 5
+    sizing = next(item for item in analysis.modules if item.module_id == "market_status").market_sizing
+    assert sizing is not None
+    assert sizing.forecast_cagr == 0.084472
     assert set(analysis.methodology.rule_ids) >= {
         "SUL-DEFINE-001",
         "SUL-CHAIN-002",

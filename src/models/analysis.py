@@ -77,6 +77,40 @@ class AnalysisFinding(BaseModel):
         return value
 
 
+class MarketSizingInput(BaseModel):
+    name: str
+    value: float = Field(gt=0)
+    unit: str
+    year: int
+    evidence_id: str | None = None
+    input_type: str = "observed"
+    rationale: str
+
+
+class MarketSizingEstimate(BaseModel):
+    scope: str
+    currency: str
+    unit: str
+    price_basis: str
+    base_year: int
+    base_size: float = Field(gt=0)
+    low_size: float = Field(gt=0)
+    high_size: float = Field(gt=0)
+    forecast_year: int
+    forecast_size: float = Field(gt=0)
+    forecast_cagr: float
+    primary_method: str
+    validation_method: str
+    primary_equation: str
+    validation_equation: str
+    inputs: list[MarketSizingInput] = Field(min_length=2)
+    reconciliation: str
+    sensitivities: list[str] = Field(min_length=1)
+    limitations: list[str] = Field(min_length=1)
+    evidence_ids: list[str] = Field(min_length=1)
+    analyst_estimate: bool = True
+
+
 class IndustryAnalysisModule(BaseModel):
     module_id: str
     title: str
@@ -84,6 +118,7 @@ class IndustryAnalysisModule(BaseModel):
     findings: list[AnalysisFinding] = Field(default_factory=list)
     evidence_gaps: list[str] = Field(default_factory=list)
     rejected_questions: list[str] = Field(default_factory=list)
+    market_sizing: MarketSizingEstimate | None = None
 
 
 class IndustryAnalysisArtifact(BaseModel):

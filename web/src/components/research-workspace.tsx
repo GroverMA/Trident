@@ -108,9 +108,10 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
   );
   const [analysisSelections, setAnalysisSelections] = useState<Record<string, "accepted" | "rejected">>(() =>
     Object.fromEntries(initialProject.industry_analysis_artifact?.modules.flatMap((module) =>
-      module.findings.flatMap((item) => item.review_status === "accepted" || item.review_status === "rejected"
-        ? [[item.finding_id, item.review_status]]
-        : []),
+      module.findings.map((item) => [
+        item.finding_id,
+        item.review_status === "rejected" ? "rejected" : "accepted",
+      ]),
     ) || []) as Record<string, "accepted" | "rejected">,
   );
   const [futureSelections, setFutureSelections] = useState<Record<string, "accepted" | "rejected">>(() => {
@@ -137,9 +138,10 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
     }
     if (result.industry_analysis_artifact) {
       setAnalysisSelections(Object.fromEntries(result.industry_analysis_artifact.modules.flatMap((module) =>
-        module.findings.flatMap((item) => item.review_status === "accepted" || item.review_status === "rejected"
-          ? [[item.finding_id, item.review_status]]
-          : []),
+        module.findings.map((item) => [
+          item.finding_id,
+          item.review_status === "rejected" ? "rejected" : "accepted",
+        ]),
       )) as Record<string, "accepted" | "rejected">);
     }
     if (result.future_intelligence_artifact) {
@@ -558,6 +560,13 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
     )) as Record<string, "accepted" | "rejected">);
   }
 
+  function selectAnalysis(mode: "recommended" | "none") {
+    setAnalysisSelections(Object.fromEntries(analysisFindings.map((item) => [
+      item.finding_id,
+      mode === "none" ? "rejected" : "accepted",
+    ])) as Record<string, "accepted" | "rejected">);
+  }
+
   const brief = project.research_brief_artifact;
   const plan = project.research_plan_artifact;
   const evidence = project.evidence_collection_artifact;
@@ -965,12 +974,18 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
           </div>
           <div className="planStats"><div><span>使用证据</span><strong>{analysis.input_evidence_ids.length}</strong></div><div><span>分析模块</span><strong>{analysis.modules.length}</strong></div><div><span>行业判断</span><strong>{analysisFindings.length}</strong></div><div><span>已接受判断</span><strong>{analysisFindings.filter((item) => item.review_status === "accepted").length}</strong></div></div>
           <form onSubmit={(event) => { event.preventDefault(); if (analysisChecked) void reviewIndustryAnalysis(event.currentTarget, true); }}>
+            {!analysis.human_confirmed && <div className="evidenceBulkActions"><button type="button" className="secondaryButton" onClick={() => selectAnalysis("recommended")}>采用全部分析师建议</button><button type="button" className="secondaryButton" onClick={() => selectAnalysis("none")}>全部拒绝</button><span className="bulkReviewHint">系统已默认勾选建议项；你只需重点查看低置信度、冲突和证据边界。</span></div>}
             <div className="taskList">
               {analysis.modules.map((module, moduleIndex) => (
                 <details className="taskCard" key={module.module_id} open={moduleIndex === 0}>
                   <summary><span>{moduleIndex + 1}</span><strong>{module.title}</strong><small>{module.findings.length} 项判断</small></summary>
                   <div className="taskBody">
                     <p>{module.executive_summary}</p>
+                    {module.market_sizing && <section className="marketSizingEstimate">
+                      <div className="marketSizingHeadline"><div><span>TRIDENT ANALYST ESTIMATE</span><strong>{module.market_sizing.base_year} 年市场规模</strong><b>{module.market_sizing.base_size.toLocaleString()} {module.market_sizing.unit}</b><small>估算区间 {module.market_sizing.low_size.toLocaleString()}–{module.market_sizing.high_size.toLocaleString()} {module.market_sizing.unit}</small></div><div><span>FORECAST</span><strong>{module.market_sizing.forecast_year} 年市场规模</strong><b>{module.market_sizing.forecast_size.toLocaleString()} {module.market_sizing.unit}</b><small>预测 CAGR {(module.market_sizing.forecast_cagr * 100).toFixed(1)}%</small></div></div>
+                      <div className="marketSizingMethods"><div><strong>主测方法 · {module.market_sizing.primary_method}</strong><p>{module.market_sizing.primary_equation}</p></div><div><strong>独立验证 · {module.market_sizing.validation_method}</strong><p>{module.market_sizing.validation_equation}</p></div></div>
+                      <details><summary>查看底层输入、校准与敏感性</summary><div className="evidenceTableWrap"><table className="evidenceTable"><thead><tr><th>变量</th><th>数值</th><th>年份</th><th>类型</th><th>依据</th></tr></thead><tbody>{module.market_sizing.inputs.map((input) => <tr key={`${input.name}-${input.year}`}><td>{input.name}</td><td>{input.value.toLocaleString()} {input.unit}</td><td>{input.year}</td><td>{input.input_type}</td><td>{input.rationale}</td></tr>)}</tbody></table></div><p><strong>校准：</strong>{module.market_sizing.reconciliation}</p><p><strong>敏感变量：</strong>{module.market_sizing.sensitivities.join("；")}</p><p><strong>限制：</strong>{module.market_sizing.limitations.join("；")}</p></details>
+                    </section>}
                     {module.evidence_gaps.length > 0 && <div className="analysisBoundary"><strong>证据缺口</strong><ul>{module.evidence_gaps.map((item) => <li key={item}>{item}</li>)}</ul></div>}
                     {module.rejected_questions.length > 0 && <div className="analysisBoundary"><strong>当前证据无法回答</strong><ul>{module.rejected_questions.map((item) => <li key={item}>{item}</li>)}</ul></div>}
                     {module.findings.map((item) => (
@@ -991,7 +1006,7 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
             {analysis.overall_evidence_limitations.length > 0 && <div className="analysisBoundary"><h3>整体证据边界</h3><ul>{analysis.overall_evidence_limitations.map((item) => <li key={item}>{item}</li>)}</ul></div>}
             {message && <div className="formSuccess" role="status">{message}</div>}
             {error && <div className="formError" role="alert">{error}</div>}
-            {!analysis.human_confirmed && <><label className="gateConfirmation requiredConfirmation"><input type="checkbox" checked={analysisChecked} onChange={(event) => setAnalysisChecked(event.target.checked)} /><span>我已逐项审核所有行业判断、证据引用、适用范围和不确定性（必选）</span></label><div className="scopeActions"><button type="button" className="secondaryButton" disabled={action !== null} onClick={(event) => { const form = event.currentTarget.form; if (form) void reviewIndustryAnalysis(form, false); }}>{action === "analysis-save" ? "正在保存…" : "保存审核决定"}</button><button type="submit" className="primaryButton" disabled={action !== null || !analysisChecked || analysisFindings.some((item) => !analysisSelections[item.finding_id])}>{action === "analysis-confirm" ? "正在确认…" : "批准行业分析并进入 Future Intelligence"}</button></div></>}
+            {!analysis.human_confirmed && <><label className="gateConfirmation requiredConfirmation"><input type="checkbox" checked={analysisChecked} onChange={(event) => setAnalysisChecked(event.target.checked)} /><span>我已重点复核低置信度判断、证据边界和冲突，并确认采用上述批量审核结果（必选）</span></label><div className="scopeActions"><button type="button" className="secondaryButton" disabled={action !== null} onClick={(event) => { const form = event.currentTarget.form; if (form) void reviewIndustryAnalysis(form, false); }}>{action === "analysis-save" ? "正在保存…" : "保存审核决定"}</button><button type="submit" className="primaryButton" disabled={action !== null || !analysisChecked}>{action === "analysis-confirm" ? "正在确认…" : "批准行业分析并进入 Future Intelligence"}</button></div></>}
             {analysis.human_confirmed && !future && <div className="nextStageNotice"><strong>Future Intelligence 节点已经就绪</strong><span>将严格继承已确认行业定义、规模、竞争与驱动因素 Skill，生成可证伪趋势和三种情景。</span></div>}
           </form>
         </section>
