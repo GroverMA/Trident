@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type {
   ProjectScopePayload,
   ProjectSummary,
@@ -85,6 +87,7 @@ function stableDateTime(value: string): string {
 }
 
 export function ResearchWorkspace({ initialProject }: { initialProject: ProjectSummary }) {
+  const router = useRouter();
   const [project, setProject] = useState(initialProject);
   const [action, setAction] = useState<ActionState | null>(null);
   const [editingScope, setEditingScope] = useState(!initialProject.research_brief_artifact);
@@ -512,6 +515,7 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
     try {
       const result = await requestProject(`/api/projects/${project.project_id}/general-report`, "POST");
       acceptProject(result, "Gate 2 已完成，General Report 已根据批准内容生成。");
+      router.push(`/projects/${project.project_id}/report`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "General Report 暂时未能生成，已审核内容不会丢失。");
     } finally { setAction(null); }
@@ -533,6 +537,7 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
         setProject(latest);
         if (latest.general_report_artifact) {
           acceptProject(latest, "完整报告初稿、引用矩阵、分析逻辑和趋势逻辑已经生成，可以开始自上而下审阅。");
+          router.push(`/projects/${project.project_id}/report`);
           return;
         }
         if (latest.last_pipeline_error) {
@@ -875,11 +880,10 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
       )}
 
       {reviewFirst && report && (
-        <section className="artifactPanel">
-          <div className="artifactHeading"><div><span className="eyebrow">REVIEW-FIRST · GENERAL REPORT</span><h2>{report.title}</h2><p>报告初稿已生成。下方摘要展示引用、分析与趋势底稿；所有自动选择仍保留为待人工审阅状态。</p></div><span className="reviewRequired">审阅草稿</span></div>
+        <section className="artifactPanel reportReadyPanel">
+          <div className="artifactHeading"><div><span className="eyebrow">REVIEW-FIRST · GENERAL REPORT</span><h2>{report.title}</h2><p>完整报告已生成并放入独立阅读页面；研究底稿与后续审阅仍保留在工作台。</p></div><span className="reviewRequired">审阅草稿</span></div>
           <div className="planStats"><div><span>引用来源</span><strong>{report.source_count}</strong></div><div><span>证据任务</span><strong>{evidence?.task_runs.length || 0}</strong></div><div><span>行业模块</span><strong>{analysis?.modules.length || 0}</strong></div><div><span>趋势与情景</span><strong>{(future?.trends.length || 0) + (future?.scenarios.length || 0)}</strong></div></div>
-          {report.unresolved_prompt_questions.length > 0 && <div className="evidenceGapPanel"><h3>仍需重点审阅的问题</h3><ul>{report.unresolved_prompt_questions.map((item) => <li key={item}>{item}</li>)}</ul></div>}
-          <article className="reportMarkdown"><pre>{report.markdown}</pre></article>
+          <Link className="primaryButton linkButton artifactPrimary" href={`/projects/${project.project_id}/report`}>打开独立 General Report</Link>
         </section>
       )}
 
@@ -1051,7 +1055,7 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
       )}
 
       {!reviewFirst && report && (
-        <section className="artifactPanel"><div className="artifactHeading"><div><span className="eyebrow">GENERAL REPORT</span><h2>{report.title}</h2><p>{report.source_count} 个来源 · {report.accepted_finding_ids.length} 项行业判断 · {report.accepted_trend_ids.length} 项趋势</p></div><span className="confirmedLabel">报告已生成</span></div>{report.unresolved_prompt_questions.length > 0 && <div className="evidenceGapPanel"><h3>仍未完全回答的问题</h3><ul>{report.unresolved_prompt_questions.map((item) => <li key={item}>{item}</li>)}</ul></div>}<article className="reportMarkdown"><pre>{report.markdown}</pre></article></section>
+        <section className="artifactPanel reportReadyPanel"><div className="artifactHeading"><div><span className="eyebrow">GENERAL REPORT</span><h2>{report.title}</h2><p>{report.source_count} 个来源 · {report.accepted_finding_ids.length} 项行业判断 · {report.accepted_trend_ids.length} 项趋势</p></div><span className="confirmedLabel">报告已生成</span></div><p className="reportReadyCopy">报告正文已放入独立阅读页面，不再与前序研究节点混排。</p><Link className="primaryButton linkButton artifactPrimary" href={`/projects/${project.project_id}/report`}>打开独立 General Report</Link></section>
       )}
     </main>
   );
