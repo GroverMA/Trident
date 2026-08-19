@@ -28,6 +28,7 @@ from src.models.analysis import (
     IndustryAnalysisArtifact,
     IndustryAnalysisModule,
 )
+from src.providers.base import ProviderError
 
 
 def methodology() -> MethodologyTrace:
@@ -112,6 +113,12 @@ class FakeEvidenceCollectionService:
                 )
             ],
         )
+
+
+class FailingEvidenceCollectionService:
+    async def collect_task(self, project, plan, task_id, *, query_override=None):
+        del project, plan, task_id, query_override
+        raise ProviderError("search transport unavailable")
 
 
 class FakeIndustryAnalysisService:
@@ -414,6 +421,46 @@ def test_build_first_evidence_gate_is_service_backed_and_persisted(tmp_path) -> 
 
             persisted = client.get(project_url).json()
             assert persisted["evidence_collection_artifact"]["task_runs"][0]["evidence"][0]["reviewer_note"] == "已核对来源"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_evidence_failure_is_persisted_as_retryable_state(tmp_path) -> None:
+    repository = SQLiteProjectRepository(tmp_path / "evidence-failure.db")
+    project = ProjectState(
+        project_name="失败恢复测试",
+        industry="IVD",
+        region="中国",
+        research_objective="测试网页研究恢复",
+        time_horizon="2026-2036",
+        research_plan_artifact=FakeResearchPlanningService().generate_plan(
+            ProjectState(
+                project_name="失败恢复测试",
+                industry="IVD",
+                region="中国",
+                research_objective="测试网页研究恢复",
+                time_horizon="2026-2036",
+            ),
+            None,
+        ).model_copy(update={"human_confirmed": True}),
+    )
+    project = repository.save(project)
+    research = ResearchApplication(
+        projects=repository,
+        services=SimpleNamespace(evidence_collection=FailingEvidenceCollectionService()),
+    )
+    app.dependency_overrides[get_research_application] = lambda: research
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                f"/v1/projects/{project.project_id}/evidence",
+                json={"task_ids": ["T01"]},
+            )
+            assert response.status_code == 502
+            persisted = client.get(f"/v1/projects/{project.project_id}").json()
+            assert persisted["workflow_status"]["evidence_collection"] == "ready"
+            assert persisted["current_step"] == "evidence_collection"
+            assert persisted["last_pipeline_error"].startswith("T01：")
     finally:
         app.dependency_overrides.clear()
 

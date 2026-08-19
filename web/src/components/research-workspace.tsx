@@ -73,6 +73,16 @@ function errorMessage(detail: unknown, fallback: string): string {
   return fallback;
 }
 
+function stableDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "时间待确认";
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  }).format(date);
+}
+
 export function ResearchWorkspace({ initialProject }: { initialProject: ProjectSummary }) {
   const [project, setProject] = useState(initialProject);
   const [action, setAction] = useState<ActionState | null>(null);
@@ -142,6 +152,13 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
     if (!response.ok) {
       throw new Error(errorMessage(result.detail, "研究服务暂时未能完成本次操作。"));
     }
+    return result;
+  }
+
+  async function fetchProject(): Promise<ProjectSummary> {
+    const response = await fetch(`/api/projects/${project.project_id}`, { cache: "no-store" });
+    const result = await response.json() as ProjectSummary & { detail?: unknown };
+    if (!response.ok) throw new Error(errorMessage(result.detail, "无法刷新项目状态。"));
     return result;
   }
 
@@ -297,12 +314,21 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
     setAction("evidence-collect");
     setMessage("");
     setError("");
+    let latest = project;
+    const completed = new Set(project.evidence_collection_artifact?.task_runs.map((run) => run.task_id) || []);
+    const pendingTasks = (project.research_plan_artifact?.tasks || []).filter((task) => !completed.has(task.task_id));
     try {
-      const result = await requestProject(
-        `/api/projects/${project.project_id}/evidence`,
-        "POST",
-        {},
-      );
+      for (let index = 0; index < pendingTasks.length; index += 1) {
+        const task = pendingTasks[index];
+        setMessage(`正在执行 ${task.task_id} · ${task.title}（${index + 1}/${pendingTasks.length}）`);
+        latest = await requestProject(
+          `/api/projects/${project.project_id}/evidence`,
+          "POST",
+          { task_ids: [task.task_id] },
+        );
+        setProject(latest);
+      }
+      const result = latest;
       const artifact = result.evidence_collection_artifact;
       if (artifact) {
         setEvidenceSelections(Object.fromEntries(artifact.task_runs.flatMap((run) =>
@@ -312,9 +338,13 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
           ]),
         )) as Record<string, "accepted" | "rejected">);
       }
-      acceptProject(result, "网页检索和证据结构化已经完成，请逐条接受或拒绝候选证据。");
+      acceptProject(result, `网页检索和证据结构化已经完成（${artifact?.task_runs.length || 0}/${plan?.tasks.length || 0} 项），请逐条接受或拒绝候选证据。`);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "网页证据研究暂时未能完成。");
+      try {
+        latest = await fetchProject();
+        acceptProject(latest, "已完成任务和证据已经保存，可以从失败任务继续。");
+      } catch { /* retain the last locally confirmed state */ }
+      setError(reason instanceof Error ? `网页研究中断：${reason.message}。已完成任务不会丢失，请点击继续。` : "网页证据研究暂时未能完成，已完成任务不会丢失。");
     } finally {
       setAction(null);
     }
@@ -551,7 +581,7 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
             <span>研究进度</span>
             <strong>{completed}/{steps.length} 个节点已完成</strong>
           </div>
-          <span>最后保存 {new Date(project.updated_at).toLocaleString("zh-CN")}</span>
+          <span suppressHydrationWarning>最后保存 {stableDateTime(project.updated_at)}</span>
         </div>
         <div className="workflowTrack">
           {steps.map((step, index) => {
@@ -796,6 +826,7 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
 
       {!reviewFirst && evidence && (
         <section className="artifactPanel">
+          {!evidence.human_confirmed && plan && evidence.task_runs.length < plan.tasks.length && <div className="nextStageNotice"><strong>网页研究已完成 {evidence.task_runs.length}/{plan.tasks.length} 项</strong><span>其余任务可以继续执行；已经保存的来源和证据不会重复丢失。</span><button type="button" className="secondaryButton" disabled={action !== null} onClick={() => void collectEvidence()}>{action === "evidence-collect" ? "正在继续未完成任务…" : "继续未完成的网页研究"}</button></div>}
           {evidenceAdvisories.length > 0 && !evidence.human_confirmed && <section className="evidenceGapPanel">
             <h2>证据缺口与分析师处理建议</h2>
             <p>本轮检索未完全覆盖 AI 拆解出的所有问题，但证据缺口不会阻断研究。后续分析会降低相关结论置信度，并在报告中明确标注证据边界。</p>

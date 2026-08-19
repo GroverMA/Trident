@@ -23,6 +23,7 @@
 - [x] 迁移 Industry Analysis 五模块生成、Finding 人工审核与确认 Gate 至共享 Web 流程。
 - [x] 迁移 Future Intelligence、Gate 2 内容确认与 General Report 至共享 Web 流程。
 - [ ] 建立持久化 Job 状态机，覆盖排队、执行、人工等待、失败、重试、取消和完成。
+- [x] 网页研究按任务分段执行、即时保存并支持从未完成任务恢复。
 - [ ] 完成 PostgreSQL 规范化模型和 Alembic 迁移；保留显式 SQLite Demo 适配。
 - [ ] 为 CloudBase Demo 验证持久卷或数据库迁移方案，避免容器重启丢失项目。
 - [ ] 完成凭证轮换和密钥托管；撤销任何曾通过截图或非安全渠道暴露的凭证。
@@ -43,6 +44,8 @@
 - [ ] 开发 PE/VC 场景包和中小企业增长决策场景包。
 - [ ] 完成项目文件夹、版本对比、审阅会话和通知功能。
 - [ ] 增加模型调用、搜索、抓取和文档处理的成本治理。
+- [ ] 实施不可变 Telemetry Schema，采集每节点 Token、耗时、调用次数、失败和重试。
+- [ ] 部署独立 `trident-ops` 产品监测 Dashboard，并接入组织级 RBAC/RLS。
 
 ## P2：企业级能力
 

@@ -26,6 +26,7 @@ from src.services.research_planning import SOPComplianceError
 from src.services.industry_analysis import IndustryAnalysisError
 from src.services.errors import FutureIntelligenceError
 from src.services.report_generation import ReportGenerationError
+from src.services.evidence_collection import EvidenceCollectionError
 from src.services.reviewer_orchestration import ReviewerPipelineError
 from src.state.project import (
     ProjectState,
@@ -378,6 +379,8 @@ async def collect_project_evidence(
         raise HTTPException(status_code=404, detail="project not found") from exc
     except ResearchWorkflowError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except EvidenceCollectionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ConfigurationError as exc:
         raise HTTPException(status_code=503, detail="AI研究服务尚未完成配置") from exc
     except ProviderError as exc:

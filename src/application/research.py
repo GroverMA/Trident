@@ -11,8 +11,10 @@ from src.models.analysis import AnalysisReviewStatus
 from src.models.future import ForecastReviewStatus
 from src.models.research import MarketDefinition, ResearchBriefArtifact
 from src.persistence.projects import ProjectRepository
+from src.providers.base import ProviderError
 from src.state.project import ProjectState, WorkflowStatus, default_workflow
 from src.services.evidence_collection import (
+    EvidenceCollectionError,
     evidence_coverage_advisories,
     evidence_gate_reasons,
     review_evidence,
@@ -299,12 +301,27 @@ class ResearchApplication:
         )
         artifact = active.evidence_collection_artifact
         for task_id in selected:
-            run = await self.services.evidence_collection.collect_task(
-                active,
-                plan,
-                task_id,
-                query_override=query_override,
-            )
+            try:
+                run = await self.services.evidence_collection.collect_task(
+                    active,
+                    plan,
+                    task_id,
+                    query_override=query_override,
+                )
+            except (ProviderError, EvidenceCollectionError) as exc:
+                statuses = dict(active.workflow_status)
+                statuses["evidence_collection"] = (
+                    WorkflowStatus.NEEDS_REVIEW
+                    if artifact is not None and artifact.task_runs
+                    else WorkflowStatus.READY
+                )
+                self.projects.save(active.model_copy(update={
+                    "workflow_status": statuses,
+                    "current_step": "evidence_collection",
+                    "last_pipeline_error": f"{task_id}：{exc}",
+                    "updated_at": datetime.now(UTC),
+                }))
+                raise
             artifact = upsert_task_run(artifact, plan.artifact_id, run)
             active = self.projects.save(
                 active.model_copy(
@@ -323,6 +340,7 @@ class ResearchApplication:
                 update={
                     "workflow_status": statuses,
                     "current_step": "evidence_qa",
+                    "last_pipeline_error": None,
                     "updated_at": datetime.now(UTC),
                 }
             )
