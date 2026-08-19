@@ -240,6 +240,8 @@ export interface ProjectSummary {
   company_strategy_objective?: string | null;
   research_path: ResearchPath;
   research_mode?: string;
+  scenario_pack?: "general" | "sme_growth" | "pe_vc";
+  scenario_pack_version?: string;
   workspace_mode?: string;
   current_step: string;
   last_pipeline_error?: string | null;
@@ -292,4 +294,6 @@ export interface ProjectCreatePayload {
   research_path: ResearchPath;
   research_mode: "general_research";
   workspace_mode: "quick_report" | "analyst_workspace";
+  scenario_pack: "general" | "sme_growth" | "pe_vc";
+  scenario_pack_version: "1.0.0";
 }

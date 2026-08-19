@@ -25,6 +25,8 @@ from src.models.analysis import AnalysisReviewStatus
 from src.models.future import ForecastReviewStatus
 from src.persistence.factory import create_project_repository
 from src.providers.base import ProviderError
+from src.core.registry import ExtensionRegistry
+from src.scenarios import builtin_scenario_packs
 from src.services.research_planning import SOPComplianceError
 from src.services.industry_analysis import IndustryAnalysisError
 from src.services.errors import FutureIntelligenceError
@@ -55,6 +57,11 @@ class ProjectCreate(BaseModel):
     workspace_mode: WorkspaceMode = WorkspaceMode.QUICK_REPORT
     research_path: ResearchPath = ResearchPath.BUILD_FIRST
     industry_pack: str | None = None
+    scenario_pack: str = "general"
+    scenario_pack_version: str = "1.0.0"
+
+
+SCENARIO_PACKS = ExtensionRegistry(builtin_scenario_packs())
 
 
 class PipelineRequest(BaseModel):
@@ -308,6 +315,10 @@ def capabilities(research: ResearchApp) -> dict:
 
 @app.post("/v1/projects", response_model=ProjectState, status_code=status.HTTP_201_CREATED)
 def create_project(payload: ProjectCreate, research: ResearchApp) -> ProjectState:
+    try:
+        SCENARIO_PACKS.get(payload.scenario_pack, payload.scenario_pack_version)
+    except KeyError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return research.create_project(ProjectState(**payload.model_dump()))
 
 

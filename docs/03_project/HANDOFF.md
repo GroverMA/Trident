@@ -1,12 +1,13 @@
 # 项目交接说明
 
-- **最后更新**：2026-08-18
+- **最后更新**：2026-08-19
 - **当前仓库**：Trident
 - **当前分支**：`main`
 - **当前里程碑**：Vercel 主 Demo 完整研究流程迁移；CloudBase 商业化部署预研
 
 ## 最近完成
 
+- 场景化迁移第一批已完成：`general@1.0.0`、`sme_growth@1.0.0`、`pe_vc@1.0.0` 通过共享 Registry 加载，场景约束进入 Brief 与 Plan，未复制研究 Agent。
 - 从原型仓库复制并独立建立 Trident，不再修改原 Industry Analyst。
 - 建立 Python + FastAPI + Next.js 的升级基线和可插拔合同。
 - 增加 CloudBase 中国大陆 Demo 部署文件，并保留海外部署。

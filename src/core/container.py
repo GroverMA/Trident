@@ -15,6 +15,7 @@ from src.providers.hkgai_mcp import HKGAIMCPProvider
 from src.providers.hkgai_model import HKGAIModelProvider
 from src.providers.hkgai_structured_rest import HKGAIStructuredRestProvider
 from src.providers.search_router import SearchRouter
+from src.scenarios import builtin_scenario_packs
 from src.services.action_planning import ActionPlanningService
 from src.services.company_assessment import CompanyAssessmentService
 from src.services.evidence_collection import EvidenceCollectionService
@@ -54,7 +55,9 @@ class ServiceContainer:
     sop: ResearchSOPPack
     model_factory: ModelFactory = _default_model_factory
     search_factory: SearchFactory = _default_search_factory
-    scenario_packs: ExtensionRegistry = field(default_factory=ExtensionRegistry)
+    scenario_packs: ExtensionRegistry = field(
+        default_factory=lambda: ExtensionRegistry(builtin_scenario_packs())
+    )
     industry_packs: ExtensionRegistry = field(default_factory=ExtensionRegistry)
     algorithms: ExtensionRegistry = field(default_factory=ExtensionRegistry)
     evaluators: ExtensionRegistry = field(default_factory=ExtensionRegistry)
@@ -69,7 +72,9 @@ class ServiceContainer:
 
     @cached_property
     def research_planning(self) -> ResearchPlanningService:
-        return ResearchPlanningService(model=self._model(), sop=self.sop)
+        return ResearchPlanningService(
+            model=self._model(), sop=self.sop, scenario_packs=self.scenario_packs
+        )
 
     @cached_property
     def evidence_collection(self) -> EvidenceCollectionService:

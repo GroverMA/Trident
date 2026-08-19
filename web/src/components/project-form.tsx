@@ -7,6 +7,7 @@ import type { ProjectCreatePayload, ProjectSummary, ResearchPath } from "@/lib/t
 export function ProjectForm({ researchPath }: { researchPath: ResearchPath }) {
   const router = useRouter();
   const [strategyEnabled, setStrategyEnabled] = useState(false);
+  const [scenarioPack, setScenarioPack] = useState<"general" | "sme_growth" | "pe_vc">("general");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -26,6 +27,8 @@ export function ProjectForm({ researchPath }: { researchPath: ResearchPath }) {
       research_path: researchPath,
       research_mode: "general_research",
       workspace_mode: strategyEnabled ? "analyst_workspace" : "quick_report",
+      scenario_pack: scenarioPack,
+      scenario_pack_version: "1.0.0",
     };
     if (strategyEnabled) {
       payload.target_company = String(data.get("target_company") || "").trim();
@@ -62,6 +65,34 @@ export function ProjectForm({ researchPath }: { researchPath: ResearchPath }) {
       </div>
 
       <form className="projectForm" onSubmit={submit}>
+        <section className="scenarioPicker" aria-labelledby="scenario-heading">
+          <div className="subsectionTitle" id="scenario-heading">研究场景</div>
+          <p>场景包会改变研究问题、证据重点和交付结构，但始终复用同一套 Trident 研究流程。</p>
+          <div className="scenarioOptions">
+            {[
+              ["general", "通用行业研究", "行业边界、规模、竞争、驱动与未来情景"],
+              ["sme_growth", "企业增长决策", "市场机会、能力差距、增长选择与行动计划"],
+              ["pe_vc", "PE/VC 赛道研判", "赛道吸引力、投资假设、标的地图与尽调问题"],
+            ].map(([id, title, description]) => (
+              <button
+                className={scenarioPack === id ? "scenarioOption scenarioOptionActive" : "scenarioOption"}
+                key={id}
+                type="button"
+                aria-pressed={scenarioPack === id}
+                onClick={() => {
+                  const next = id as "general" | "sme_growth" | "pe_vc";
+                  setScenarioPack(next);
+                  if (next === "sme_growth") setStrategyEnabled(true);
+                  if (next !== "sme_growth") setStrategyEnabled(false);
+                }}
+              >
+                <strong>{title}</strong>
+                <span>{description}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
         <section className={strategyEnabled ? "strategyCard strategyCardActive" : "strategyCard"}>
           <div>
             <div className="strategyTitle">企业战略决策支持 · 高级分析模式</div>
@@ -71,7 +102,10 @@ export function ProjectForm({ researchPath }: { researchPath: ResearchPath }) {
             <input
               type="checkbox"
               checked={strategyEnabled}
-              onChange={(event) => setStrategyEnabled(event.target.checked)}
+              onChange={(event) => {
+                setStrategyEnabled(event.target.checked);
+                setScenarioPack(event.target.checked ? "sme_growth" : "general");
+              }}
             />
             <span className="switch" aria-hidden="true" />
             <span>进入企业战略决策支持模式</span>

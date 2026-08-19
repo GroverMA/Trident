@@ -96,6 +96,8 @@ class ProjectState(BaseModel):
     market_scope_confirmed_at: datetime | None = None
     last_pipeline_error: str | None = None
     industry_pack: str | None = None
+    scenario_pack: str = "general"
+    scenario_pack_version: str = "1.0.0"
     research_brief_artifact: ResearchBriefArtifact | None = None
     research_plan_artifact: ResearchPlanArtifact | None = None
     evidence_collection_artifact: EvidenceCollectionArtifact | None = None
@@ -132,6 +134,8 @@ class ProjectState(BaseModel):
         "company_strategy_objective",
         "decision_context",
         "industry_pack",
+        "scenario_pack",
+        "scenario_pack_version",
     )
     @classmethod
     def clean_optional_text(cls, value: str | None) -> str | None:

@@ -8,6 +8,7 @@ from typing import Any, Protocol
 from pydantic import ValidationError
 
 from src.knowledge.sop import ResearchSOPPack
+from src.core.registry import ExtensionRegistry
 from src.models.research import (
     MethodologyTrace,
     ResearchBriefArtifact,
@@ -100,9 +101,36 @@ PLAN_OUTPUT_CONTRACT = {
 
 
 class ResearchPlanningService:
-    def __init__(self, model: StructuredModel, sop: ResearchSOPPack) -> None:
+    def __init__(
+        self,
+        model: StructuredModel,
+        sop: ResearchSOPPack,
+        scenario_packs: ExtensionRegistry | None = None,
+    ) -> None:
         self.model = model
         self.sop = sop
+        self.scenario_packs = scenario_packs or ExtensionRegistry()
+
+    def _scenario_context(self, project: ProjectState) -> dict[str, Any]:
+        if not self.scenario_packs.descriptors():
+            return {}
+        try:
+            pack = self.scenario_packs.get(
+                project.scenario_pack, project.scenario_pack_version
+            )
+        except KeyError as exc:
+            raise SOPComplianceError(
+                f"未知场景包：{project.scenario_pack}@{project.scenario_pack_version}"
+            ) from exc
+        return {
+            "scenario_pack": {
+                "id": pack.descriptor.extension_id,
+                "version": pack.descriptor.version,
+                "name": pack.descriptor.display_name,
+                "instructions": dict(pack.research_instructions()),
+                "required_inputs": dict(pack.required_inputs()),
+            }
+        }
 
     def generate_brief(self, project: ProjectState) -> ResearchBriefArtifact:
         messages = [
@@ -125,6 +153,7 @@ class ResearchPlanningService:
                     "根据以下项目输入生成Research Brief。信息不足时提出澄清问题，不要"
                     "自行假定为事实。输出语言必须与项目要求一致。\n\n"
                     f"项目输入：\n{json.dumps(self._project_payload(project), ensure_ascii=False)}\n\n"
+                    f"场景包约束：\n{json.dumps(self._scenario_context(project), ensure_ascii=False)}\n\n"
                     f"严格输出结构：\n{json.dumps(BRIEF_OUTPUT_CONTRACT, ensure_ascii=False)}"
                 ),
             ),
@@ -184,6 +213,7 @@ class ResearchPlanningService:
                     "市场规模任务必须设计主测算法和独立验证法；驱动与趋势任务必须覆盖需求、供给、"
                     "政策、技术、商业模式和竞争六方向，并预留结构化历史序列及预测模型适用性检查。\n\n"
                     f"项目输入：\n{json.dumps(self._project_payload(project), ensure_ascii=False)}\n\n"
+                    f"场景包约束：\n{json.dumps(self._scenario_context(project), ensure_ascii=False)}\n\n"
                     "已确认Research Brief：\n"
                     f"{brief.model_dump_json(exclude={'methodology', 'generated_at'}, ensure_ascii=False)}\n\n"
                     f"严格输出结构：\n{json.dumps(PLAN_OUTPUT_CONTRACT, ensure_ascii=False)}"
@@ -353,6 +383,8 @@ class ResearchPlanningService:
             "output_language": project.output_language,
             "research_mode": project.research_mode.value,
             "industry_pack": project.industry_pack,
+            "scenario_pack": project.scenario_pack,
+            "scenario_pack_version": project.scenario_pack_version,
         }
 
     @staticmethod

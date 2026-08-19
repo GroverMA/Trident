@@ -6,6 +6,8 @@
 
 ### Added
 
+- 版本化 Scenario Pack Registry 的首批内置场景：通用行业研究、企业增长决策和 PE/VC 赛道研判；场景约束实际进入 Brief 与 Plan。
+- 新建项目页增加场景选择，并持久化场景 ID 与版本；未知场景版本由 API 拒绝。
 - 产品、研究、工程、项目治理与 AI 记忆知识库。
 - CloudBase 单域名公开健康探针 `/healthz` 和就绪探针 `/readyz`。
 - 共享 Web 研究流程的 Evidence Collection、Evidence Matrix 和 Gate 1 人工审核。

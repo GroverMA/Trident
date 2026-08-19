@@ -481,3 +481,29 @@ a { color: inherit; text-decoration: none; }
   .analysisFindingHeader { flex-direction: column; gap: 8px; }
   .analysisDimensions { grid-template-columns: 1fr; }
 }
+.scenarioPicker {
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.scenarioPicker > p { color: var(--muted); margin: .45rem 0 1rem; }
+.scenarioOptions { display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; }
+.scenarioOption {
+  min-height: 112px;
+  padding: 1rem;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: white;
+  color: var(--text);
+}
+.scenarioOption strong, .scenarioOption span { display: block; }
+.scenarioOption span { margin-top: .45rem; color: var(--muted); line-height: 1.45; }
+.scenarioOptionActive { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
+
+@media (max-width: 760px) {
+  .scenarioOptions { grid-template-columns: 1fr; }
+  .scenarioOption { min-height: auto; }
+}
