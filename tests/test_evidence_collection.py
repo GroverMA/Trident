@@ -137,6 +137,23 @@ class FakeModel:
         return payload, ModelResponse(content="{}", model="fake")
 
 
+class PartialEvidenceModel:
+    source_id: str | None = None
+
+    def complete_json(self, messages, *, enable_thinking=False):
+        match = re.search(r"SRC-[0-9a-f]+", messages[-1].content)
+        if match:
+            self.source_id = match.group(0)
+        assert self.source_id is not None
+        return {
+            "evidence": [{
+                "source_id": self.source_id,
+                "statement": "2025年样本数量达到一万例。",
+                "supporting_excerpt": "样本数量在2025年达到一万例",
+            }],
+        }, ModelResponse(content="{}", model="partial-model")
+
+
 def test_source_classifier_is_transparent() -> None:
     assert classify_source("https://www.stats.gov.cn/data")[0] == SourceTier.A
     assert classify_source("https://university.edu/paper")[0] == SourceTier.B
@@ -154,6 +171,18 @@ def test_collection_builds_candidate_evidence_and_deduplicates_urls() -> None:
     assert result.evidence[0].review_status == EvidenceReviewStatus.NEEDS_REVIEW
     assert result.evidence[0].qa_score >= 90
     assert result.information_gaps == ["缺少收入规模口径"]
+
+
+def test_partial_model_evidence_becomes_reviewable_limitation_not_pipeline_error() -> None:
+    service = EvidenceCollectionService(PartialEvidenceModel(), FakeRouter())  # type: ignore[arg-type]
+
+    result = asyncio.run(service.collect_task(project(), plan(), "T01"))
+
+    assert len(result.evidence) == 1
+    assert result.evidence[0].statement == "2025年样本数量达到一万例。"
+    assert result.evidence[0].prompt_relevance == 0.5
+    assert result.evidence[0].review_status == EvidenceReviewStatus.OUT_OF_SCOPE
+    assert "超出研究边界" in result.evidence[0].qa_flags
 
 
 def test_human_review_controls_evidence_gate() -> None:

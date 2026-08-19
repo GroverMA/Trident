@@ -24,6 +24,7 @@ type ActionState =
   | "future-save"
   | "future-confirm"
   | "report-generate"
+  | "report-first-generate"
   | "rewind";
 
 const BUILD_STEPS: WorkflowStep[] = [
@@ -504,6 +505,21 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
     } finally { setAction(null); }
   }
 
+  async function generateReviewFirstReport() {
+    setAction("report-first-generate"); setMessage(""); setError("");
+    try {
+      const result = await requestProject(
+        `/api/projects/${project.project_id}/report-first`,
+        "POST",
+        { enterprise: project.company_strategy_enabled },
+      );
+      acceptProject(result, "完整报告初稿、引用矩阵、分析逻辑和趋势逻辑已经生成，可以开始自上而下审阅。");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "报告初稿生成中断；已完成的研究节点已经保存，可以安全重试。");
+      try { setProject(await fetchProject()); } catch { /* retain current state */ }
+    } finally { setAction(null); }
+  }
+
   function selectEvidence(mode: "recommended" | "all" | "none") {
     const artifact = project.evidence_collection_artifact;
     if (!artifact) return;
@@ -808,6 +824,28 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
           ) : (
             <div className="nextStageNotice"><strong>{reviewFirst ? "报告初稿节点已经就绪" : "网页证据研究节点已经就绪"}</strong><span>{reviewFirst ? "下一阶段将接入完整报告编排、引用追溯与内容修订工作台。" : "下一阶段将接入搜索、抓取、证据结构化与批量人工审核。"}</span></div>
           )}
+        </section>
+      )}
+
+      {reviewFirst && plan?.human_confirmed && !report && (
+        <section className="artifactPanel artifactStart">
+          <span className="eyebrow">REPORT-FIRST PIPELINE</span>
+          <h2>生成完整报告初稿与可追溯研究底稿</h2>
+          <p>系统会依次完成网页研究、引用矩阵、行业分析、趋势与情景及 General Report；单项搜索不足会转化为明确证据缺口，不会让整份报告无故中断。</p>
+          {message && <div className="formSuccess" role="status">{message}</div>}
+          {error && <div className="formError" role="alert">{error}</div>}
+          <button className="primaryButton artifactPrimary" type="button" disabled={action !== null} onClick={() => void generateReviewFirstReport()}>
+            {action === "report-first-generate" ? "AI 正在生成完整报告与审阅底稿…" : "生成完整报告初稿"}
+          </button>
+        </section>
+      )}
+
+      {reviewFirst && report && (
+        <section className="artifactPanel">
+          <div className="artifactHeading"><div><span className="eyebrow">REVIEW-FIRST · GENERAL REPORT</span><h2>{report.title}</h2><p>报告初稿已生成。下方摘要展示引用、分析与趋势底稿；所有自动选择仍保留为待人工审阅状态。</p></div><span className="reviewRequired">审阅草稿</span></div>
+          <div className="planStats"><div><span>引用来源</span><strong>{report.source_count}</strong></div><div><span>证据任务</span><strong>{evidence?.task_runs.length || 0}</strong></div><div><span>行业模块</span><strong>{analysis?.modules.length || 0}</strong></div><div><span>趋势与情景</span><strong>{(future?.trends.length || 0) + (future?.scenarios.length || 0)}</strong></div></div>
+          {report.unresolved_prompt_questions.length > 0 && <div className="evidenceGapPanel"><h3>仍需重点审阅的问题</h3><ul>{report.unresolved_prompt_questions.map((item) => <li key={item}>{item}</li>)}</ul></div>}
+          <article className="reportMarkdown"><pre>{report.markdown}</pre></article>
         </section>
       )}
 

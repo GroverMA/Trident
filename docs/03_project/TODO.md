@@ -23,6 +23,7 @@
 - [x] 迁移 Industry Analysis 五模块生成、Finding 人工审核与确认 Gate 至共享 Web 流程。
 - [x] 迁移 Future Intelligence、Gate 2 内容确认与 General Report 至共享 Web 流程。
 - [ ] 建立持久化 Job 状态机，覆盖排队、执行、人工等待、失败、重试、取消和完成。
+- [ ] 按 `PRODUCTIZATION_ARCHITECTURE.md` 将长研究迁入 Durable Workflow + Worker，Vercel 仅保留 Web/BFF。
 - [x] 网页研究按任务分段执行、即时保存并支持从未完成任务恢复。
 - [ ] 完成 PostgreSQL 规范化模型和 Alembic 迁移；保留显式 SQLite Demo 适配。
 - [ ] 为 CloudBase Demo 验证持久卷或数据库迁移方案，避免容器重启丢失项目。

@@ -309,7 +309,31 @@ class EvidenceCollectionService:
             except EvidenceCollectionError as exc:
                 last_error = exc
                 if attempt == 1:
-                    break
+                    normalized = self._normalize_partial_extraction(
+                        payload, project, task, {source.source_id for source in selected}
+                    )
+                    try:
+                        self._validate_extraction(
+                            normalized,
+                            {source.source_id for source in selected},
+                            {
+                                f"{task.task_id}-Q{index}"
+                                for index in range(1, len(task.questions) + 1)
+                            },
+                            set(task.prompt_question_ids),
+                        )
+                        return normalized
+                    except EvidenceCollectionError:
+                        # A malformed model response is a documented evidence
+                        # limitation, not a reason to strand the whole project.
+                        return {
+                            "evidence": [],
+                            "conflicts": [],
+                            "information_gaps": [
+                                f"模型返回的证据候选未通过结构校验：{last_error}。"
+                                "本任务保留为证据缺口，后续可重试或人工补充。"
+                            ],
+                        }
                 messages.extend(
                     [
                         ChatMessage(role="assistant", content=response.content),
@@ -323,6 +347,67 @@ class EvidenceCollectionService:
                     ]
                 )
         raise EvidenceCollectionError(f"证据抽取未通过结构校验：{last_error}")
+
+    @staticmethod
+    def _normalize_partial_extraction(
+        payload: dict[str, Any],
+        project: ProjectState,
+        task: ResearchTask,
+        source_ids: set[str],
+    ) -> dict[str, Any]:
+        """Conservatively repair optional LLM fields without inventing evidence.
+
+        Statement, excerpt and a known source remain mandatory. Missing QA and
+        scope fields receive cautious values so the item is retained for human
+        inspection but cannot become a system-recommended Gate 1 candidate.
+        """
+
+        valid_kinds = {kind.value for kind in EvidenceKind}
+        task_questions = [
+            f"{task.task_id}-Q{index}" for index in range(1, len(task.questions) + 1)
+        ]
+        normalized_evidence: list[dict[str, Any]] = []
+        dropped = 0
+        raw_items = payload.get("evidence", [])
+        if not isinstance(raw_items, list):
+            raw_items = []
+        for raw in raw_items[:MAX_EVIDENCE_PER_TASK]:
+            if (
+                not isinstance(raw, dict)
+                or raw.get("source_id") not in source_ids
+                or not str(raw.get("statement") or "").strip()
+                or not str(raw.get("supporting_excerpt") or "").strip()
+            ):
+                dropped += 1
+                continue
+            item = dict(raw)
+            if item.get("kind") not in valid_kinds:
+                item["kind"] = EvidenceKind.FACT.value
+            item.setdefault("geographic_scope", project.region)
+            item.setdefault("market_scope", project.industry)
+            item.setdefault("supports_or_challenges", "neutral")
+            item.setdefault("model_confidence", 0.5)
+            item.setdefault("prompt_relevance", 0.5)
+            if not isinstance(item.get("question_ids"), list) or not item["question_ids"]:
+                item["question_ids"] = task_questions[:1]
+            if not isinstance(item.get("prompt_question_ids"), list):
+                item["prompt_question_ids"] = list(task.prompt_question_ids[:1])
+            # Missing scope evidence must never be silently treated as a match.
+            item.setdefault("scope_match", False)
+            normalized_evidence.append(item)
+
+        gaps = payload.get("information_gaps", [])
+        normalized_gaps = [str(value) for value in gaps] if isinstance(gaps, list) else []
+        if dropped:
+            normalized_gaps.append(
+                f"{dropped}条候选因缺少可核验陈述、原文或有效来源而未采用。"
+            )
+        conflicts = payload.get("conflicts", [])
+        return {
+            "evidence": normalized_evidence,
+            "conflicts": conflicts if isinstance(conflicts, list) else [],
+            "information_gaps": normalized_gaps,
+        }
 
     @staticmethod
     def _validate_extraction(
