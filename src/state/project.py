@@ -20,6 +20,7 @@ from src.models.strategy import (
     CompanyScorecardArtifact,
     EnterpriseDecisionReportArtifact,
 )
+from src.observability.telemetry import StepRunTelemetry
 
 
 class ResearchMode(StrEnum):
@@ -108,6 +109,7 @@ class ProjectState(BaseModel):
     content_revision_artifact: ContentRevisionArtifact | None = None
     current_step: str = "research_brief"
     workflow_status: dict[str, WorkflowStatus] = Field(default_factory=default_workflow)
+    telemetry_runs: list[StepRunTelemetry] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

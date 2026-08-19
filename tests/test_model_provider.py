@@ -5,6 +5,7 @@ import json
 from src.config import Settings
 from src.providers.base import ChatMessage
 from src.providers.hkgai_model import HKGAIModelProvider
+from src.observability.telemetry import finish_span, start_span
 
 
 class FakeResponse:
@@ -139,3 +140,17 @@ def test_thinking_parameters_are_only_added_when_enabled() -> None:
     assert body["reasoning_effort"] == "max"
     assert body["include_reasoning"] is True
     assert body["chat_template_kwargs"] == {"enable_thinking": True}
+
+
+def test_model_usage_is_recorded_inside_a_research_step() -> None:
+    session = FakeSession()
+    provider = HKGAIModelProvider(settings(), session=session)
+    span, token = start_span("project-1", "research_brief")
+
+    provider.complete([ChatMessage(role="user", content="Return JSON")])
+    run = finish_span(span, token)
+
+    assert run.status == "completed"
+    assert run.total_tokens == 20
+    assert len(run.model_calls) == 1
+    assert run.model_calls[0].model == "test-model"

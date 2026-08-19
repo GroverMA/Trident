@@ -17,7 +17,7 @@
 - Vercel Preview 只连接测试 Telemetry 数据库；Production 连接正式数据库。
 - 腾讯云商业化部署沿用相同事件合同，可写入区域内 PostgreSQL，再由区域内后台查看；默认不跨境同步研究内容。
 
-当前 Demo 尚无完整用户和组织体系，因此第一阶段只建立事件合同和内部开关，不采用“隐藏 URL 即安全”的做法。正式开放前必须接入身份认证、RBAC 和组织隔离。
+当前 Demo 尚无完整用户和组织体系。第一阶段已在同一 Web 应用提供受双层密钥保护的 `/ops` 入口：浏览器使用 `TRIDENT_OPS_USERNAME` / `TRIDENT_OPS_PASSWORD`，Next.js 服务端再使用 `TRIDENT_OPS_KEY` 调用 FastAPI。入口不出现在普通导航；正式对客户开放前仍必须接入身份认证、RBAC 和组织隔离。
 
 ## 3. 事件数据模型
 
@@ -81,8 +81,16 @@ model_call
 
 ## 7. 实施顺序
 
-1. 建立不可变 Telemetry Schema 和模型/搜索/步骤事件采集。
-2. 接入 PostgreSQL、迁移和事件一致性测试。
-3. 建立仅内部可访问的 `/ops` Dashboard 与产品指标 API。
+1. **已完成 Demo 阶段**：模型供应商真实 Usage、步骤耗时与失败类型采集，数据随项目持久化；建立受保护的 `/ops` Dashboard 和产品指标 API。
+2. 接入 PostgreSQL、迁移和事件一致性测试，把项目内有界历史迁移为 append-only 表。
+3. 增加搜索、抓取、重试、来源数以及模型 Usage 缺失率事件。
 4. 接入身份、组织、RBAC、RLS 和审计日志。
 5. 完成客户只读授权流程、数据保留与区域化部署。
+
+## 8. 当前数据边界
+
+- 覆盖时间从埋点版本部署后的新模型调用开始；历史调用不估算回填。
+- Token 来自模型供应商响应中的 `usage`；同时兼容 OpenAI 风格 input/output 与 prompt/completion 字段。
+- 当前 Demo 将最多 500 条步骤运行随项目 JSON 持久化，保证 SQLite、PostgreSQL 和 MySQL 适配器均可使用。
+- 当前已采集 Prompt Analysis、Research Planning、逐任务 Web Research、Industry Analysis、Future Intelligence 和 General Report。
+- Dashboard 只展示聚合和运行元数据，不展示 Prompt、网页正文、模型回答或任何凭证。

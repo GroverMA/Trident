@@ -15,6 +15,7 @@
 - 五个版本化专业研究 Skill、运行时 Registry、模块级 Prompt 绑定和产物版本/哈希审计。
 - 共享 Web 研究流程的 Future Intelligence 生成、趋势/情景逐项审核与 Gate 2 准入。
 - Gate 2 内容确认与 General Report 生成、失败后保留审核状态的安全重试通路。
+- 内部 `/ops` 产品运行 Dashboard、双层访问保护、真实模型 Usage 与步骤耗时埋点。
 
 ### Changed
 
@@ -47,7 +48,7 @@
 
 - 完整异步研究 Job 和持久化恢复仍在规划中。
 - CloudBase Demo 的持久化数据库方案尚需最终确认。
-- Token 与节点耗时的跨项目 Telemetry Schema 尚未实施；产品监测 Dashboard 当前已完成指标和部署设计，不能在缺少真实数据源时宣称上线。
+- Demo 阶段 Telemetry 随项目 JSON 保存；正式 append-only PostgreSQL Schema、组织级 RBAC/RLS 和搜索/抓取指标尚未实施。
 - CloudBase 默认域名在中国大陆本地网络可访问，但会隔离部分境外或自动化网络；大陆
   验收必须使用目标区域网络，不能把外部探测超时直接判断为服务不可用。
 

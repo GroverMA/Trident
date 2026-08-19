@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from datetime import UTC, datetime
+import os
+import secrets
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
@@ -211,6 +214,59 @@ def readiness():
             },
         )
     return {"status": "ready", "service": "trident-research-api"}
+
+
+def _require_ops_access(
+    x_trident_ops_key: Annotated[str | None, Header()] = None,
+) -> None:
+    expected = os.getenv("TRIDENT_OPS_KEY", "").strip()
+    if not expected:
+        raise HTTPException(status_code=503, detail="运营后台尚未配置访问密钥")
+    if not x_trident_ops_key or not secrets.compare_digest(
+        x_trident_ops_key, expected
+    ):
+        raise HTTPException(status_code=401, detail="运营后台访问凭证无效")
+
+
+@app.get("/v1/ops/telemetry", dependencies=[Depends(_require_ops_access)])
+def ops_telemetry(research: ResearchApp) -> dict:
+    """Return privacy-safe, source-backed telemetry for the internal dashboard."""
+
+    projects = research.list_projects(limit=500)
+    rows = [
+        {
+            **run.model_dump(mode="json"),
+            "project_name": project.project_name,
+            "industry": project.industry,
+            "region": project.region,
+            "report_completed": project.general_report_artifact is not None,
+        }
+        for project in projects
+        for run in project.telemetry_runs
+    ]
+    total_tokens = sum(int(row["total_tokens"]) for row in rows)
+    completed_reports = sum(
+        project.general_report_artifact is not None for project in projects
+    )
+    return {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "source": "ProjectState.telemetry_runs / provider-reported usage",
+        "coverage_started_at": min(
+            (row["started_at"] for row in rows), default=None
+        ),
+        "summary": {
+            "project_count": len(projects),
+            "completed_report_count": completed_reports,
+            "step_run_count": len(rows),
+            "failed_step_count": sum(row["status"] == "failed" for row in rows),
+            "model_call_count": sum(len(row["model_calls"]) for row in rows),
+            "total_tokens": total_tokens,
+            "average_tokens_per_completed_report": (
+                round(total_tokens / completed_reports) if completed_reports else None
+            ),
+        },
+        "runs": sorted(rows, key=lambda row: row["started_at"], reverse=True),
+    }
 
 
 @app.get("/v1/capabilities")

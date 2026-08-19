@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
+from time import perf_counter
 from typing import Any
 
 import requests
 
 from src.config import Settings
 from src.providers.base import ChatMessage, ModelProvider, ModelResponse, ProviderError
+from src.observability.telemetry import record_model_usage
 
 
 class HKGAIModelProvider(ModelProvider):
@@ -65,6 +68,8 @@ class HKGAIModelProvider(ModelProvider):
                 }
             )
 
+        started_at = datetime.now(UTC)
+        started_clock = perf_counter()
         payload = self._request_json(
             "POST",
             f"{self.settings.model_base_url}/v1/chat/completions",
@@ -78,7 +83,7 @@ class HKGAIModelProvider(ModelProvider):
             raise ProviderError("Modelhub returned an invalid completion") from exc
 
         usage = payload.get("usage", {})
-        return ModelResponse(
+        result = ModelResponse(
             content=str(content or ""),
             reasoning=(
                 str(message["reasoning"])
@@ -88,6 +93,13 @@ class HKGAIModelProvider(ModelProvider):
             model=str(payload.get("model") or self.settings.model_name),
             usage=usage if isinstance(usage, dict) else {},
         )
+        record_model_usage(
+            model=result.model or self.settings.model_name,
+            usage=result.usage,
+            started_at=started_at,
+            duration_ms=round((perf_counter() - started_clock) * 1000),
+        )
+        return result
 
     def complete_json(
         self,

@@ -581,3 +581,38 @@ def test_scope_update_rejects_empty_required_fields(tmp_path) -> None:
         assert response.status_code == 422
     finally:
         app.dependency_overrides.clear()
+
+
+def test_ops_telemetry_requires_key_and_returns_source_backed_runs(
+    tmp_path, monkeypatch
+) -> None:
+    services = SimpleNamespace(research_planning=FakeResearchPlanningService())
+    research = ResearchApplication(
+        projects=SQLiteProjectRepository(tmp_path / "ops.db"),
+        services=services,
+    )
+    project = research.create_project(ProjectState(
+        project_name="运营监测测试",
+        industry="IVD",
+        region="中国",
+        research_objective="验证研究步骤监测",
+        time_horizon="2026-2030",
+    ))
+    research.generate_brief(project.project_id)
+    monkeypatch.setenv("TRIDENT_OPS_KEY", "ops-test-secret")
+    app.dependency_overrides[get_research_application] = lambda: research
+    try:
+        with TestClient(app) as client:
+            assert client.get("/v1/ops/telemetry").status_code == 401
+            response = client.get(
+                "/v1/ops/telemetry",
+                headers={"X-Trident-Ops-Key": "ops-test-secret"},
+            )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["source"].startswith("ProjectState.telemetry_runs")
+        assert body["summary"]["step_run_count"] == 1
+        assert body["runs"][0]["step"] == "research_brief"
+        assert body["runs"][0]["project_name"] == "运营监测测试"
+    finally:
+        app.dependency_overrides.clear()

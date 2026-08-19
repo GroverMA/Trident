@@ -44,8 +44,9 @@
 - [ ] 开发 PE/VC 场景包和中小企业增长决策场景包。
 - [ ] 完成项目文件夹、版本对比、审阅会话和通知功能。
 - [ ] 增加模型调用、搜索、抓取和文档处理的成本治理。
-- [ ] 实施不可变 Telemetry Schema，采集每节点 Token、耗时、调用次数、失败和重试。
-- [ ] 部署独立 `trident-ops` 产品监测 Dashboard，并接入组织级 RBAC/RLS。
+- [x] Demo 阶段采集真实模型 Usage、每节点耗时、调用次数和失败类型，并提供受保护的 `/ops` Dashboard。
+- [ ] 将 Demo 项目内 Telemetry 迁移到 append-only PostgreSQL Schema，补齐搜索、抓取和重试事件。
+- [ ] 独立部署 `trident-ops` 并接入组织级身份、RBAC/RLS 和审计日志。
 
 ## P2：企业级能力
 

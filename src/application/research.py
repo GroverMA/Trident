@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Callable, Mapping
+from typing import Callable, Mapping, TypeVar
 
 from src.core.container import ServiceContainer
 from src.models.evidence import EvidenceReviewStatus
 from src.models.analysis import AnalysisReviewStatus
 from src.models.future import ForecastReviewStatus
 from src.models.research import MarketDefinition, ResearchBriefArtifact
+from src.observability.telemetry import StepRunTelemetry, finish_span, start_span
 from src.persistence.projects import ProjectRepository
-from src.providers.base import ProviderError
 from src.state.project import ProjectState, WorkflowStatus, default_workflow
 from src.services.evidence_collection import (
-    EvidenceCollectionError,
     evidence_coverage_advisories,
     evidence_gate_reasons,
     review_evidence,
@@ -33,6 +32,9 @@ class ProjectNotFoundError(LookupError):
 
 class ResearchWorkflowError(ValueError):
     """Raised when a research command is used before its prerequisite."""
+
+
+T = TypeVar("T")
 
 
 class ResearchApplication:
@@ -77,6 +79,36 @@ class ResearchApplication:
 
     def check_persistence(self) -> None:
         self.projects.ping()
+
+    @staticmethod
+    def _append_telemetry(
+        project: ProjectState, run: StepRunTelemetry
+    ) -> ProjectState:
+        # Project payload persistence keeps telemetry deployment-neutral for the
+        # demo. Bound history prevents one long-running project growing without
+        # limit; the commercial database phase will move these rows to an
+        # append-only telemetry table.
+        return project.model_copy(
+            update={"telemetry_runs": [*project.telemetry_runs, run][-500:]}
+        )
+
+    def _run_ai_step(
+        self,
+        project: ProjectState,
+        step: str,
+        operation: Callable[[], T],
+        *,
+        task_id: str | None = None,
+    ) -> tuple[T, StepRunTelemetry]:
+        span, token = start_span(project.project_id, step, task_id)
+        try:
+            result = operation()
+        except Exception as exc:
+            run = finish_span(span, token, exc)
+            latest = self.get_project(project.project_id)
+            self.projects.save(self._append_telemetry(latest, run))
+            raise
+        return result, finish_span(span, token)
 
     def update_scope(
         self,
@@ -158,12 +190,16 @@ class ResearchApplication:
 
     def generate_brief(self, project_id: str) -> ProjectState:
         project = self.get_project(project_id)
-        brief = self.services.research_planning.generate_brief(project)
+        brief, telemetry = self._run_ai_step(
+            project,
+            "research_brief",
+            lambda: self.services.research_planning.generate_brief(project),
+        )
         statuses = dict(project.workflow_status)
         statuses["research_brief"] = WorkflowStatus.NEEDS_REVIEW
         statuses["research_planning"] = WorkflowStatus.NOT_STARTED
         return self.projects.save(
-            project.model_copy(
+            self._append_telemetry(project, telemetry).model_copy(
                 update={
                     "research_brief_artifact": brief,
                     "research_plan_artifact": None,
@@ -226,11 +262,15 @@ class ResearchApplication:
         brief = project.research_brief_artifact
         if brief is None or not brief.human_confirmed:
             raise ResearchWorkflowError("Research Brief必须先经过人工确认")
-        plan = self.services.research_planning.generate_plan(project, brief)
+        plan, telemetry = self._run_ai_step(
+            project,
+            "research_planning",
+            lambda: self.services.research_planning.generate_plan(project, brief),
+        )
         statuses = dict(project.workflow_status)
         statuses["research_planning"] = WorkflowStatus.NEEDS_REVIEW
         return self.projects.save(
-            project.model_copy(
+            self._append_telemetry(project, telemetry).model_copy(
                 update={
                     "research_plan_artifact": plan,
                     "workflow_status": statuses,
@@ -301,6 +341,7 @@ class ResearchApplication:
         )
         artifact = active.evidence_collection_artifact
         for task_id in selected:
+            span, token = start_span(active.project_id, "evidence_collection", task_id)
             try:
                 run = await self.services.evidence_collection.collect_task(
                     active,
@@ -308,23 +349,25 @@ class ResearchApplication:
                     task_id,
                     query_override=query_override,
                 )
-            except (ProviderError, EvidenceCollectionError) as exc:
+            except Exception as exc:
+                telemetry = finish_span(span, token, exc)
                 statuses = dict(active.workflow_status)
                 statuses["evidence_collection"] = (
                     WorkflowStatus.NEEDS_REVIEW
                     if artifact is not None and artifact.task_runs
                     else WorkflowStatus.READY
                 )
-                self.projects.save(active.model_copy(update={
+                self.projects.save(self._append_telemetry(active, telemetry).model_copy(update={
                     "workflow_status": statuses,
                     "current_step": "evidence_collection",
                     "last_pipeline_error": f"{task_id}：{exc}",
                     "updated_at": datetime.now(UTC),
                 }))
                 raise
+            telemetry = finish_span(span, token)
             artifact = upsert_task_run(artifact, plan.artifact_id, run)
             active = self.projects.save(
-                active.model_copy(
+                self._append_telemetry(active, telemetry).model_copy(
                     update={
                         "evidence_collection_artifact": artifact,
                         "updated_at": datetime.now(UTC),
@@ -426,12 +469,16 @@ class ResearchApplication:
         evidence = project.evidence_collection_artifact
         if evidence is None or not evidence.human_confirmed:
             raise ResearchWorkflowError("Gate 1证据必须先经过人工确认")
-        analysis = self.services.industry_analysis.generate(project, evidence)
+        analysis, telemetry = self._run_ai_step(
+            project,
+            "industry_analysis",
+            lambda: self.services.industry_analysis.generate(project, evidence),
+        )
         statuses = dict(project.workflow_status)
         statuses["industry_analysis"] = WorkflowStatus.NEEDS_REVIEW
         statuses["future_intelligence"] = WorkflowStatus.NOT_STARTED
         return self.projects.save(
-            project.model_copy(
+            self._append_telemetry(project, telemetry).model_copy(
                 update={
                     "industry_analysis_artifact": analysis,
                     "future_intelligence_artifact": None,
@@ -500,12 +547,16 @@ class ResearchApplication:
         analysis = project.industry_analysis_artifact
         if evidence is None or analysis is None or not analysis.human_confirmed:
             raise ResearchWorkflowError("请先完成人工确认的行业分析")
-        future = self.services.future_intelligence.generate(project, evidence, analysis)
+        future, telemetry = self._run_ai_step(
+            project,
+            "future_intelligence",
+            lambda: self.services.future_intelligence.generate(project, evidence, analysis),
+        )
         statuses = dict(project.workflow_status)
         statuses["future_intelligence"] = WorkflowStatus.NEEDS_REVIEW
         statuses["human_review"] = WorkflowStatus.NOT_STARTED
         statuses["decision_report"] = WorkflowStatus.NOT_STARTED
-        return self.projects.save(project.model_copy(update={
+        return self.projects.save(self._append_telemetry(project, telemetry).model_copy(update={
             "future_intelligence_artifact": future,
             "general_report_artifact": None,
             "workflow_status": statuses,
@@ -590,11 +641,15 @@ class ResearchApplication:
             raise ResearchWorkflowError("行业分析尚未通过人工审核")
         if future is None or not future.human_confirmed:
             raise ResearchWorkflowError("Future Intelligence尚未通过人工审核")
-        report = self.services.report_generation.generate(project)
+        report, telemetry = self._run_ai_step(
+            project,
+            "decision_report",
+            lambda: self.services.report_generation.generate(project),
+        )
         statuses = dict(project.workflow_status)
         statuses["human_review"] = WorkflowStatus.COMPLETED
         statuses["decision_report"] = WorkflowStatus.COMPLETED
-        return self.projects.save(project.model_copy(update={
+        return self.projects.save(self._append_telemetry(project, telemetry).model_copy(update={
             "general_report_artifact": report,
             "workflow_status": statuses,
             "current_step": "decision_report",
