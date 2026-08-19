@@ -125,6 +125,16 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
 
   function acceptProject(result: ProjectSummary, success: string) {
     setProject(result);
+    if (result.evidence_collection_artifact) {
+      setEvidenceSelections(Object.fromEntries(result.evidence_collection_artifact.task_runs.flatMap((run) =>
+        run.evidence.map((item) => [
+          item.evidence_id,
+          item.review_status === "accepted" || item.review_status === "rejected"
+            ? item.review_status
+            : (item.qa_score >= 80 && item.prompt_relevance >= 0.7 ? "accepted" : "rejected"),
+        ]),
+      )) as Record<string, "accepted" | "rejected">);
+    }
     if (result.industry_analysis_artifact) {
       setAnalysisSelections(Object.fromEntries(result.industry_analysis_artifact.modules.flatMap((module) =>
         module.findings.flatMap((item) => item.review_status === "accepted" || item.review_status === "rejected"
@@ -898,33 +908,30 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
           </div>
           <form id="gate-one-form" onSubmit={(event) => { event.preventDefault(); if (gateOneChecked) void reviewEvidence(event.currentTarget, true); }}>
             {!evidence.human_confirmed && <div className="evidenceBulkActions"><button type="button" className="secondaryButton" onClick={() => selectEvidence("recommended")}>采用全部系统推荐</button><button type="button" className="secondaryButton" onClick={() => selectEvidence("all")}>一键全选</button><button type="button" className="secondaryButton" onClick={() => selectEvidence("none")}>全部取消</button></div>}
-            <div className="taskList">
-              {evidence.task_runs.map((run) => (
-                <details className="taskCard" key={run.run_id} open>
-                  <summary><span>{run.task_id}</span><strong>{run.task_title}</strong><small>{run.evidence.length} 条候选证据</small></summary>
-                  <div className="taskBody">
-                    {run.evidence.map((item) => {
-                      const source = run.sources.find((candidate) => candidate.source_id === item.source_id);
-                      return (
-                        <div className="evidenceStandard" key={item.evidence_id}>
-                          <strong>{item.kind} · QA {item.qa_score}</strong>
-                          <span>{item.statement}</span>
-                          <small>{item.supporting_excerpt}</small>
-                          {source && <a href={source.url} target="_blank" rel="noreferrer">{source.title} · {source.domain}</a>}
-                          {!evidence.human_confirmed && (
-                            <div className="fieldGrid">
-                              <label className="field"><span>审核决定</span><select name={`evidence_status_${item.evidence_id}`} value={evidenceSelections[item.evidence_id] || ""} onChange={(event) => setEvidenceSelections((current) => ({ ...current, [item.evidence_id]: event.target.value as "accepted" | "rejected" }))}><option value="">待决定</option><option value="accepted">接受</option><option value="rejected">拒绝</option></select></label>
-                              <label className="field"><span>审核备注</span><input name={`evidence_note_${item.evidence_id}`} defaultValue={item.reviewer_note || ""} /></label>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {run.information_gaps.length > 0 && <div><h4>仍有信息缺口</h4><ul>{run.information_gaps.map((item) => <li key={item}>{item}</li>)}</ul></div>}
-                  </div>
-                </details>
-              ))}
+            <div className="evidenceTableWrap gateEvidenceTableWrap">
+              <table className="evidenceTable gateEvidenceTable">
+                <thead><tr><th>采用</th><th>任务</th><th>类型</th><th>证据陈述与原文</th><th>质量</th><th>问题相关度</th><th>来源</th><th>审核备注</th></tr></thead>
+                <tbody>{evidence.task_runs.flatMap((run) => run.evidence.map((item) => {
+                  const source = run.sources.find((candidate) => candidate.source_id === item.source_id);
+                  const decision = evidenceSelections[item.evidence_id] || "";
+                  return <tr key={item.evidence_id} className={decision === "rejected" ? "evidenceRejectedRow" : ""}>
+                    <td className="evidenceDecisionCell">
+                      {evidence.human_confirmed
+                        ? <span className={item.review_status === "accepted" ? "tableAccepted" : "tableRejected"}>{item.review_status === "accepted" ? "采用" : "拒绝"}</span>
+                        : <select aria-label={`${item.evidence_id} 审核决定`} name={`evidence_status_${item.evidence_id}`} value={decision} onChange={(event) => setEvidenceSelections((current) => ({ ...current, [item.evidence_id]: event.target.value as "accepted" | "rejected" }))}><option value="">待定</option><option value="accepted">采用</option><option value="rejected">拒绝</option></select>}
+                    </td>
+                    <td><strong>{run.task_id}</strong><small>{run.task_title}</small></td>
+                    <td>{item.kind}</td>
+                    <td className="evidenceStatementCell"><strong>{item.statement}</strong><details><summary>查看原文摘录</summary><p>{item.supporting_excerpt}</p></details></td>
+                    <td><strong>{item.qa_score}</strong></td>
+                    <td>{Math.round(item.prompt_relevance * 100)}%</td>
+                    <td>{source ? <a href={source.url} target="_blank" rel="noreferrer"><strong>{source.title}</strong><small>{source.domain} · {source.source_tier}</small></a> : "来源待核对"}</td>
+                    <td>{evidence.human_confirmed ? (item.reviewer_note || "—") : <input aria-label={`${item.evidence_id} 审核备注`} name={`evidence_note_${item.evidence_id}`} defaultValue={item.reviewer_note || ""} placeholder="可选" />}</td>
+                  </tr>;
+                }))}</tbody>
+              </table>
             </div>
+            {evidence.task_runs.some((run) => run.information_gaps.length > 0) && <details className="evidenceGapDetails"><summary>查看各任务仍有的信息缺口</summary>{evidence.task_runs.filter((run) => run.information_gaps.length > 0).map((run) => <div key={run.run_id}><strong>{run.task_id} · {run.task_title}</strong><ul>{run.information_gaps.map((item) => <li key={item}>{item}</li>)}</ul></div>)}</details>}
             {message && <div className="formSuccess" role="status">{message}</div>}
             {error && <div className="formError" role="alert">{error}</div>}
             {!evidence.human_confirmed && (

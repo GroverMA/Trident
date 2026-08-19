@@ -407,8 +407,19 @@ class ResearchApplication:
         if plan is None or artifact is None:
             raise ResearchWorkflowError("请先完成证据检索")
 
+        # A long Gate 1 page can remain open while another tab or a resumed
+        # collection run replaces one task's candidates. Decisions referring
+        # to the superseded candidate must never block review of the current
+        # evidence matrix. They are obsolete UI state, not current evidence.
+        current_evidence_ids = {
+            item.evidence_id
+            for run in artifact.task_runs
+            for item in run.evidence
+        }
         reviewed = artifact
         for evidence_id, decision, note in decisions:
+            if evidence_id not in current_evidence_ids:
+                continue
             reviewed = review_evidence(reviewed, evidence_id, decision, note)
 
         statuses = dict(project.workflow_status)

@@ -389,6 +389,30 @@ a { color: inherit; text-decoration: none; }
 .evidenceTable { width: 100%; min-width: 840px; border-collapse: collapse; font-size: .76rem; }
 .evidenceTable th, .evidenceTable td { padding: 10px 12px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; line-height: 1.5; }
 .evidenceTable th { color: #58657a; background: #f8fafb; font-weight: 650; }
+.gateEvidenceTableWrap { max-height: 680px; }
+.gateEvidenceTable { min-width: 1320px; }
+.gateEvidenceTable thead { position: sticky; z-index: 2; top: 0; }
+.gateEvidenceTable th { white-space: nowrap; }
+.gateEvidenceTable td { background: #fff; }
+.gateEvidenceTable td:nth-child(1) { width: 92px; }
+.gateEvidenceTable td:nth-child(2) { width: 140px; }
+.gateEvidenceTable td:nth-child(3) { width: 90px; }
+.gateEvidenceTable td:nth-child(4) { min-width: 390px; }
+.gateEvidenceTable td:nth-child(5), .gateEvidenceTable td:nth-child(6) { width: 86px; text-align: center; }
+.gateEvidenceTable td:nth-child(7) { min-width: 230px; }
+.gateEvidenceTable td:nth-child(8) { min-width: 170px; }
+.gateEvidenceTable td > small, .gateEvidenceTable a small { display: block; margin-top: 4px; color: #8792a2; }
+.gateEvidenceTable select, .gateEvidenceTable input { width: 100%; min-height: 34px; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: #fff; }
+.gateEvidenceTable a { color: #0969c7; }
+.evidenceStatementCell > strong { display: block; font-weight: 600; }
+.evidenceStatementCell details { margin-top: 6px; color: var(--muted); }
+.evidenceStatementCell details summary { cursor: pointer; color: var(--accent); font-size: .72rem; }
+.evidenceStatementCell details p { margin: 7px 0 0; }
+.evidenceRejectedRow td { background: #fbfbfb; color: #8a94a3; }
+.tableAccepted { color: #23704b; font-weight: 700; }
+.tableRejected { color: #9e4a4a; font-weight: 700; }
+.evidenceGapDetails { margin: 14px 0 22px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: #fafbfc; }
+.evidenceGapDetails > summary { cursor: pointer; color: var(--accent); font-weight: 650; }
 .gapResolution { display: flex; gap: 20px; margin: 18px 0; padding: 0; border: 0; color: #536178; font-size: .82rem; }
 .gapResolution legend { margin-bottom: 9px; }
 .gapResolution label { display: flex; align-items: center; gap: 7px; }

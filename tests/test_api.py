@@ -404,6 +404,11 @@ def test_build_first_evidence_gate_is_service_backed_and_persisted(tmp_path) -> 
                 json={
                     "decisions": [
                         {
+                            "evidence_id": "EVD-obsolete-from-an-earlier-task-run",
+                            "status": "accepted",
+                            "note": "旧页面中的候选证据",
+                        },
+                        {
                             "evidence_id": evidence["evidence_id"],
                             "status": "accepted",
                             "note": "已核对来源",
