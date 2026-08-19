@@ -242,6 +242,7 @@ export interface ProjectSummary {
   research_mode?: string;
   workspace_mode?: string;
   current_step: string;
+  last_pipeline_error?: string | null;
   workflow_status: Record<string, string>;
   market_scope_confirmed_at?: string | null;
   research_brief_artifact?: ResearchBriefArtifact | null;

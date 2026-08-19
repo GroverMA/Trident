@@ -8,7 +8,7 @@ import os
 import secrets
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
@@ -59,6 +59,7 @@ class ProjectCreate(BaseModel):
 
 class PipelineRequest(BaseModel):
     enterprise: bool | None = None
+    background: bool = False
 
 
 class ProjectScopeUpdate(BaseModel):
@@ -575,8 +576,25 @@ def rewind_project_workflow(
 
 @app.post("/v1/projects/{project_id}/report-first", response_model=ProjectState)
 async def run_report_first(
-    project_id: str, payload: PipelineRequest, research: ResearchApp
+    project_id: str,
+    payload: PipelineRequest,
+    background_tasks: BackgroundTasks,
+    research: ResearchApp,
 ) -> ProjectState:
+    if payload.background:
+        try:
+            queued = research.queue_report_first(project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="project not found") from exc
+        except ResearchWorkflowError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        background_tasks.add_task(
+            _execute_report_first_background,
+            research,
+            project_id,
+            payload.enterprise,
+        )
+        return queued
     try:
         return await research.run_report_first(project_id, enterprise=payload.enterprise)
     except ProjectNotFoundError as exc:
@@ -587,3 +605,25 @@ async def run_report_first(
             status_code=422,
             detail={"stage": exc.stage, "message": str(exc)},
         ) from exc
+
+
+async def _execute_report_first_background(
+    research: ResearchApplication,
+    project_id: str,
+    enterprise: bool | None,
+) -> None:
+    try:
+        await research.run_report_first(project_id, enterprise=enterprise)
+    except ReviewerPipelineError as exc:
+        research.projects.save(exc.project.model_copy(update={
+            "last_pipeline_error": f"{exc.stage}：{exc}",
+            "updated_at": datetime.now(UTC),
+        }))
+    except Exception as exc:
+        # Store only the exception type; provider wrappers already expose safe
+        # diagnostics and credentials must never enter project state.
+        project = research.get_project(project_id)
+        research.projects.save(project.model_copy(update={
+            "last_pipeline_error": f"report_first：{type(exc).__name__}",
+            "updated_at": datetime.now(UTC),
+        }))

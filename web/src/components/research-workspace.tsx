@@ -511,9 +511,24 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
       const result = await requestProject(
         `/api/projects/${project.project_id}/report-first`,
         "POST",
-        { enterprise: project.company_strategy_enabled },
+        { enterprise: project.company_strategy_enabled, background: true },
       );
-      acceptProject(result, "完整报告初稿、引用矩阵、分析逻辑和趋势逻辑已经生成，可以开始自上而下审阅。");
+      setProject(result);
+      setMessage("报告初稿已进入后台执行。关闭或刷新页面不会取消研究，页面将自动检查进度。");
+      for (let attempt = 0; attempt < 180; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 5000));
+        const latest = await fetchProject();
+        setProject(latest);
+        if (latest.general_report_artifact) {
+          acceptProject(latest, "完整报告初稿、引用矩阵、分析逻辑和趋势逻辑已经生成，可以开始自上而下审阅。");
+          return;
+        }
+        if (latest.last_pipeline_error) {
+          throw new Error(latest.last_pipeline_error);
+        }
+        setMessage(`后台研究正在进行 · 已检查 ${attempt + 1} 次。你可以保留本页，也可以稍后从项目列表返回。`);
+      }
+      throw new Error("报告仍在后台运行，请稍后从项目列表返回查看，不需要重复启动。");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "报告初稿生成中断；已完成的研究节点已经保存，可以安全重试。");
       try { setProject(await fetchProject()); } catch { /* retain current state */ }

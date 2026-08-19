@@ -664,3 +664,24 @@ class ResearchApplication:
             project, enterprise=enterprise
         )
         return self.projects.save(result.project)
+
+    def queue_report_first(self, project_id: str) -> ProjectState:
+        """Persist a visible queued state before background report execution."""
+
+        project = self.get_project(project_id)
+        brief = project.research_brief_artifact
+        plan = project.research_plan_artifact
+        if brief is None or not brief.human_confirmed:
+            raise ResearchWorkflowError("Research Brief必须先经过人工确认")
+        if plan is None or not plan.human_confirmed:
+            raise ResearchWorkflowError("Research Plan必须先经过人工确认")
+        if project.workflow_status.get("decision_report") == WorkflowStatus.IN_PROGRESS:
+            raise ResearchWorkflowError("报告初稿已经在后台生成，请等待当前任务完成")
+        statuses = dict(project.workflow_status)
+        statuses["decision_report"] = WorkflowStatus.IN_PROGRESS
+        return self.projects.save(project.model_copy(update={
+            "workflow_status": statuses,
+            "current_step": "decision_report",
+            "last_pipeline_error": None,
+            "updated_at": datetime.now(UTC),
+        }))

@@ -48,6 +48,7 @@ Telemetry / Audit / Error Monitoring
 - 把两条研究路径全部跑通，并将每个节点改为可重复、可恢复命令。
 - PostgreSQL 替换临时 SQLite；报告和文件进入对象存储。
 - 当前逐任务网页研究是后台 Job 化前的过渡，不再新增超长同步接口。
+- 审阅式完整初稿已采用 FastAPI 后台任务 + 项目状态轮询，避免 Vercel 单请求超时；该实现用于 Demo，进程重启恢复能力仍由后续 Durable Workflow 补齐。
 
 ### 2–5 个月：产品化与限定服务
 
