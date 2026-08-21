@@ -54,6 +54,12 @@
   Secret，并由受保护的 GitHub Actions 执行
   `tcb cloudrun deploy -e "$TCB_ENV_ID" -s trident-agent-cn --port 3000 --force`。
   Secret 只允许进入平台密钥库，不写入仓库、日志或 Knowledge Base。
+- **控制台识别规则**：若页面标题为“更新容器镜像部署”且要求填写“镜像地址”，当前服务
+  就是镜像发布模式；这个页面不会显示 GitHub 分支，也不能通过把镜像名改成 `main` 来完成
+  源码绑定。应返回服务创建/部署入口，选择“代码仓库/Git 仓库”方式并绑定
+  `GroverMA/Trident` 的 `main`；若当前个人版控制台不提供该方式，则保留镜像模式，并由
+  GitHub Actions 使用提交 SHA 构建镜像、推送镜像仓库、创建 CloudBase 新版本和切流。
+  两种方式都必须在部署记录中保存 Git SHA，禁止长期使用含义不清的浮动镜像标签。
 
 ### Standard SaaS
 

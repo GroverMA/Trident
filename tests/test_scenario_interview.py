@@ -1,8 +1,70 @@
+import json
+
 from fastapi.testclient import TestClient
 
 from src.api.app import app, get_research_application
 from src.application.research import ResearchApplication
 from src.persistence.sqlite_projects import SQLiteProjectRepository
+from src.core.registry import ExtensionRegistry
+from src.scenarios import builtin_scenario_packs
+from src.services.scenario_interview import ScenarioInterviewService
+from src.state.project import ProjectState
+
+
+class AdaptiveInterviewModel:
+    def complete_json(self, messages, *, enable_thinking=False):
+        answer = json.loads(messages[-1].content)["answer"]
+        if "大概" in answer:
+            return ({
+                "summary": "用户只给出了方向性判断。",
+                "extracted_facts": [],
+                "ambiguities": ["缺少变化幅度"],
+                "missing_information": ["收入或利润的具体范围"],
+                "answer_quality": "needs_validation",
+                "topic_complete": False,
+                "follow_up_question": "大概变化了多少？如果没有精确数，给一个区间也可以。",
+                "confidence": 0.42,
+            }, object())
+        return ({
+            "summary": "回答包含可继续研究的具体信息。",
+            "extracted_facts": ["收入增长约10%"],
+            "ambiguities": [],
+            "missing_information": [],
+            "answer_quality": "sufficient",
+            "topic_complete": True,
+            "follow_up_question": None,
+            "confidence": 0.8,
+        }, object())
+
+
+def test_interview_analyses_answer_before_moving_to_next_topic() -> None:
+    service = ScenarioInterviewService(
+        ExtensionRegistry(builtin_scenario_packs()),
+        model_factory=AdaptiveInterviewModel,
+    )
+    project = ProjectState(
+        project_name="动态访谈",
+        industry="工业机器人",
+        region="中国",
+        research_objective="寻找增长机会",
+        time_horizon="未来3年",
+        target_company="示例企业",
+        scenario_pack="growth_strategy",
+        scenario_pack_version="1.0.0",
+    )
+    started = service.start(project)
+    followed_up = service.answer(started, "收入大概增长了一些")
+    session = followed_up.interview_session_artifact
+    assert session is not None
+    assert session.turns[-1].topic_id == "performance_change"
+    assert session.turns[-1].question.startswith("大概变化了多少")
+    assert session.turns[0].analysis is not None
+    assert session.turns[0].analysis.ambiguities == ["缺少变化幅度"]
+
+    advanced = service.answer(followed_up, "收入同比增长约10%，来自月度财务报表。")
+    advanced_session = advanced.interview_session_artifact
+    assert advanced_session is not None
+    assert advanced_session.turns[-1].topic_id == "concentration_risk"
 
 
 def test_scenario_interview_persists_and_generates_sourced_profile(tmp_path) -> None:
