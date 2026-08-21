@@ -376,6 +376,7 @@ def capabilities() -> dict:
                 "report_template": pack.report_template(),
                 "ui_schema": pack.ui_schema(),
                 "feedback_policy": pack.feedback_policy(),
+                "decision_output_policy": pack.decision_output_policy(),
                 "research_route_policy": pack.research_route_policy(),
                 "data_scope_policy": pack.data_scope_policy(),
             }

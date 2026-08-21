@@ -50,6 +50,7 @@ class BuiltinScenarioPack:
     report: Mapping[str, Any] = field(default_factory=dict)
     ui: Mapping[str, Any] = field(default_factory=dict)
     feedback: Mapping[str, Any] = field(default_factory=dict)
+    decision_outputs: Mapping[str, Any] = field(default_factory=dict)
     routing: Mapping[str, Any] = field(default_factory=dict)
     data_scope: Mapping[str, Any] = field(default_factory=dict)
     deprecated: bool = False
@@ -96,6 +97,9 @@ class BuiltinScenarioPack:
     def feedback_policy(self) -> Mapping[str, Any]:
         return self.feedback
 
+    def decision_output_policy(self) -> Mapping[str, Any]:
+        return self.decision_outputs
+
     def research_route_policy(self) -> Mapping[str, Any]:
         return self.routing
 
@@ -121,6 +125,7 @@ def _pack(
     report_type: str,
     diagnostic_topics: list[str] | None = None,
     feedback_policy: Mapping[str, Any] | None = None,
+    decision_output_policy: Mapping[str, Any] | None = None,
     route_policy: Mapping[str, Any] | None = None,
     data_scope_policy: Mapping[str, Any] | None = None,
     deprecated: bool = False,
@@ -170,6 +175,11 @@ def _pack(
             "review_layout": "compact_table",
         },
         feedback=feedback_policy or {"enabled": False},
+        decision_outputs=decision_output_policy or {
+            "scorecard": {"enabled": False},
+            "action_plan": {"enabled": False},
+            "strategy_skill_slot": {"enabled": False},
+        },
         routing=route_policy or {
             "default_path": "research_build_first",
             "review_material_threshold": 1,
@@ -252,6 +262,48 @@ def builtin_scenario_packs() -> tuple[BuiltinScenarioPack, ...]:
             "deviation_classes": ["decision_assumption", "action_design", "execution_quality", "external_change"],
             "approval_role": "enterprise_management",
             "dashboard_dimensions": ["decision_quality", "action_quality", "execution_quality", "customer_market_quality", "learning_quality"],
+        },
+        decision_output_policy={
+            "scorecard": {
+                "enabled": True,
+                "purpose": "在候选增长机会之间判断企业适配度、可执行性与风险，而不是只给企业做通用能力体检。",
+                "dimensions": [
+                    "market_opportunity", "product_scenario_fit", "buyer_adoption", "unit_economics",
+                    "route_to_market", "organization_execution", "resource_gap", "risk_and_reversibility",
+                ],
+                "required_views": ["current_capability", "market_average", "strategic_threshold"],
+                "opportunity_unit": "growth_opportunity",
+            },
+            "action_plan": {
+                "enabled": True,
+                "portfolio_rule": "5条机会长名单收敛为不超过3条战略优先级，并只为最终1至2条生成行动计划。",
+                "growth_tracks": [
+                    {
+                        "track_id": "core_range_expansion",
+                        "label": "第一增长曲线",
+                        "question": "核心产品优先进入哪些场景，能够改善近期订单、毛利和现金流？",
+                        "validation": "产品×场景交叉密度、买家采购门槛与30天客户验证",
+                    },
+                    {
+                        "track_id": "downstream_migration",
+                        "label": "第二增长曲线",
+                        "question": "现有核心能力还能进入哪些高增长下游？",
+                        "validation": "能力可迁移性、应用适配、资源补齐和进入路线",
+                    },
+                ],
+                "required_fields": [
+                    "owner", "timing", "resources", "dependencies", "leading_kpi", "outcome_kpi",
+                    "customer_validation", "risks", "stop_or_pivot_condition", "feedback_cadence",
+                ],
+                "feedback_loop": "客户接触→样品/测试→报价/试单→渠道/成交→更新机会评分与Action Plan",
+            },
+            "strategy_skill_slot": {
+                "enabled": True,
+                "slot_id": "growth_strategy_method",
+                "interface_version": "1.0.0",
+                "allowed_overrides": ["opportunity_scoring", "strategic_prioritization", "capability_matching", "action_sequencing"],
+                "protected_invariants": ["evidence_traceability", "human_approval", "version_history", "feedback_writeback"],
+            },
         },
         route_policy={
             "default_path": "research_build_first",
@@ -364,6 +416,34 @@ def builtin_scenario_packs() -> tuple[BuiltinScenarioPack, ...]:
             "approval_role": "fund_authorized_reviewer",
             "dashboard_dimensions": ["decision_quality", "support_action_quality", "execution_quality", "customer_market_quality", "learning_quality"],
         },
+        decision_output_policy={
+            "scorecard": {
+                "enabled": True,
+                "purpose": "把市场时点、团队、技术、商业验证与融资里程碑转化为可复核的投资判断。",
+                "dimensions": [
+                    "market_timing", "founder_team", "technology_moat", "product_market_evidence",
+                    "business_model", "milestone_feasibility", "financing_runway", "downside_risk",
+                ],
+                "required_views": ["current_evidence", "fund_threshold", "next_milestone_threshold"],
+                "opportunity_unit": "investment_hypothesis",
+            },
+            "action_plan": {
+                "enabled": True,
+                "portfolio_rule": "先形成推进/观察/暂不推进判断；进入DD后把未证实投资假设转成里程碑与验证任务。",
+                "required_fields": [
+                    "hypothesis_owner", "timing", "required_evidence", "milestone", "leading_kpi",
+                    "outcome_kpi", "runway_impact", "follow_on_trigger", "stop_or_exit_condition", "feedback_cadence",
+                ],
+                "feedback_loop": "创始人/客户反馈→里程碑证据→投资假设更新→跟投、支持、观察或退出判断",
+            },
+            "strategy_skill_slot": {
+                "enabled": True,
+                "slot_id": "vc_investment_method",
+                "interface_version": "1.0.0",
+                "allowed_overrides": ["investment_hypothesis", "milestone_design", "fund_fit_scoring", "follow_on_logic"],
+                "protected_invariants": ["evidence_traceability", "human_approval", "version_history", "portfolio_feedback_writeback"],
+            },
+        },
         route_policy={
             "default_path": "research_build_first",
             "insufficient_material_path": "research_build_first",
@@ -397,6 +477,7 @@ def builtin_scenario_packs() -> tuple[BuiltinScenarioPack, ...]:
         route="/enterprise",
         report_type="growth_decision_report",
         feedback_policy=growth.feedback_policy(),
+        decision_output_policy=growth.decision_output_policy(),
         deprecated=True,
     )
     legacy_pe_vc = _pack(

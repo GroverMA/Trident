@@ -7,6 +7,7 @@ from src.knowledge.sop import load_active_sop
 from src.scenarios import builtin_scenario_packs
 from src.scenarios import ScenarioInputError, ScenarioWorkflowRunner
 from src.services.research_planning import ResearchPlanningService, SOPComplianceError
+from src.services.company_assessment import CompanyAssessmentService
 from src.state.project import ProjectState
 from src.api.app import capabilities
 
@@ -59,6 +60,28 @@ def test_pe_and_vc_are_distinct_executable_scenario_contracts() -> None:
     assert pe.feedback_policy()["subject"] == "pe_value_creation_plan"
     assert vc.feedback_policy()["subject"] == "vc_portfolio_milestones"
     assert pe.feedback_policy()["approval_role"] != vc.feedback_policy()["approval_role"]
+    assert pe.decision_output_policy()["scorecard"]["enabled"] is False
+    assert vc.decision_output_policy()["scorecard"]["opportunity_unit"] == "investment_hypothesis"
+
+
+def test_growth_scorecard_and_action_plan_are_scenario_bound_and_skill_extensible() -> None:
+    growth = ExtensionRegistry(builtin_scenario_packs()).get("growth_strategy", "1.0.0")
+    policy = growth.decision_output_policy()
+
+    assert "product_scenario_fit" in policy["scorecard"]["dimensions"]
+    assert len(policy["action_plan"]["growth_tracks"]) == 2
+    assert "1至2条" in policy["action_plan"]["portfolio_rule"]
+    assert policy["strategy_skill_slot"]["slot_id"] == "growth_strategy_method"
+    assert "evidence_traceability" in policy["strategy_skill_slot"]["protected_invariants"]
+
+    service = CompanyAssessmentService(_UnusedModel(), load_active_sop(), ExtensionRegistry(builtin_scenario_packs()))
+    specs = service._dimension_specs(_project(
+        scenario_pack="growth_strategy",
+        scenario_pack_version="1.0.0",
+        company_strategy_objective="寻找第二增长曲线",
+    ))
+    assert set(specs) == set(policy["scorecard"]["dimensions"])
+    assert round(sum(weight for _, weight in specs.values()), 6) == 1
 
 
 def test_commercial_scenarios_embed_feedback_and_knowledge_writeback() -> None:

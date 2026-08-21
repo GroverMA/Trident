@@ -383,6 +383,7 @@ export interface ScenarioPackContract {
   report_template: Record<string, unknown>;
   ui_schema: Record<string, unknown>;
   feedback_policy: Record<string, unknown>;
+  decision_output_policy: Record<string, unknown>;
   research_route_policy: Record<string, unknown>;
   data_scope_policy: Record<string, unknown>;
 }
