@@ -10,6 +10,7 @@ from typing import Any, Protocol
 from pydantic import ValidationError
 
 from src.knowledge.sop import ResearchSOPPack
+from src.core.registry import ExtensionRegistry
 from src.models.analysis import AnalysisReviewStatus
 from src.models.enterprise import EnterpriseReviewStatus
 from src.models.evidence import EvidenceReviewStatus
@@ -64,6 +65,24 @@ DEFAULT_CORE_METRICS: dict[str, list[str]] = {
     "organization_execution": ["战略里程碑达成率", "关键资源到位率", "跨职能项目按期交付率"],
     "regulatory_localization": ["本地化采购比例", "关键物料安全库存覆盖", "准入合规一次通过率"],
     "digital_data": ["数字化流程覆盖率", "数据可用率与及时率", "智能化项目价值兑现率"],
+    "market_opportunity": ["目标市场增速", "可服务市场规模", "竞争强度与窗口期"],
+    "product_scenario_fit": ["产品场景适配率", "关键需求覆盖率", "场景验证通过率"],
+    "buyer_adoption": ["买家验证转化率", "采购周期", "切换成本与认证通过率"],
+    "unit_economics": ["贡献毛利率", "客户获取成本回收期", "场景生命周期价值"],
+    "route_to_market": ["目标客户覆盖率", "渠道产出", "报价至成交转化率"],
+    "resource_gap": ["关键资源到位率", "能力缺口关闭率", "预算兑现率"],
+    "risk_and_reversibility": ["关键假设验证率", "止损触发率", "可逆投入占比"],
+}
+
+SCENARIO_DIMENSION_TITLES = {
+    "market_opportunity": "增长机会与市场窗口",
+    "product_scenario_fit": "产品与应用场景适配",
+    "buyer_adoption": "买家采购与采用门槛",
+    "unit_economics": "单位经济性与盈利质量",
+    "route_to_market": "进入路径与渠道可达性",
+    "organization_execution": "组织资源与执行能力",
+    "resource_gap": "资源与能力缺口",
+    "risk_and_reversibility": "风险、验证成本与可逆性",
 }
 
 
@@ -187,9 +206,35 @@ def company_scorecard_eligibility(project: ProjectState) -> list[str]:
 
 
 class CompanyAssessmentService:
-    def __init__(self, model: StructuredModel, sop: ResearchSOPPack) -> None:
+    def __init__(
+        self,
+        model: StructuredModel,
+        sop: ResearchSOPPack,
+        scenario_packs: ExtensionRegistry | None = None,
+    ) -> None:
         self.model = model
         self.sop = sop
+        self.scenario_packs = scenario_packs
+
+    def _decision_policy(self, project: ProjectState) -> dict[str, Any]:
+        if self.scenario_packs is None:
+            return {}
+        try:
+            pack = self.scenario_packs.get(project.scenario_pack, project.scenario_pack_version)
+        except (KeyError, ValueError):
+            return {}
+        return dict(pack.decision_output_policy())
+
+    def _dimension_specs(self, project: ProjectState) -> dict[str, tuple[str, float]]:
+        policy = self._decision_policy(project)
+        dimension_ids = list(policy.get("scorecard", {}).get("dimensions") or [])
+        if not dimension_ids:
+            return _dimension_specs_for(project.company_strategy_objective)
+        weight = 1 / len(dimension_ids)
+        return {
+            dimension_id: (SCENARIO_DIMENSION_TITLES.get(dimension_id, dimension_id), weight)
+            for dimension_id in dimension_ids
+        }
 
     def generate(self, project: ProjectState) -> CompanyScorecardArtifact:
         reasons = company_scorecard_eligibility(project)
@@ -201,7 +246,8 @@ class CompanyAssessmentService:
         enterprise = project.enterprise_sensing_artifact
         assert evidence and analysis and future and enterprise
         assert project.target_company and project.company_strategy_objective
-        dimension_specs = _dimension_specs_for(project.company_strategy_objective)
+        decision_policy = self._decision_policy(project)
+        dimension_specs = self._dimension_specs(project)
 
         accepted_evidence = [
             item for item in evidence.evidence
@@ -285,6 +331,7 @@ class CompanyAssessmentService:
                     "两类差距将成为Action Plan的直接输入。不得把行业吸引力直接当作企业能力，不得因资料缺失给"
                     "中性分；资料不足时该维度必须不评分并说明原因。0-5分项是分析判断，最终0-100分、"
                     "权重、置信度和数据完整度由系统计算。只输出合法JSON。\n\n"
+                    f"本场景决策输出策略：{json.dumps(decision_policy, ensure_ascii=False)}\n\n"
                     + self.sop.prompt_context("company_assessment")
                 ),
             ),

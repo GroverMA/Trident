@@ -100,11 +100,15 @@ class ServiceContainer:
 
     @cached_property
     def company_assessment(self) -> CompanyAssessmentService:
-        return CompanyAssessmentService(model=self._model(), sop=self.sop)
+        return CompanyAssessmentService(
+            model=self._model(), sop=self.sop, scenario_packs=self.scenario_packs
+        )
 
     @cached_property
     def action_planning(self) -> ActionPlanningService:
-        return ActionPlanningService(model=self._model(), sop=self.sop)
+        return ActionPlanningService(
+            model=self._model(), sop=self.sop, scenario_packs=self.scenario_packs
+        )
 
     @cached_property
     def reviewer_revision(self) -> ReviewerRevisionService:
