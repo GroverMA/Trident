@@ -39,6 +39,16 @@ The customer-facing client now lives in `web/` and calls FastAPI over HTTP. It
 preserves Trident's existing visual language while removing delivery-channel
 coupling from the research workflow.
 
+For local product verification, start both services together so project
+creation and every research path are available:
+
+```bash
+./scripts/start-local-demo.sh
+```
+
+Starting only `pnpm dev` renders the interface but cannot create or advance a
+project because the research API is not running.
+
 Terminal 1 — API and local persistence:
 
 ```bash

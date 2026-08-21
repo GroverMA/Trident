@@ -263,7 +263,7 @@ export interface ProjectSummary {
   company_strategy_objective?: string | null;
   research_path: ResearchPath;
   research_mode?: string;
-  scenario_pack?: "general" | "sme_growth" | "pe_vc";
+  scenario_pack?: string;
   scenario_pack_version?: string;
   workspace_mode?: string;
   current_step: string;
@@ -276,6 +276,24 @@ export interface ProjectSummary {
   industry_analysis_artifact?: IndustryAnalysisArtifact | null;
   future_intelligence_artifact?: FutureIntelligenceArtifact | null;
   general_report_artifact?: GeneralReportArtifact | null;
+  interview_session_artifact?: {
+    artifact_id: string;
+    status: "in_progress" | "ready_for_profile" | "completed";
+    turns: Array<{ turn_id: string; topic_id: string; question: string; answer?: string | null; answer_quality: string }>;
+    covered_topics: string[];
+    remaining_topics: string[];
+    suggested_uploads: string[];
+  } | null;
+  entity_profile_artifact?: {
+    artifact_id: string;
+    entity_name: string;
+    operating_portrait: string;
+    decision_style: string;
+    research_next_step: string;
+    known_facts: string[];
+    data_gaps: string[];
+    human_confirmed: boolean;
+  } | null;
   created_at: string;
   updated_at: string;
 }
@@ -317,6 +335,39 @@ export interface ProjectCreatePayload {
   research_path: ResearchPath;
   research_mode: "general_research";
   workspace_mode: "quick_report" | "analyst_workspace";
-  scenario_pack: "general" | "sme_growth" | "pe_vc";
-  scenario_pack_version: "1.0.0";
+  scenario_pack: string;
+  scenario_pack_version: string;
+}
+
+export interface ScenarioWorkflowNodeContract {
+  node_id: string;
+  capability: string;
+  depends_on: string[];
+  review_gate?: string | null;
+  checkpoint: boolean;
+}
+
+export interface ScenarioPackContract {
+  descriptor: {
+    display_name: string;
+    description: string;
+    capabilities: string[];
+  };
+  manifest: {
+    scenario_id: string;
+    version: string;
+    research_core_version: string;
+    deprecated: boolean;
+    replaces: string[];
+  };
+  required_inputs: { required: string[] };
+  workflow: ScenarioWorkflowNodeContract[];
+  interview_policy: Record<string, unknown>;
+  evidence_policy: Record<string, unknown>;
+  review_gates: Record<string, unknown>;
+  output_schema: Record<string, unknown>;
+  evaluation_rubric: Record<string, unknown>;
+  report_template: Record<string, unknown>;
+  ui_schema: Record<string, unknown>;
+  feedback_policy: Record<string, unknown>;
 }

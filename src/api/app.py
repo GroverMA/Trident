@@ -26,13 +26,19 @@ from src.models.future import ForecastReviewStatus
 from src.persistence.factory import create_project_repository
 from src.providers.base import ProviderError
 from src.core.registry import ExtensionRegistry
-from src.scenarios import builtin_scenario_packs
+from src.scenarios import (
+    ScenarioContractError,
+    ScenarioInputError,
+    ScenarioWorkflowRunner,
+    builtin_scenario_packs,
+)
 from src.services.research_planning import SOPComplianceError
 from src.services.industry_analysis import IndustryAnalysisError
 from src.services.errors import FutureIntelligenceError
 from src.services.report_generation import ReportGenerationError
 from src.services.evidence_collection import EvidenceCollectionError
 from src.services.reviewer_orchestration import ReviewerPipelineError
+from src.services.scenario_interview import ScenarioInterviewError, ScenarioInterviewService
 from src.state.project import (
     ProjectState,
     ResearchMode,
@@ -62,6 +68,16 @@ class ProjectCreate(BaseModel):
 
 
 SCENARIO_PACKS = ExtensionRegistry(builtin_scenario_packs())
+SCENARIO_WORKFLOW = ScenarioWorkflowRunner(SCENARIO_PACKS)
+SCENARIO_INTERVIEWS = ScenarioInterviewService(SCENARIO_PACKS)
+
+
+class InterviewStartRequest(BaseModel):
+    restart: bool = False
+
+
+class InterviewAnswerRequest(BaseModel):
+    answer: str = Field(min_length=1)
 
 
 class PipelineRequest(BaseModel):
@@ -278,12 +294,12 @@ def ops_telemetry(research: ResearchApp) -> dict:
 
 
 @app.get("/v1/capabilities")
-def capabilities(research: ResearchApp) -> dict:
+def capabilities() -> dict:
     registries = {
-        "scenario_packs": research.services.scenario_packs,
-        "industry_packs": research.services.industry_packs,
-        "algorithms": research.services.algorithms,
-        "evaluators": research.services.evaluators,
+        "scenario_packs": SCENARIO_PACKS,
+        "industry_packs": ExtensionRegistry(),
+        "algorithms": ExtensionRegistry(),
+        "evaluators": ExtensionRegistry(),
     }
     return {
         "delivery_channels": ["streamlit-compatibility", "fastapi"],
@@ -310,14 +326,57 @@ def capabilities(research: ResearchApp) -> dict:
             ]
             for name, registry in registries.items()
         },
+        "scenario_contracts": [
+            {
+                "descriptor": {
+                    "display_name": pack.descriptor.display_name,
+                    "description": pack.descriptor.description,
+                    "capabilities": pack.descriptor.capabilities,
+                },
+                "manifest": {
+                    "scenario_id": pack.manifest().scenario_id,
+                    "version": pack.manifest().version,
+                    "research_core_version": pack.manifest().research_core_version,
+                    "deprecated": pack.manifest().deprecated,
+                    "replaces": pack.manifest().replaces,
+                },
+                "required_inputs": pack.required_inputs(),
+                "workflow": [
+                    {
+                        "node_id": node.node_id,
+                        "capability": node.capability,
+                        "depends_on": node.depends_on,
+                        "review_gate": node.review_gate,
+                        "checkpoint": node.checkpoint,
+                    }
+                    for node in pack.workflow()
+                ],
+                "interview_policy": pack.interview_policy(),
+                "evidence_policy": pack.evidence_policy(),
+                "review_gates": pack.review_gates(),
+                "output_schema": pack.output_schema(),
+                "evaluation_rubric": pack.evaluation_rubric(),
+                "report_template": pack.report_template(),
+                "ui_schema": pack.ui_schema(),
+                "feedback_policy": pack.feedback_policy(),
+            }
+            for descriptor in SCENARIO_PACKS.descriptors()
+            for pack in [
+                SCENARIO_PACKS.get(descriptor.extension_id, descriptor.version)
+            ]
+        ],
     }
 
 
 @app.post("/v1/projects", response_model=ProjectState, status_code=status.HTTP_201_CREATED)
 def create_project(payload: ProjectCreate, research: ResearchApp) -> ProjectState:
     try:
-        SCENARIO_PACKS.get(payload.scenario_pack, payload.scenario_pack_version)
-    except KeyError as exc:
+        SCENARIO_WORKFLOW.plan(
+            payload.scenario_pack,
+            payload.scenario_pack_version,
+            payload.model_dump(),
+        )
+    except (KeyError, ScenarioContractError, ScenarioInputError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return research.create_project(ProjectState(**payload.model_dump()))
 
@@ -337,6 +396,38 @@ def get_project(project_id: str, research: ResearchApp) -> ProjectState:
         return research.get_project(project_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="project not found") from exc
+
+
+@app.post("/v1/projects/{project_id}/interview/start", response_model=ProjectState)
+def start_interview(
+    project_id: str,
+    payload: InterviewStartRequest,
+    research: ResearchApp,
+) -> ProjectState:
+    try:
+        project = research.get_project(project_id)
+        return research.save_project(
+            SCENARIO_INTERVIEWS.start(project, restart=payload.restart)
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except (KeyError, ScenarioInterviewError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/v1/projects/{project_id}/interview/answer", response_model=ProjectState)
+def answer_interview(
+    project_id: str,
+    payload: InterviewAnswerRequest,
+    research: ResearchApp,
+) -> ProjectState:
+    try:
+        project = research.get_project(project_id)
+        return research.save_project(SCENARIO_INTERVIEWS.answer(project, payload.answer))
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except (KeyError, ScenarioInterviewError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.patch("/v1/projects/{project_id}/scope", response_model=ProjectState)

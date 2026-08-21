@@ -252,6 +252,47 @@ def test_project_crud_is_available_without_loading_ai_runtime(
 
 
 @pytest.mark.parametrize("research_path", ["research_build_first", "report_review_first"])
+def test_company_strategy_project_can_be_created_in_both_research_paths(
+    tmp_path, research_path: str
+) -> None:
+    research = ResearchApplication(
+        projects=SQLiteProjectRepository(tmp_path / f"strategy-{research_path}.db"),
+        service_factory=lambda: (_ for _ in ()).throw(
+            AssertionError("project creation must not load the AI runtime")
+        ),
+    )
+    app.dependency_overrides[get_research_application] = lambda: research
+    payload = {
+        "project_name": "工业机器人增长战略研究",
+        "industry": "工业机器人",
+        "region": "全球",
+        "research_objective": "研究未来五年的竞争格局和增长机会",
+        "time_horizon": "2026-2031",
+        "research_path": research_path,
+        "company_strategy_enabled": True,
+        "target_company": "示例机器人企业",
+        "company_strategy_objective": "寻找第二增长曲线并形成行动计划",
+        "workspace_mode": "analyst_workspace",
+        "scenario_pack": "sme_growth",
+        "scenario_pack_version": "1.0.0",
+    }
+
+    try:
+        with TestClient(app) as client:
+            response = client.post("/v1/projects", json=payload)
+        assert response.status_code == 201
+        project = response.json()
+        assert project["research_path"] == research_path
+        assert project["company_strategy_enabled"] is True
+        assert project["target_company"] == payload["target_company"]
+        assert project["company_strategy_objective"] == payload["company_strategy_objective"]
+        assert project["workspace_mode"] == "analyst_workspace"
+        assert project["scenario_pack"] == "sme_growth"
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize("research_path", ["research_build_first", "report_review_first"])
 def test_research_brief_and_plan_workflow_persists_for_both_paths(
     tmp_path, research_path: str
 ) -> None:

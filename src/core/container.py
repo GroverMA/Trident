@@ -15,7 +15,7 @@ from src.providers.hkgai_mcp import HKGAIMCPProvider
 from src.providers.hkgai_model import HKGAIModelProvider
 from src.providers.hkgai_structured_rest import HKGAIStructuredRestProvider
 from src.providers.search_router import SearchRouter
-from src.scenarios import builtin_scenario_packs
+from src.scenarios import ScenarioWorkflowRunner, builtin_scenario_packs
 from src.services.action_planning import ActionPlanningService
 from src.services.company_assessment import CompanyAssessmentService
 from src.services.evidence_collection import EvidenceCollectionService
@@ -75,6 +75,10 @@ class ServiceContainer:
         return ResearchPlanningService(
             model=self._model(), sop=self.sop, scenario_packs=self.scenario_packs
         )
+
+    @cached_property
+    def scenario_workflow(self) -> ScenarioWorkflowRunner:
+        return ScenarioWorkflowRunner(self.scenario_packs)
 
     @cached_property
     def evidence_collection(self) -> EvidenceCollectionService:

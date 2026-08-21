@@ -21,15 +21,57 @@ class ExtensionDescriptor:
     capabilities: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class ScenarioManifest:
+    """Version and compatibility metadata for an executable scenario pack."""
+
+    scenario_id: str
+    version: str
+    research_core_version: str = "1.0.0"
+    deprecated: bool = False
+    replaces: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ScenarioWorkflowNode:
+    """One declarative step executed by the shared workflow runner."""
+
+    node_id: str
+    capability: str
+    depends_on: tuple[str, ...] = ()
+    review_gate: str | None = None
+    checkpoint: bool = True
+
+
 @runtime_checkable
 class ScenarioPack(Protocol):
     """A PE/VC, growth-strategy or future scenario-specific workflow pack."""
 
     descriptor: ExtensionDescriptor
 
+    def manifest(self) -> ScenarioManifest: ...
+
     def research_instructions(self) -> Mapping[str, Any]: ...
 
     def required_inputs(self) -> Mapping[str, Any]: ...
+
+    def workflow(self) -> tuple[ScenarioWorkflowNode, ...]: ...
+
+    def interview_policy(self) -> Mapping[str, Any]: ...
+
+    def evidence_policy(self) -> Mapping[str, Any]: ...
+
+    def review_gates(self) -> Mapping[str, Any]: ...
+
+    def output_schema(self) -> Mapping[str, Any]: ...
+
+    def evaluation_rubric(self) -> Mapping[str, Any]: ...
+
+    def report_template(self) -> Mapping[str, Any]: ...
+
+    def ui_schema(self) -> Mapping[str, Any]: ...
+
+    def feedback_policy(self) -> Mapping[str, Any]: ...
 
 
 @runtime_checkable

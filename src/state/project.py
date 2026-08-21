@@ -12,6 +12,7 @@ from src.models.analysis import IndustryAnalysisArtifact
 from src.models.enterprise import EnterpriseSensingArtifact
 from src.models.evidence import EvidenceCollectionArtifact
 from src.models.future import FutureIntelligenceArtifact
+from src.models.interview import EntityProfileArtifact, ScenarioInterviewArtifact
 from src.models.report import GeneralReportArtifact
 from src.models.revision import ContentRevisionArtifact
 from src.models.research import ResearchBriefArtifact, ResearchPlanArtifact
@@ -104,6 +105,8 @@ class ProjectState(BaseModel):
     industry_analysis_artifact: IndustryAnalysisArtifact | None = None
     future_intelligence_artifact: FutureIntelligenceArtifact | None = None
     enterprise_sensing_artifact: EnterpriseSensingArtifact | None = None
+    interview_session_artifact: ScenarioInterviewArtifact | None = None
+    entity_profile_artifact: EntityProfileArtifact | None = None
     general_report_artifact: GeneralReportArtifact | None = None
     company_scorecard_artifact: CompanyScorecardArtifact | None = None
     action_plan_artifact: ActionPlanArtifact | None = None

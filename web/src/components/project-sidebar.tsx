@@ -75,11 +75,11 @@ export function ProjectSidebar({
     <aside id="project-navigation" className={`sidebar projectManager ${drawerOpen ? "mobileDrawerOpen" : ""}`}>
       <div className="mobileNavHeader"><strong>项目管理</strong><button type="button" onClick={() => setDrawerOpen(false)}>关闭</button></div>
       <Brand compact />
-      <Link className="modeSwitcher" href="/">
+      <Link className="modeSwitcher" href="/research">
         当前研究方式 · {researchPath === "report_review_first" ? "审阅式研究" : "构建式研究"}
         <span>⌄</span>
       </Link>
-      <Link className="primaryButton linkButton sidebarButton" href="/">新建研究</Link>
+      <Link className="primaryButton linkButton sidebarButton" href="/research">新建研究</Link>
       {activeProject && (
         <div className="sidebarActiveCard">
           <strong>{activeProject.project_name}</strong>

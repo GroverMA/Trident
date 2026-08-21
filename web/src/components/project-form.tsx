@@ -7,7 +7,6 @@ import type { ProjectCreatePayload, ProjectSummary, ResearchPath } from "@/lib/t
 export function ProjectForm({ researchPath }: { researchPath: ResearchPath }) {
   const router = useRouter();
   const [strategyEnabled, setStrategyEnabled] = useState(false);
-  const [scenarioPack, setScenarioPack] = useState<"general" | "sme_growth" | "pe_vc">("general");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -27,9 +26,10 @@ export function ProjectForm({ researchPath }: { researchPath: ResearchPath }) {
       research_path: researchPath,
       research_mode: "general_research",
       workspace_mode: strategyEnabled ? "analyst_workspace" : "quick_report",
-      scenario_pack: scenarioPack,
+      scenario_pack: strategyEnabled ? "sme_growth" : "general",
       scenario_pack_version: "1.0.0",
     };
+
     if (strategyEnabled) {
       payload.target_company = String(data.get("target_company") || "").trim();
       payload.company_strategy_objective = String(
@@ -65,34 +65,6 @@ export function ProjectForm({ researchPath }: { researchPath: ResearchPath }) {
       </div>
 
       <form className="projectForm" onSubmit={submit}>
-        <section className="scenarioPicker" aria-labelledby="scenario-heading">
-          <div className="subsectionTitle" id="scenario-heading">研究场景</div>
-          <p>场景包会改变研究问题、证据重点和交付结构，但始终复用同一套 Trident 研究流程。</p>
-          <div className="scenarioOptions">
-            {[
-              ["general", "通用行业研究", "行业边界、规模、竞争、驱动与未来情景"],
-              ["sme_growth", "企业增长决策", "市场机会、能力差距、增长选择与行动计划"],
-              ["pe_vc", "PE/VC 赛道研判", "赛道吸引力、投资假设、标的地图与尽调问题"],
-            ].map(([id, title, description]) => (
-              <button
-                className={scenarioPack === id ? "scenarioOption scenarioOptionActive" : "scenarioOption"}
-                key={id}
-                type="button"
-                aria-pressed={scenarioPack === id}
-                onClick={() => {
-                  const next = id as "general" | "sme_growth" | "pe_vc";
-                  setScenarioPack(next);
-                  if (next === "sme_growth") setStrategyEnabled(true);
-                  if (next !== "sme_growth") setStrategyEnabled(false);
-                }}
-              >
-                <strong>{title}</strong>
-                <span>{description}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-
         <section className={strategyEnabled ? "strategyCard strategyCardActive" : "strategyCard"}>
           <div>
             <div className="strategyTitle">企业战略决策支持 · 高级分析模式</div>
@@ -102,10 +74,7 @@ export function ProjectForm({ researchPath }: { researchPath: ResearchPath }) {
             <input
               type="checkbox"
               checked={strategyEnabled}
-              onChange={(event) => {
-                setStrategyEnabled(event.target.checked);
-                setScenarioPack(event.target.checked ? "sme_growth" : "general");
-              }}
+              onChange={(event) => setStrategyEnabled(event.target.checked)}
             />
             <span className="switch" aria-hidden="true" />
             <span>进入企业战略决策支持模式</span>
@@ -127,6 +96,24 @@ export function ProjectForm({ researchPath }: { researchPath: ResearchPath }) {
           </label>
         </div>
 
+        {strategyEnabled && (
+          <div className="enterpriseFields">
+            <label className="field">
+              <span>目标企业</span>
+              <input name="target_company" required placeholder="例如：某工业自动化企业" />
+            </label>
+            <label className="field">
+              <span>企业战略目标</span>
+              <textarea
+                name="company_strategy_objective"
+                required
+                rows={4}
+                placeholder="例如：评估第二增长曲线、产品组合或渠道资源配置。"
+              />
+            </label>
+          </div>
+        )}
+
         <div className="promptGuide">
           <div className="promptKicker">主要 PROMPT · 必填</div>
           <div className="promptTitle">告诉 AI 这次研究最需要回答什么</div>
@@ -141,25 +128,6 @@ export function ProjectForm({ researchPath }: { researchPath: ResearchPath }) {
             placeholder="例如：系统研究全球及中国IVD市场的现状、未来十年的发展状况以及竞争格局。"
           />
         </label>
-
-        {strategyEnabled && (
-          <section className="enterpriseFields">
-            <div className="subsectionTitle">企业定制基础信息</div>
-            <label className="field fieldWide">
-              <span>目标企业（必填）</span>
-              <input name="target_company" required placeholder="例如：某医疗科技公司（请使用脱敏名称）" />
-            </label>
-            <label className="field fieldWide">
-              <span>企业战略意图（必填）</span>
-              <textarea
-                name="company_strategy_objective"
-                required
-                rows={4}
-                placeholder="例如：未来三年提高核心医院渗透率，并建立可复制的渠道能力。"
-              />
-            </label>
-          </section>
-        )}
 
         <div className="fieldGrid">
           <label className="field">
@@ -180,11 +148,11 @@ export function ProjectForm({ researchPath }: { researchPath: ResearchPath }) {
         <button type="submit" className="primaryButton formSubmit" disabled={submitting}>
           {submitting
             ? "正在创建研究项目…"
-            : strategyEnabled
-              ? "创建企业战略研究项目"
-              : researchPath === "report_review_first"
+            : researchPath === "report_review_first"
                 ? "创建项目并准备报告初稿"
-                : "创建通用研究项目"}
+                : strategyEnabled
+                    ? "创建高级分析项目"
+                    : "创建通用研究项目"}
         </button>
       </form>
     </section>
