@@ -16,6 +16,7 @@ from src.models.interview import EntityProfileArtifact, ScenarioInterviewArtifac
 from src.models.report import GeneralReportArtifact
 from src.models.revision import ContentRevisionArtifact
 from src.models.research import ResearchBriefArtifact, ResearchPlanArtifact
+from src.models.research_routing import ResearchRouteDecision
 from src.models.strategy import (
     ActionPlanArtifact,
     CompanyScorecardArtifact,
@@ -107,6 +108,7 @@ class ProjectState(BaseModel):
     enterprise_sensing_artifact: EnterpriseSensingArtifact | None = None
     interview_session_artifact: ScenarioInterviewArtifact | None = None
     entity_profile_artifact: EntityProfileArtifact | None = None
+    research_route_artifact: ResearchRouteDecision | None = None
     general_report_artifact: GeneralReportArtifact | None = None
     company_scorecard_artifact: CompanyScorecardArtifact | None = None
     action_plan_artifact: ActionPlanArtifact | None = None

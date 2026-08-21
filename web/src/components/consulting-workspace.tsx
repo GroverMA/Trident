@@ -121,6 +121,34 @@ export function ConsultingWorkspace({ initialScenario }: { initialScenario?: Exc
     } catch (reason) { setAnswers(answers); setAnswer(submittedAnswer); answerRef.current = submittedAnswer; setRequestError(reason instanceof Error ? reason.message : "回答保存失败"); }
     finally { setBusy(false); }
   }
+  async function confirmProfile() {
+    if (!project || !profile) return;
+    setBusy(true); setRequestError("");
+    try {
+      const response = await fetch(`/api/projects/${project.project_id}/interview/profile`, {
+        method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({
+          operating_portrait: profile.operating_portrait,
+          decision_style: profile.decision_style,
+          research_next_step: profile.research_next_step,
+          confirm: true,
+        }),
+      });
+      const updated = await response.json() as ProjectSummary & { detail?: string };
+      if (!response.ok) throw new Error(updated.detail || "画像确认失败");
+      const routeResponse = await fetch(`/api/projects/${updated.project_id}/research-route`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          available_materials: files,
+          has_existing_report: files.some((name) => /\.(pdf|docx?|pptx?)$/i.test(name)),
+        }),
+      });
+      const routed = await routeResponse.json() as ProjectSummary & { detail?: string };
+      if (!routeResponse.ok) throw new Error(routed.detail || "研究通路选择失败");
+      setProject(routed);
+    } catch (reason) { setRequestError(reason instanceof Error ? reason.message : "画像确认失败"); }
+    finally { setBusy(false); }
+  }
   function addFiles(event: ChangeEvent<HTMLInputElement>) { setFiles((current) => [...current, ...Array.from(event.target.files || []).map((file) => file.name)]); }
   function startVoice() {
     type SpeechEvent = { resultIndex: number; results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> };
@@ -207,7 +235,7 @@ export function ConsultingWorkspace({ initialScenario }: { initialScenario?: Exc
           <aside className="evidenceDrawer"><span className="eyebrow">OPTIONAL MATERIALS</span><h2>有资料就上传，没有也可以继续</h2><p>资料用于校准判断，不是进入下一步的门槛。纸质材料可以先拍照或扫描。</p><div className="uploadGuide">{uploadItems.map((item) => <span key={item}>{item}</span>)}</div><input ref={fileRef} type="file" multiple hidden onChange={addFiles} /><button type="button" className="secondaryButton uploadButton" onClick={() => fileRef.current?.click()}>选择文件</button>{files.length > 0 && <ul className="uploadedFiles">{files.map((file) => <li key={file}>{file}</li>)}</ul>}<div className="oralOption"><strong>什么资料都没有？</strong><p>继续回答问题即可。系统会把老板或管理层的口述标记为“待验证判断”，后续再逐步补数。</p></div></aside>
         </div>}
 
-        {stage === "profile" && profile && <section className="profileWorkspace" id="profile"><div className="profileLead"><span className="eyebrow">DIAGNOSTIC OUTPUT</span><h1>第一轮企业诊断画像已经形成</h1><p>画像和访谈已经保存到项目，可在项目管理中继续，不会因切换场景丢失。</p></div><div className="profileGrid"><article><span>01 · 企业基础画像</span><h2>经营信息与数字化基础</h2><p>{profile.operating_portrait}</p></article><article><span>02 · 决策风格</span><h2>管理层如何形成判断</h2><p>{profile.decision_style}</p></article><article><span>03 · 下一研究任务</span><h2>从诊断进入专业研究流</h2><p>{profile.research_next_step}</p></article></div><div className="profileActions"><Link className="secondaryButton" href="/projects">在项目管理中查看</Link><Link className="primaryButton" href={`/research?project=${project?.project_id || ""}`}>进入研究内核</Link></div>{scenario === "growth_strategy" ? <EnterpriseFlow growthType={growthType} /> : <div className="workflowPreview"><strong>后续完整研究流</strong><span>{String(activeContract?.ui_schema.card_flow || "行业研究 → 场景分析 → 人工审核 → 决策输出")}</span></div>}</section>}
+        {stage === "profile" && profile && <section className="profileWorkspace" id="profile"><div className="profileLead"><span className="eyebrow">DIAGNOSTIC OUTPUT</span><h1>第一轮企业诊断画像已经形成</h1><p>请先审核画像。确认后，这些内容会作为 Prompt Analysis 和 Gate 0 的场景输入，但待验证判断不会被当作市场事实。</p></div><div className="profileGrid"><article><span>01 · 企业基础画像</span><h2>经营信息与数字化基础</h2><p>{profile.operating_portrait}</p></article><article><span>02 · 决策风格</span><h2>管理层如何形成判断</h2><p>{profile.decision_style}</p></article><article><span>03 · 下一研究任务</span><h2>从诊断进入专业研究流</h2><p>{profile.research_next_step}</p></article></div><div className="profileEvidenceBands"><div><strong>已提取事实</strong><span>{profile.known_facts.length ? profile.known_facts.join("；") : "尚无经过结构化提取的事实"}</span></div><div><strong>管理层口述与判断</strong><span>{profile.management_judgments.length ? profile.management_judgments.join("；") : "暂无"}</span></div><div><strong>后续验证缺口</strong><span>{profile.data_gaps.length ? profile.data_gaps.join("；") : "暂无显著缺口"}</span></div></div>{project?.research_route_artifact && <div className="workflowPreview"><strong>推荐研究通路 · {project.research_route_artifact.mode_label}</strong><span>{project.research_route_artifact.rationale.join(" ")}</span></div>}{requestError && <p className="formError" role="alert">{requestError}</p>}<div className="profileActions"><Link className="secondaryButton" href="/projects">在项目管理中查看</Link>{profile.human_confirmed && project?.research_route_artifact ? <Link className="primaryButton" href={`/research?project=${project?.project_id || ""}`}>按推荐通路进入研究内核</Link> : <button className="primaryButton" type="button" disabled={busy} onClick={confirmProfile}>{busy ? "正在选择研究通路…" : "确认画像并选择研究通路"}</button>}</div>{scenario === "growth_strategy" ? <EnterpriseFlow growthType={growthType} /> : <div className="workflowPreview"><strong>后续完整研究流</strong><span>{String(activeContract?.ui_schema.card_flow || "行业研究 → 场景分析 → 人工审核 → 决策输出")}</span></div>}</section>}
       </section>}
     </main>;
 }

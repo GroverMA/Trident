@@ -122,7 +122,7 @@ class ResearchPlanningService:
             raise SOPComplianceError(
                 f"未知场景包：{project.scenario_pack}@{project.scenario_pack_version}"
             ) from exc
-        return {
+        context = {
             "scenario_pack": {
                 "id": pack.descriptor.extension_id,
                 "version": pack.descriptor.version,
@@ -131,6 +131,20 @@ class ResearchPlanningService:
                 "required_inputs": dict(pack.required_inputs()),
             }
         }
+        if project.entity_profile_artifact is not None:
+            profile = project.entity_profile_artifact
+            context["confirmed_entity_profile"] = {
+                "entity_name": profile.entity_name,
+                "objective": profile.objective,
+                "operating_portrait": profile.operating_portrait,
+                "decision_style": profile.decision_style,
+                "verified_facts": profile.known_facts,
+                "management_judgments": profile.management_judgments,
+                "data_gaps": profile.data_gaps,
+                "research_next_step": profile.research_next_step,
+                "human_confirmed": profile.human_confirmed,
+            }
+        return context
 
     def generate_brief(self, project: ProjectState) -> ResearchBriefArtifact:
         messages = [

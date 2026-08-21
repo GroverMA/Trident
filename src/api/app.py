@@ -39,6 +39,7 @@ from src.services.report_generation import ReportGenerationError
 from src.services.evidence_collection import EvidenceCollectionError
 from src.services.reviewer_orchestration import ReviewerPipelineError
 from src.services.scenario_interview import ScenarioInterviewError, ScenarioInterviewService
+from src.services.research_routing import ScenarioResearchRouter
 from src.state.project import (
     ProjectState,
     ResearchMode,
@@ -73,6 +74,7 @@ SCENARIO_INTERVIEWS = ScenarioInterviewService(
     SCENARIO_PACKS,
     model_factory=lambda: ServiceContainer.from_runtime()._model(),
 )
+SCENARIO_ROUTER = ScenarioResearchRouter(SCENARIO_PACKS)
 
 
 class InterviewStartRequest(BaseModel):
@@ -81,6 +83,18 @@ class InterviewStartRequest(BaseModel):
 
 class InterviewAnswerRequest(BaseModel):
     answer: str = Field(min_length=1)
+
+
+class ResearchRouteRequest(BaseModel):
+    available_materials: list[str] = Field(default_factory=list)
+    has_existing_report: bool = False
+
+
+class ProfileReviewRequest(BaseModel):
+    operating_portrait: str
+    decision_style: str
+    research_next_step: str
+    confirm: bool = False
 
 
 class PipelineRequest(BaseModel):
@@ -362,6 +376,8 @@ def capabilities() -> dict:
                 "report_template": pack.report_template(),
                 "ui_schema": pack.ui_schema(),
                 "feedback_policy": pack.feedback_policy(),
+                "research_route_policy": pack.research_route_policy(),
+                "data_scope_policy": pack.data_scope_policy(),
             }
             for descriptor in SCENARIO_PACKS.descriptors()
             for pack in [
@@ -430,6 +446,50 @@ def answer_interview(
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="project not found") from exc
     except (KeyError, ScenarioInterviewError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.patch("/v1/projects/{project_id}/interview/profile", response_model=ProjectState)
+def review_interview_profile(
+    project_id: str, payload: ProfileReviewRequest, research: ResearchApp
+) -> ProjectState:
+    try:
+        project = research.get_project(project_id)
+        return research.save_project(SCENARIO_INTERVIEWS.review_profile(
+            project,
+            operating_portrait=payload.operating_portrait,
+            decision_style=payload.decision_style,
+            research_next_step=payload.research_next_step,
+            confirm=payload.confirm,
+        ))
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ScenarioInterviewError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/v1/projects/{project_id}/research-route", response_model=ProjectState)
+def choose_scenario_research_route(
+    project_id: str,
+    payload: ResearchRouteRequest,
+    research: ResearchApp,
+) -> ProjectState:
+    try:
+        project = research.get_project(project_id)
+        pack = SCENARIO_PACKS.get(project.scenario_pack, project.scenario_pack_version)
+        needs_interview = any(node.capability == "consulting.interview" for node in pack.workflow())
+        if needs_interview and not (
+            project.entity_profile_artifact and project.entity_profile_artifact.human_confirmed
+        ):
+            raise ScenarioInterviewError("请先完成并确认AI诊断画像，再进入专业研究")
+        return research.save_project(SCENARIO_ROUTER.route(
+            project,
+            available_materials=payload.available_materials,
+            has_existing_report=payload.has_existing_report,
+        ))
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except (KeyError, ScenarioInterviewError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 

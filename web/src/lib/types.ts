@@ -292,8 +292,20 @@ export interface ProjectSummary {
     decision_style: string;
     research_next_step: string;
     known_facts: string[];
+    management_judgments: string[];
     data_gaps: string[];
     human_confirmed: boolean;
+    confirmed_at?: string | null;
+  } | null;
+  research_route_artifact?: {
+    artifact_id: string;
+    scenario_id: string;
+    primary_path: ResearchPath;
+    supplemental_gap_research: boolean;
+    mode_label: string;
+    rationale: string[];
+    available_materials: string[];
+    data_scope: Record<string, unknown>;
   } | null;
   created_at: string;
   updated_at: string;
@@ -371,4 +383,6 @@ export interface ScenarioPackContract {
   report_template: Record<string, unknown>;
   ui_schema: Record<string, unknown>;
   feedback_policy: Record<string, unknown>;
+  research_route_policy: Record<string, unknown>;
+  data_scope_policy: Record<string, unknown>;
 }
