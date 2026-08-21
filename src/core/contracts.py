@@ -73,6 +73,10 @@ class ScenarioPack(Protocol):
 
     def feedback_policy(self) -> Mapping[str, Any]: ...
 
+    def research_route_policy(self) -> Mapping[str, Any]: ...
+
+    def data_scope_policy(self) -> Mapping[str, Any]: ...
+
 
 @runtime_checkable
 class IndustryPack(Protocol):

@@ -50,6 +50,8 @@ class BuiltinScenarioPack:
     report: Mapping[str, Any] = field(default_factory=dict)
     ui: Mapping[str, Any] = field(default_factory=dict)
     feedback: Mapping[str, Any] = field(default_factory=dict)
+    routing: Mapping[str, Any] = field(default_factory=dict)
+    data_scope: Mapping[str, Any] = field(default_factory=dict)
     deprecated: bool = False
     replaces: tuple[str, ...] = ()
 
@@ -94,6 +96,12 @@ class BuiltinScenarioPack:
     def feedback_policy(self) -> Mapping[str, Any]:
         return self.feedback
 
+    def research_route_policy(self) -> Mapping[str, Any]:
+        return self.routing
+
+    def data_scope_policy(self) -> Mapping[str, Any]:
+        return self.data_scope
+
 
 def _pack(
     *,
@@ -113,6 +121,8 @@ def _pack(
     report_type: str,
     diagnostic_topics: list[str] | None = None,
     feedback_policy: Mapping[str, Any] | None = None,
+    route_policy: Mapping[str, Any] | None = None,
+    data_scope_policy: Mapping[str, Any] | None = None,
     deprecated: bool = False,
     replaces: tuple[str, ...] = (),
 ) -> BuiltinScenarioPack:
@@ -160,6 +170,19 @@ def _pack(
             "review_layout": "compact_table",
         },
         feedback=feedback_policy or {"enabled": False},
+        routing=route_policy or {
+            "default_path": "research_build_first",
+            "review_material_threshold": 1,
+            "allow_review_first": True,
+            "supplemental_gap_research": True,
+        },
+        data_scope=data_scope_policy or {
+            "workspace_owner": "research_organization",
+            "subject_type": "research_project",
+            "private_memory_root": "project",
+            "public_evidence_reusable": True,
+            "private_artifacts_cross_workspace": False,
+        },
         deprecated=deprecated,
         replaces=replaces,
     )
@@ -184,6 +207,13 @@ def builtin_scenario_packs() -> tuple[BuiltinScenarioPack, ...]:
         route="/research",
         report_type="general_report",
         feedback_policy={"enabled": False},
+        data_scope_policy={
+            "workspace_owner": "research_organization",
+            "subject_type": "research_project",
+            "private_memory_root": "project",
+            "public_evidence_reusable": True,
+            "private_artifacts_cross_workspace": False,
+        },
     )
     growth = _pack(
         scenario_id="growth_strategy",
@@ -222,6 +252,20 @@ def builtin_scenario_packs() -> tuple[BuiltinScenarioPack, ...]:
             "deviation_classes": ["decision_assumption", "action_design", "execution_quality", "external_change"],
             "approval_role": "enterprise_management",
             "dashboard_dimensions": ["decision_quality", "action_quality", "execution_quality", "customer_market_quality", "learning_quality"],
+        },
+        route_policy={
+            "default_path": "research_build_first",
+            "review_material_threshold": 99,
+            "allow_review_first": False,
+            "supplemental_gap_research": True,
+            "reason": "企业内部资料用于画像和能力判断，外部增长机会仍需从行业证据重新构建。",
+        },
+        data_scope_policy={
+            "workspace_owner": "enterprise",
+            "subject_type": "operating_company",
+            "private_memory_root": "enterprise_knowledge_base",
+            "public_evidence_reusable": True,
+            "private_artifacts_cross_workspace": False,
         },
         replaces=("sme_growth@1.0.0",),
     )
@@ -264,6 +308,21 @@ def builtin_scenario_packs() -> tuple[BuiltinScenarioPack, ...]:
             "approval_role": "investment_committee_or_board",
             "dashboard_dimensions": ["decision_quality", "action_quality", "execution_quality", "operating_customer_quality", "learning_quality"],
         },
+        route_policy={
+            "default_path": "report_review_first",
+            "insufficient_material_path": "research_build_first",
+            "review_material_threshold": 2,
+            "allow_review_first": True,
+            "supplemental_gap_research": True,
+            "reason": "PE通常从IM、财务和商业尽调材料出发，再对关键缺口进行外部证据研究。",
+        },
+        data_scope_policy={
+            "workspace_owner": "fund",
+            "subject_type": "deal_target",
+            "private_memory_root": "fund_deal_workspace",
+            "public_evidence_reusable": True,
+            "private_artifacts_cross_workspace": False,
+        },
         replaces=("pe_vc@1.0.0",),
     )
     vc = _pack(
@@ -304,6 +363,21 @@ def builtin_scenario_packs() -> tuple[BuiltinScenarioPack, ...]:
             "deviation_classes": ["decision_assumption", "action_design", "execution_quality", "external_change"],
             "approval_role": "fund_authorized_reviewer",
             "dashboard_dimensions": ["decision_quality", "support_action_quality", "execution_quality", "customer_market_quality", "learning_quality"],
+        },
+        route_policy={
+            "default_path": "research_build_first",
+            "insufficient_material_path": "research_build_first",
+            "review_material_threshold": 3,
+            "allow_review_first": True,
+            "supplemental_gap_research": True,
+            "reason": "VC早期材料通常偏融资叙事，应先独立构建市场与技术证据；完整DD材料可进入审阅式。",
+        },
+        data_scope_policy={
+            "workspace_owner": "fund",
+            "subject_type": "venture_target",
+            "private_memory_root": "fund_investment_workspace",
+            "public_evidence_reusable": True,
+            "private_artifacts_cross_workspace": False,
         },
         replaces=("pe_vc@1.0.0",),
     )

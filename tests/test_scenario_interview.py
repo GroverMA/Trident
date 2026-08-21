@@ -119,9 +119,25 @@ def test_scenario_interview_persists_and_generates_sourced_profile(tmp_path) -> 
             profile = latest["entity_profile_artifact"]
             assert profile["entity_name"] == "示例企业"
             assert len(profile["source_turn_ids"]) == 4
+            assert profile["human_confirmed"] is False
+
+            confirmed = client.patch(
+                f"/v1/projects/{project_id}/interview/profile",
+                json={
+                    "operating_portrait": profile["operating_portrait"],
+                    "decision_style": profile["decision_style"],
+                    "research_next_step": profile["research_next_step"],
+                    "confirm": True,
+                },
+            )
+            assert confirmed.status_code == 200
+            confirmed_profile = confirmed.json()["entity_profile_artifact"]
+            assert confirmed_profile["human_confirmed"] is True
+            assert confirmed_profile["confirmed_at"] is not None
 
             restored = client.get(f"/v1/projects/{project_id}").json()
             assert restored["entity_profile_artifact"]["artifact_id"] == profile["artifact_id"]
+            assert restored["entity_profile_artifact"]["human_confirmed"] is True
             assert len(restored["interview_session_artifact"]["turns"]) == 4
     finally:
         app.dependency_overrides.clear()

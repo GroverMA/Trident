@@ -72,7 +72,9 @@ class EntityProfileArtifact(BaseModel):
     decision_style: str
     research_next_step: str
     known_facts: list[str] = Field(default_factory=list)
+    management_judgments: list[str] = Field(default_factory=list)
     data_gaps: list[str] = Field(default_factory=list)
     source_turn_ids: list[str] = Field(default_factory=list)
     human_confirmed: bool = False
+    confirmed_at: datetime | None = None
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

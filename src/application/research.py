@@ -190,6 +190,12 @@ class ResearchApplication:
 
     def generate_brief(self, project_id: str) -> ProjectState:
         project = self.get_project(project_id)
+        if (
+            project.scenario_pack != "general"
+            and project.entity_profile_artifact is not None
+            and not project.entity_profile_artifact.human_confirmed
+        ):
+            raise ResearchWorkflowError("请先审核并确认场景诊断画像，再进入专业研究")
         brief, telemetry = self._run_ai_step(
             project,
             "research_brief",

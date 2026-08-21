@@ -125,6 +125,30 @@ class ScenarioInterviewService:
         })
         return project.model_copy(update={"interview_session_artifact": updated, "entity_profile_artifact": profile})
 
+    def review_profile(
+        self,
+        project: ProjectState,
+        *,
+        operating_portrait: str,
+        decision_style: str,
+        research_next_step: str,
+        confirm: bool,
+    ) -> ProjectState:
+        profile = project.entity_profile_artifact
+        if profile is None:
+            raise ScenarioInterviewError("请先完成诊断访谈并生成画像")
+        fields = [operating_portrait.strip(), decision_style.strip(), research_next_step.strip()]
+        if not all(fields):
+            raise ScenarioInterviewError("画像、决策风格和下一研究任务不能为空")
+        reviewed = profile.model_copy(update={
+            "operating_portrait": fields[0],
+            "decision_style": fields[1],
+            "research_next_step": fields[2],
+            "human_confirmed": confirm,
+            "confirmed_at": datetime.now(UTC) if confirm else None,
+        })
+        return project.model_copy(update={"entity_profile_artifact": reviewed})
+
     def _analyse_answer(
         self,
         project: ProjectState,
@@ -201,7 +225,20 @@ class ScenarioInterviewService:
         joined = " ".join(answers)
         data_led = any(word in joined for word in ("数据", "指标", "财务", "报表", "毛利", "订单"))
         decisive = any(word in joined for word in ("拍板", "快速", "试错", "果断"))
-        gaps = [turn.topic_id for turn in turns if turn.answer_quality == "needs_validation"]
+        verified = [fact for turn in turns if turn.analysis for fact in turn.analysis.extracted_facts]
+        judgments = [
+            turn.answer or "" for turn in turns
+            if turn.answer and not (turn.analysis and turn.analysis.extracted_facts)
+        ]
+        gaps = list(dict.fromkeys(
+            gap
+            for turn in turns
+            for gap in (
+                ([turn.topic_id] if turn.answer_quality == "needs_validation" else [])
+                + (turn.analysis.ambiguities if turn.analysis else [])
+                + (turn.analysis.missing_information if turn.analysis else [])
+            )
+        ))
         return EntityProfileArtifact(
             scenario_id=project.scenario_pack,
             entity_name=project.target_company or project.project_name,
@@ -215,7 +252,8 @@ class ScenarioInterviewService:
                 if decisive else "管理层偏审慎共识，应显性记录假设、证据、责任人与确认节点。"
             ),
             research_next_step="依据场景包进入专业研究内核，并把画像中的事实、假设和缺口分别处理。",
-            known_facts=[answer for answer in answers if answer],
+            known_facts=verified,
+            management_judgments=judgments,
             data_gaps=gaps,
             source_turn_ids=[turn.turn_id for turn in turns],
         )
