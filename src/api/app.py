@@ -69,7 +69,10 @@ class ProjectCreate(BaseModel):
 
 SCENARIO_PACKS = ExtensionRegistry(builtin_scenario_packs())
 SCENARIO_WORKFLOW = ScenarioWorkflowRunner(SCENARIO_PACKS)
-SCENARIO_INTERVIEWS = ScenarioInterviewService(SCENARIO_PACKS)
+SCENARIO_INTERVIEWS = ScenarioInterviewService(
+    SCENARIO_PACKS,
+    model_factory=lambda: ServiceContainer.from_runtime()._model(),
+)
 
 
 class InterviewStartRequest(BaseModel):

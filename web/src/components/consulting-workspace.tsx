@@ -9,6 +9,14 @@ type Stage = "scenarios" | "goal" | "interview" | "profile";
 
 type ScenarioCardView = { id: Scenario; index: string; title: string; english: string; description: string; flow: string; tag: string };
 
+const SCENARIO_ORDER: Scenario[] = ["general", "growth_strategy", "pe", "vc"];
+const STABLE_SCENARIO_CARDS: ScenarioCardView[] = [
+  { id: "general", index: "01", title: "通用行业研究", english: "GENERAL", description: "完整行业定义、规模、竞争、驱动、趋势与报告流程。", flow: "定义问题 → 研究路径 → 完整报告", tag: "研究基座" },
+  { id: "growth_strategy", index: "02", title: "企业增长决策", english: "GROWTH STRATEGY", description: "把企业诊断与行业证据映射为增长选择、能力差距和行动计划。", flow: "主动诊断 → 机会研究 → 战略 → 行动", tag: "场景包" },
+  { id: "pe", index: "03", title: "PE 投资分析", english: "PE", description: "成熟企业经营质量、交易边界、价值创造、下行情景与退出研究。", flow: "投资风格 → 标的诊断 → DD → IC Memo", tag: "场景包" },
+  { id: "vc", index: "04", title: "VC 投资分析", english: "VC", description: "机会发现、团队、技术、市场时点、里程碑和后续融资研究。", flow: "决策风格 → 初筛 → DD → 投后跟踪", tag: "场景包" },
+];
+
 export function ConsultingWorkspace({ initialScenario }: { initialScenario?: Exclude<Scenario, "general"> } = {}) {
   const [stage, setStage] = useState<Stage>(initialScenario ? "goal" : "scenarios");
   const [scenario, setScenario] = useState<Scenario>(initialScenario || "growth_strategy");
@@ -33,17 +41,24 @@ export function ConsultingWorkspace({ initialScenario }: { initialScenario?: Exc
   const voiceFinalRef = useRef("");
   const voiceInterimRef = useRef("");
   const voiceSubmittingRef = useRef(false);
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
   useEffect(() => {
-    fetch("/api/capabilities", { cache: "no-store" })
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 8000);
+    fetch("/api/capabilities", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         const payload = await response.json() as { scenario_contracts?: ScenarioPackContract[]; detail?: string };
         if (!response.ok) throw new Error(payload.detail || "场景目录暂时无法加载");
-        setScenarioContracts((payload.scenario_contracts || []).filter((item) => !item.manifest.deprecated));
+        const unique = new Map((payload.scenario_contracts || []).filter((item) => !item.manifest.deprecated).map((item) => [item.manifest.scenario_id, item]));
+        setScenarioContracts(SCENARIO_ORDER.map((id) => unique.get(id)).filter(Boolean) as ScenarioPackContract[]);
+        setCatalogError("");
       })
-      .catch((reason) => setCatalogError(reason instanceof Error ? reason.message : "场景目录暂时无法加载"));
-  }, []);
+      .catch(() => setCatalogError("场景服务连接较慢，当前显示稳定入口；进入场景时会再次验证。"))
+      .finally(() => window.clearTimeout(timer));
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [catalogAttempt]);
   const activeContract = scenarioContracts.find((item) => item.manifest.scenario_id === scenario);
-  const scenarioCards = useMemo<ScenarioCardView[]>(() => scenarioContracts.map((item, index) => ({
+  const scenarioCards = useMemo<ScenarioCardView[]>(() => scenarioContracts.length ? scenarioContracts.map((item, index) => ({
     id: item.manifest.scenario_id as Scenario,
     index: String(index + 1).padStart(2, "0"),
     title: item.descriptor.display_name,
@@ -51,8 +66,7 @@ export function ConsultingWorkspace({ initialScenario }: { initialScenario?: Exc
     description: item.descriptor.description,
     flow: String(item.ui_schema.card_flow || "场景工作流"),
     tag: item.manifest.scenario_id === "general" ? "研究基座" : "场景包",
-  })), [scenarioContracts]);
-  const questions = project?.interview_session_artifact?.turns.map((turn) => turn.question) || [];
+  })) : STABLE_SCENARIO_CARDS, [scenarioContracts]);
   const uploadItems = (activeContract?.ui_schema.upload_guides as string[] | undefined) || [];
   const question = project?.interview_session_artifact?.turns.find((turn) => !turn.answer)?.question || "";
   const topicTotal = (project?.interview_session_artifact?.covered_topics.length || 0) + (project?.interview_session_artifact?.remaining_topics.length || 0);
@@ -166,7 +180,7 @@ export function ConsultingWorkspace({ initialScenario }: { initialScenario?: Exc
         <div className="scenarioGridNew">
           {scenarioCards.map((item) => item.id === "general" ? <Link href="/research" className="consultingScenarioCard" key={item.id}><ScenarioCard item={item} /></Link> : <button type="button" className={item.id === "growth_strategy" ? "consultingScenarioCard featured" : "consultingScenarioCard"} key={item.id} onClick={() => chooseScenario(item.id)}><ScenarioCard item={item} /></button>)}
         </div>
-        {catalogError && <div className="formError" role="alert">{catalogError}</div>}
+        {catalogError && <div className="formError" role="alert">{catalogError} <button type="button" onClick={() => setCatalogAttempt((value) => value + 1)}>重新连接</button></div>}
         <div className="consultingPrinciple" id="method"><strong>一个共同内核</strong><span>所有场景共享行业定义、市场规模、竞争格局、驱动因素、证据审阅与报告标准；区别在于访谈对象、决策问题和最终行动输出。</span></div>
       </section>}
 
@@ -187,8 +201,8 @@ export function ConsultingWorkspace({ initialScenario }: { initialScenario?: Exc
         </form>}
 
         {stage === "interview" && <div className="interviewWorkspace">
-          <section className="interviewChat"><div className="interviewProgress"><span style={{width:`${progress}%`}} /></div><div className="interviewThread">{answers.map((item, index) => <div className="answerPair" key={index}><div className="aiQuestion"><span>AI</span><p>{questions[index]}</p></div><div className="userAnswer"><p>{item}</p><span>你的回答</span></div></div>)}<div className="aiQuestion current"><span>AI</span><div><small>问题 {answers.length + 1} / {topicTotal}</small><p>{question}</p><em>你可以只讲大概情况。AI 会把模糊表述转化为后续需要验证的假设。</em></div></div></div>
-            <form className="interviewComposer" onSubmit={submitAnswer}><textarea value={answer} onChange={(event) => { answerRef.current = event.target.value; setAnswer(event.target.value); }} rows={4} placeholder="用你习惯的方式回答，不需要整理成正式材料…" />{voiceStatus && <p className="voiceStatus" role="status">{voiceStatus}</p>}{requestError && <p className="formError" role="alert">{requestError}</p>}<div><button type="button" className={listening ? "voiceButton listening" : "voiceButton"} onClick={startVoice}>{listening ? "停止并转换为文字" : "开始语音"}</button><button type="submit" className="primaryButton" disabled={busy}>{busy ? "正在保存…" : "发送给 AI 并继续"}</button></div></form>
+          <section className="interviewChat"><div className="interviewProgress"><span style={{width:`${progress}%`}} /></div><div className="interviewThread">{(project?.interview_session_artifact?.turns || []).filter((turn) => turn.answer).map((turn) => <div className="answerPair" key={turn.turn_id}><div className="aiQuestion"><span>AI</span><p>{turn.question}</p></div><div className="userAnswer"><p>{turn.answer}</p><span>你的回答</span></div>{turn.analysis && <div className="answerAnalysis"><strong>AI 对本轮回答的判断</strong><p>{turn.analysis.summary}</p>{turn.analysis.ambiguities.length > 0 && <small>仍需澄清：{turn.analysis.ambiguities.join("；")}</small>}</div>}</div>)}<div className="aiQuestion current"><span>AI</span><div><small>动态问题 {answers.length + 1}</small><p>{question}</p><em>AI 会先分析本轮答案；信息不明确时会追问，充分后才进入下一主题。</em></div></div></div>
+            <form className="interviewComposer" onSubmit={submitAnswer}><textarea value={answer} onChange={(event) => { answerRef.current = event.target.value; setAnswer(event.target.value); }} rows={4} placeholder="用你习惯的方式回答，不需要整理成正式材料…" />{voiceStatus && <p className="voiceStatus" role="status">{voiceStatus}</p>}{project?.interview_session_artifact?.provider_warning && <p className="voiceStatus" role="status">{project.interview_session_artifact.provider_warning}</p>}{requestError && <p className="formError" role="alert">{requestError}</p>}<div><button type="button" className={listening ? "voiceButton listening" : "voiceButton"} onClick={startVoice}>{listening ? "停止并转换为文字" : "开始语音"}</button><button type="submit" className="primaryButton" disabled={busy}>{busy ? "AI 正在分析回答…" : "发送给 AI 并继续"}</button></div></form>
           </section>
           <aside className="evidenceDrawer"><span className="eyebrow">OPTIONAL MATERIALS</span><h2>有资料就上传，没有也可以继续</h2><p>资料用于校准判断，不是进入下一步的门槛。纸质材料可以先拍照或扫描。</p><div className="uploadGuide">{uploadItems.map((item) => <span key={item}>{item}</span>)}</div><input ref={fileRef} type="file" multiple hidden onChange={addFiles} /><button type="button" className="secondaryButton uploadButton" onClick={() => fileRef.current?.click()}>选择文件</button>{files.length > 0 && <ul className="uploadedFiles">{files.map((file) => <li key={file}>{file}</li>)}</ul>}<div className="oralOption"><strong>什么资料都没有？</strong><p>继续回答问题即可。系统会把老板或管理层的口述标记为“待验证判断”，后续再逐步补数。</p></div></aside>
         </div>}

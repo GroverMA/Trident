@@ -279,10 +279,11 @@ export interface ProjectSummary {
   interview_session_artifact?: {
     artifact_id: string;
     status: "in_progress" | "ready_for_profile" | "completed";
-    turns: Array<{ turn_id: string; topic_id: string; question: string; answer?: string | null; answer_quality: string }>;
+    turns: Array<{ turn_id: string; topic_id: string; question: string; answer?: string | null; answer_quality: string; analysis?: { summary: string; extracted_facts: string[]; ambiguities: string[]; missing_information: string[]; answer_quality: string; topic_complete: boolean; follow_up_question?: string | null; confidence: number } | null }>;
     covered_topics: string[];
     remaining_topics: string[];
     suggested_uploads: string[];
+    provider_warning?: string | null;
   } | null;
   entity_profile_artifact?: {
     artifact_id: string;
