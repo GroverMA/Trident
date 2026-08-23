@@ -7,7 +7,7 @@
 **Full-view comparison evidence**
 
 - The source leaves the four-card group in a narrow central band and produces materially more unused space on the right side of an ultra-wide screen.
-- The implementation centers a 1480px workspace between the persistent sidebar and the right viewport edge. At standard desktop width the four scenarios form a relaxed 2 × 2 grid with 352px minimum card height and larger inter-card spacing.
+- The implementation centers a 1480px workspace between the persistent sidebar and the right viewport edge. At desktop width the four scenarios remain in one row; cards are narrow and vertically extended rather than widened into a 2 × 2 grid.
 - Header, hero, cards and shared-core strip retain the same interaction state and information architecture.
 
 **Focused comparison evidence**
@@ -28,13 +28,13 @@
 
 1. Earlier finding: content capped at 1280px and 355px-tall cards made the main group feel narrow and left the ultra-wide page visually underused.
 2. First fix: introduced shared 1480px/1360px workspace tokens and widened scenario/platform/diagnostic pages.
-3. Current fix: increased card height to 352px, expanded card gaps and padding, added persistent CN/EN interface state and routed scenario projects directly into the selected shared research core.
-4. Post-fix evidence: desktop CN and EN states remain aligned; the 390px mobile view is a single-column stack with no horizontal overflow, a separate navigation trigger and an unobstructed language switcher.
+3. Current fix: increased card height to at least 352px, retained a four-column desktop row, expanded card gaps and padding, added persistent CN/EN interface state and routed scenario projects directly into the selected shared research core.
+4. Post-fix evidence: at 1600px the four cards form one 380px-tall row with no overflow; the 390px mobile view remains a single-column stack with a separate navigation trigger and an unobstructed language switcher.
 
 **Implementation Checklist**
 
 - [x] Ultra-wide scenario layout balanced.
-- [x] Standard desktop uses a comfortable two-column card grid.
+- [x] Desktop keeps all four scenario cards in one vertically extended row.
 - [x] Mobile remains one column with no horizontal overflow.
 - [x] Project, knowledge, sensing, feedback and diagnostic containers aligned.
 - [x] Research route width increased for visual consistency.
@@ -42,6 +42,7 @@
 - [x] CN/EN switch persists across routes and restores Chinese correctly.
 - [x] English mode contains no untranslated UI strings on the primary platform pages.
 - [x] Scenario-to-research handoff respects the route selected after diagnostic interview.
+- [x] Scenario projects show confirmed interview profile, recommended route and data boundary when entering the shared research workspace.
 - [x] Browser console checked: no errors.
 
 **Follow-up Polish**
