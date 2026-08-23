@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AgentSidebar } from "@/components/agent-sidebar";
+import { LanguageProvider } from "@/components/language-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="zh-CN" data-scroll-behavior="smooth">
-      <body><div className="agentShell"><AgentSidebar /><div className="agentModule">{children}</div></div></body>
+      <body><LanguageProvider><div className="agentShell"><AgentSidebar /><div className="agentModule">{children}</div></div></LanguageProvider></body>
     </html>
   );
 }

@@ -185,7 +185,12 @@ a { color: inherit; text-decoration: none; }
 .agentSidebar footer small { margin-top: 6px; color: #536177; font-size: 8px; }
 .agentMobileNav, .agentNavBackdrop, .agentMobileHead { display: none; }
 .consultingMain { min-width: 0; }
-.consultingTopbar { min-height: 70px; padding: 0 clamp(28px,4vw,64px); display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,.84); border-bottom: 1px solid var(--border); backdrop-filter: blur(14px); }
+.consultingTopbar { min-height: 70px; padding: 0 132px 0 clamp(28px,4vw,64px); display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,.84); border-bottom: 1px solid var(--border); backdrop-filter: blur(14px); }
+.languageSwitcher { position: fixed; z-index: 130; top: 19px; right: 28px; display: inline-flex; align-items: center; gap: 5px; padding: 4px; color: #8a95a6; background: rgba(255,255,255,.94); border: 1px solid var(--border-strong); border-radius: 999px; box-shadow: 0 7px 22px rgba(23,32,51,.07); backdrop-filter: blur(12px); }
+.languageSwitcher button { min-width: 32px; height: 25px; padding: 0 7px; color: #778399; background: transparent; border: 0; border-radius: 999px; font: inherit; font-size: 10px; font-weight: 760; letter-spacing: .04em; cursor: pointer; }
+.languageSwitcher button:hover { color: var(--accent); }
+.languageSwitcher button.active { color: #fff; background: var(--accent); }
+.languageSwitcher span { font-size: 9px; opacity: .55; }
 .consultingTopbar > div span, .consultingTopbar > div strong { display: block; }
 .consultingTopbar > div span { color: var(--accent); font-size: 9px; font-weight: 760; letter-spacing: .14em; }
 .consultingTopbar > div strong { margin-top: 4px; font-size: 13px; }
@@ -195,8 +200,8 @@ a { color: inherit; text-decoration: none; }
 .consultingHero .eyebrow { grid-column: 1 / -1; margin-bottom: 16px; }
 .consultingHero h1 { margin: 0; font-size: var(--page-title-xl); line-height: 1.12; letter-spacing: -.038em; }
 .consultingHero p { max-width: 620px; margin: 0 0 4px; color: var(--muted); font-size: 14px; line-height: 1.8; }
-.scenarioGridNew { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 16px; }
-.consultingScenarioCard { min-height: 312px; padding: 26px; display: flex; flex-direction: column; color: var(--text); text-align: left; background: #fff; border: 1px solid var(--border-strong); border-radius: 14px; box-shadow: 0 8px 24px rgba(23,32,51,.035); cursor: pointer; transition: transform 180ms ease,border-color 180ms ease,box-shadow 180ms ease; }
+.scenarioGridNew { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: clamp(20px,1.4vw,26px); }
+.consultingScenarioCard { min-height: 352px; padding: 28px; display: flex; flex-direction: column; color: var(--text); text-align: left; background: #fff; border: 1px solid var(--border-strong); border-radius: 14px; box-shadow: 0 8px 24px rgba(23,32,51,.035); cursor: pointer; transition: transform 180ms ease,border-color 180ms ease,box-shadow 180ms ease; }
 button.consultingScenarioCard { width: 100%; font: inherit; }
 .consultingScenarioCard:hover { transform: translateY(-3px); border-color: #9bbcc3; box-shadow: 0 15px 34px rgba(23,32,51,.07); }
 .consultingScenarioCard.featured { background: #f2f8f8; border-color: #a9cbd0; }
@@ -204,11 +209,11 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
 .scenarioCardTop > span { color: var(--accent); font-size: 12px; font-weight: 780; }
 .scenarioCardTop em { padding: 4px 7px; color: #69778c; background: #f3f5f7; border-radius: 999px; font-size: 8px; font-style: normal; }
 .consultingScenarioCard.featured .scenarioCardTop em { color: var(--accent); background: #dfeff0; }
-.consultingScenarioCard > small { margin-top: 30px; color: #8792a3; font-size: 9px; font-weight: 730; letter-spacing: .1em; text-transform: uppercase; }
+.consultingScenarioCard > small { margin-top: 36px; color: #8792a3; font-size: 9px; font-weight: 730; letter-spacing: .1em; text-transform: uppercase; }
 .consultingScenarioCard h2 { margin: 7px 0 12px; font-size: 23px; letter-spacing: -.035em; }
 .consultingScenarioCard p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.75; }
-.consultingScenarioCard > div:not(.scenarioCardTop) { margin-top: 18px; padding: 13px 0; color: #68758a; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); font-size: 10px; line-height: 1.55; }
-.consultingScenarioCard > strong { margin-top: auto; padding-top: 18px; color: var(--accent); font-size: 11px; }
+.consultingScenarioCard > div:not(.scenarioCardTop) { margin-top: 24px; padding: 15px 0; color: #68758a; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); font-size: 10px; line-height: 1.55; }
+.consultingScenarioCard > strong { margin-top: auto; padding-top: 22px; color: var(--accent); font-size: 11px; }
 .consultingScenarioCard > strong span { margin-left: 5px; }
 .consultingPrinciple { margin-top: 18px; padding: 17px 22px; display: grid; grid-template-columns: 170px 1fr; gap: 22px; background: #eaf2f3; border: 1px solid #dce9ea; border-radius: 11px; }
 .consultingPrinciple strong { color: var(--accent); font-size: 12px; }
@@ -426,7 +431,7 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
   .agentSidebarOpen { left: 0; }
   .agentMobileHead { display: flex; justify-content: space-between; margin-bottom: 22px; }
   .agentMobileHead button { color: #9fb0c3; background: none; border: 0; }
-  .consultingTopbar { padding-left: 120px; }
+  .consultingTopbar { padding-left: 120px; padding-right: 120px; }
   .goalWorkspace, .interviewWorkspace { grid-template-columns: 1fr; }
   .profileGrid { grid-template-columns: 1fr; }
   .enterpriseFlowHead { display: block; }
@@ -439,7 +444,9 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
   .sensingLayout { grid-template-columns: 1fr; }
 }
 @media (max-width: 600px) {
-  .consultingTopbar { min-height: 66px; padding: 0 14px 0 122px; }
+  .consultingTopbar { min-height: 66px; padding: 0 104px 0 122px; }
+  .consultingTopbar > div, .consultingTopbar nav { display: none; }
+  .languageSwitcher { top: 15px; right: 12px; }
   .consultingTopbar > div span { display: none; }
   .consultingTopbar > div strong { font-size: 10px; }
   .consultingTopbar nav a:first-child { display: none; }
