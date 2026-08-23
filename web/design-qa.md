@@ -44,3 +44,12 @@ reflect the new research-path model requested for the enterprise product.
 **PASSED** — desktop and mobile layouts match the established Trident design
 language, core interactions work, both research paths persist through the API,
 and no blocking visual or runtime defect remains in this migrated slice.
+
+## 2026-08-23 scenario decision layer
+
+- The scenario selector remains a single desktop row with four equal-width, vertically extended cards.
+- Project management remains a separate route; the browser check confirmed the scenario, project, knowledge, sensing, feedback and operations navigation remains linked.
+- Company Scorecard and Action Plan use horizontally scrollable compact review tables instead of large per-item cards.
+- The tables preserve readable labels, current/market/target comparisons, KPIs, risks, stop conditions and reviewer notes at desktop width; narrow screens scroll the table without expanding the overall page width.
+- Both review surfaces use default-accept / explicit-exclude controls and retain a separate confirmation checkbox for the gate.
+- Frontend lint and production build passed; the production route manifest includes both new API proxy routes.

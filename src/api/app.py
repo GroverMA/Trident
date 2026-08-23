@@ -23,6 +23,7 @@ from src.models.research import MarketDefinition
 from src.models.evidence import EvidenceReviewStatus
 from src.models.analysis import AnalysisReviewStatus
 from src.models.future import ForecastReviewStatus
+from src.models.strategy import StrategyReviewStatus
 from src.persistence.factory import create_project_repository
 from src.providers.base import ProviderError
 from src.core.registry import ExtensionRegistry
@@ -39,6 +40,8 @@ from src.services.errors import FutureIntelligenceError
 from src.services.report_generation import ReportGenerationError
 from src.services.evidence_collection import EvidenceCollectionError
 from src.services.reviewer_orchestration import ReviewerPipelineError
+from src.services.company_assessment import CompanyAssessmentError
+from src.services.action_planning import ActionPlanningError
 from src.services.scenario_interview import ScenarioInterviewError, ScenarioInterviewService
 from src.services.research_routing import ScenarioResearchRouter
 from src.state.project import (
@@ -101,6 +104,17 @@ class ProfileReviewRequest(BaseModel):
 class PipelineRequest(BaseModel):
     enterprise: bool | None = None
     background: bool = False
+
+
+class StrategyReviewDecision(BaseModel):
+    item_id: str
+    status: StrategyReviewStatus
+    note: str | None = None
+
+
+class StrategyReviewRequest(BaseModel):
+    decisions: list[StrategyReviewDecision] = Field(default_factory=list)
+    confirm: bool = False
 
 
 class ProjectScopeUpdate(BaseModel):
@@ -722,6 +736,70 @@ def generate_project_general_report(
         raise HTTPException(status_code=503, detail="AI研究服务尚未完成配置") from exc
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/v1/projects/{project_id}/company-scorecard", response_model=ProjectState)
+def generate_project_company_scorecard(project_id: str, research: ResearchApp) -> ProjectState:
+    try:
+        return research.generate_company_scorecard(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ResearchWorkflowError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except CompanyAssessmentError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ConfigurationError as exc:
+        raise HTTPException(status_code=503, detail="AI研究服务尚未完成配置") from exc
+    except ProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.patch("/v1/projects/{project_id}/company-scorecard", response_model=ProjectState)
+def review_project_company_scorecard(
+    project_id: str, payload: StrategyReviewRequest, research: ResearchApp
+) -> ProjectState:
+    try:
+        return research.review_company_scorecard(
+            project_id,
+            decisions=[(item.item_id, item.status, item.note) for item in payload.decisions],
+            confirm=payload.confirm,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except (ResearchWorkflowError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/v1/projects/{project_id}/action-plan", response_model=ProjectState)
+def generate_project_action_plan(project_id: str, research: ResearchApp) -> ProjectState:
+    try:
+        return research.generate_action_plan(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ResearchWorkflowError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ActionPlanningError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ConfigurationError as exc:
+        raise HTTPException(status_code=503, detail="AI研究服务尚未完成配置") from exc
+    except ProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.patch("/v1/projects/{project_id}/action-plan", response_model=ProjectState)
+def review_project_action_plan(
+    project_id: str, payload: StrategyReviewRequest, research: ResearchApp
+) -> ProjectState:
+    try:
+        return research.review_action_plan(
+            project_id,
+            decisions=[(item.item_id, item.status, item.note) for item in payload.decisions],
+            confirm=payload.confirm,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except (ResearchWorkflowError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.post(

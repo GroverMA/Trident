@@ -86,8 +86,11 @@ export function ConsultingWorkspace({ initialScenario }: { initialScenario?: Exc
       const createdResponse = await fetch("/api/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
         project_name: `${targetCompany}-${activeContract?.descriptor.display_name || "决策项目"}`,
         industry, region: "中国", research_objective: objective, time_horizon: "未来3年", output_language: "简体中文",
-        target_company: targetCompany, company_strategy_enabled: scenario === "growth_strategy",
-        company_strategy_objective: scenario === "growth_strategy" ? `${growthType}：${objective}` : undefined,
+        target_company: targetCompany, company_strategy_enabled: true,
+        company_strategy_objective:
+          scenario === "growth_strategy"
+            ? `${growthType}：${objective}`
+            : `${scenario === "pe" ? "PE投资判断" : "VC投资判断"}：${objective}`,
         decision_context: objective, research_path: "research_build_first", research_mode: "general_research",
         workspace_mode: "analyst_workspace", scenario_pack: scenario, scenario_pack_version: activeContract?.manifest.version || "1.0.0",
       }) });
