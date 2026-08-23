@@ -245,6 +245,11 @@ def generate_enterprise_decision_report(project: ProjectState) -> EnterpriseDeci
     scorecard = project.company_scorecard_artifact
     action_plan = project.action_plan_artifact
     assert general and scorecard and action_plan
+    scenario_copy = {
+        "growth_strategy": ("企业增长决策报告", "企业增长目标", "企业增长决策支持"),
+        "pe": ("PE 投资决策与价值创造报告", "投资与价值创造目标", "PE 投资决策支持"),
+        "vc": ("VC 投资判断与里程碑报告", "投资假设与里程碑目标", "VC 投资决策支持"),
+    }.get(project.scenario_pack, ("企业决策版", "企业战略意图", "企业决策支持"))
 
     accepted_dimensions = [
         item for item in scorecard.dimensions
@@ -279,21 +284,21 @@ def generate_enterprise_decision_report(project: ProjectState) -> EnterpriseDeci
     weighted_target_gap = getattr(scorecard, "weighted_strategic_target_gap", None)
     general_body, general_references = _split_general_report(general.markdown)
     lines = [
-        f"# {project.project_name} · 企业战略决策报告",
+        f"# {project.project_name} · {scenario_copy[0]}",
         "",
         _paragraph(
-            f"本报告面向{project.target_company}的战略意图形成行业研究与企业决策支持",
+            f"本报告面向{project.target_company}的决策目标形成行业研究与{scenario_copy[2]}",
             "报告先呈现行业定义、赛道与产业链、市场规模、竞争格局、驱动因素及未来展望，"
             "再结合企业能力形成评分、行动优先级和执行路径",
         ),
         "",
         general_body,
         "",
-        "## 7. 企业战略意图与决策框架",
+        f"## 7. {scenario_copy[1]}与决策框架",
         "",
         _paragraph(
             f"目标企业为{project.target_company}",
-            f"企业战略意图为{project.company_strategy_objective}",
+            f"{scenario_copy[1]}为{project.company_strategy_objective}",
             f"公司综合得分为{weighted_score}，已评分权重覆盖率为{scorecard.scored_weight:.0%}",
             (
                 f"市场基准综合得分为{weighted_benchmark_score:.1f}分，"
@@ -418,7 +423,7 @@ def generate_enterprise_decision_report(project: ProjectState) -> EnterpriseDeci
     )
     markdown = sanitize_formal_report("\n".join(lines))
     return EnterpriseDecisionReportArtifact(
-        title=f"{project.project_name} · 企业决策版",
+        title=f"{project.project_name} · {scenario_copy[0]}",
         general_report_id=general.report_id,
         scorecard_id=scorecard.artifact_id,
         action_plan_id=action_plan.artifact_id,

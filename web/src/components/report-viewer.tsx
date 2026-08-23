@@ -77,7 +77,8 @@ function MarkdownReport({ markdown, title }: { markdown: string; title: string }
 }
 
 export function ReportViewer({ project }: { project: ProjectSummary }) {
-  const report = project.general_report_artifact!;
+  const enterpriseReport = project.company_strategy_enabled ? project.enterprise_decision_report_artifact : null;
+  const report = enterpriseReport || project.general_report_artifact!;
   const storageKey = `trident-report-style-${project.project_id}`;
   const [font, setFont] = useState<FontChoice>("sans");
   const [headingColor, setHeadingColor] = useState("#172033");
@@ -132,8 +133,8 @@ export function ReportViewer({ project }: { project: ProjectSummary }) {
       <label><span>页面宽度</span><select value={pageWidth} onChange={(event) => setPageWidth(event.target.value as PageWidth)}><option value="focused">专注</option><option value="standard">标准</option><option value="wide">宽屏</option></select></label>
     </section>}
     <article className={`reportDocument reportWidth-${pageWidth}`} style={style}>
-      <div className="reportMasthead"><span>GENERAL REPORT</span><h1>{report.title}</h1><p>{report.source_count} 个来源 · {report.accepted_finding_ids.length} 项行业判断 · {report.accepted_trend_ids.length} 项趋势 · {new Date(report.generated_at).toLocaleDateString("zh-CN")}</p></div>
-      {report.unresolved_prompt_questions.length > 0 && <aside className="reportUnresolved"><h2>仍未完全回答的问题</h2><ul>{report.unresolved_prompt_questions.map((item) => <li key={item}>{item}</li>)}</ul></aside>}
+      <div className="reportMasthead"><span>{enterpriseReport ? "SCENARIO DECISION REPORT" : "GENERAL REPORT"}</span><h1>{report.title}</h1><p>{enterpriseReport ? `${project.target_company || project.industry} · Scorecard + Action Plan · ` : `${project.general_report_artifact!.source_count} 个来源 · ${project.general_report_artifact!.accepted_finding_ids.length} 项行业判断 · ${project.general_report_artifact!.accepted_trend_ids.length} 项趋势 · `}{new Date(report.generated_at).toLocaleDateString("zh-CN")}</p></div>
+      {!enterpriseReport && project.general_report_artifact!.unresolved_prompt_questions.length > 0 && <aside className="reportUnresolved"><h2>仍未完全回答的问题</h2><ul>{project.general_report_artifact!.unresolved_prompt_questions.map((item) => <li key={item}>{item}</li>)}</ul></aside>}
       <div className="reportContent"><MarkdownReport markdown={report.markdown} title={report.title} /></div>
     </article>
   </main>;
