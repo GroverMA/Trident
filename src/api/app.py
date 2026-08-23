@@ -26,6 +26,7 @@ from src.models.future import ForecastReviewStatus
 from src.persistence.factory import create_project_repository
 from src.providers.base import ProviderError
 from src.core.registry import ExtensionRegistry
+from src.integrations import builtin_integration_surfaces
 from src.scenarios import (
     ScenarioContractError,
     ScenarioInputError,
@@ -319,7 +320,7 @@ def capabilities() -> dict:
         "evaluators": ExtensionRegistry(),
     }
     return {
-        "delivery_channels": ["streamlit-compatibility", "fastapi"],
+        "delivery_channels": ["streamlit-compatibility", "fastapi", "external-integration-contract"],
         "research_paths": ["research-build-first", "report-review-first"],
         "services": [
             "research-planning",
@@ -329,6 +330,9 @@ def capabilities() -> dict:
             "report-generation",
             "company-scorecard",
             "action-plan",
+        ],
+        "integration_surfaces": [
+            surface.as_dict() for surface in builtin_integration_surfaces()
         ],
         "extensions": {
             name: [
