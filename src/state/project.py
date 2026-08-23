@@ -12,7 +12,11 @@ from src.models.analysis import IndustryAnalysisArtifact
 from src.models.enterprise import EnterpriseSensingArtifact
 from src.models.evidence import EvidenceCollectionArtifact
 from src.models.future import FutureIntelligenceArtifact
-from src.models.feedback import ActionFeedbackArtifact
+from src.models.feedback import (
+    ActionFeedbackArtifact,
+    EnterpriseTimelineEvent,
+    PlanRevisionArtifact,
+)
 from src.models.interview import EntityProfileArtifact, ScenarioInterviewArtifact
 from src.models.report import GeneralReportArtifact
 from src.models.revision import ContentRevisionArtifact
@@ -115,6 +119,11 @@ class ProjectState(BaseModel):
     action_plan_artifact: ActionPlanArtifact | None = None
     enterprise_decision_report_artifact: EnterpriseDecisionReportArtifact | None = None
     action_feedback_artifact: ActionFeedbackArtifact | None = None
+    action_feedback_history: list[ActionFeedbackArtifact] = Field(default_factory=list)
+    plan_revision_artifact: PlanRevisionArtifact | None = None
+    plan_revision_history: list[PlanRevisionArtifact] = Field(default_factory=list)
+    action_plan_history: list[ActionPlanArtifact] = Field(default_factory=list)
+    enterprise_timeline_events: list[EnterpriseTimelineEvent] = Field(default_factory=list)
     content_revision_artifact: ContentRevisionArtifact | None = None
     current_step: str = "research_brief"
     workflow_status: dict[str, WorkflowStatus] = Field(default_factory=default_workflow)
@@ -197,6 +206,7 @@ def rewind_to_previous_review_gate(
         "action_plan_artifact": None,
         "enterprise_decision_report_artifact": None,
         "action_feedback_artifact": None,
+        "plan_revision_artifact": None,
         "content_revision_artifact": None,
     }
     if project.general_report_artifact is not None or (
