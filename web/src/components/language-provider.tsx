@@ -216,7 +216,17 @@ const translations: Record<string, string> = {
   "确认画像并选择研究通路": "Confirm profile and select research route",
   "正在选择研究通路…": "Selecting research route…",
   "在项目管理中查看": "View in Project Management",
-  "按推荐通路进入研究内核": "Enter Research Core via recommended route"
+  "按推荐通路进入研究内核": "Enter Research Core via recommended route",
+  "场景研究上下文": "Scenario research context",
+  "诊断访谈已作为研究约束进入共用行业研究底座；场景资料、判断与输出仍按项目独立保存。": "The diagnostic interview now constrains the shared industry research core, while scenario evidence, judgments and outputs remain isolated by project.",
+  "已确认诊断画像": "Confirmed diagnostic profile",
+  "推荐研究通路": "Recommended research route",
+  "数据边界": "Data boundary",
+  "经营企业": "Operating company",
+  "成熟企业标的": "Mature-company target",
+  "创业企业标的": "Venture target",
+  "当前项目": "Current project",
+  "仅引用本项目及已授权的长期记忆资产": "Uses only this project and authorized long-term memory assets"
 };
 
 const attributeNames = ["placeholder", "aria-label", "title"] as const;

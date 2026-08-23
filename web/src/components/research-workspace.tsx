@@ -49,6 +49,18 @@ const REVIEW_STEPS: WorkflowStep[] = [
   { key: "future_intelligence", label: "趋势逻辑", description: "复核预测、情景与关键假设" },
 ];
 
+const SCENARIO_LABELS: Record<string, string> = {
+  growth_strategy: "企业增长决策",
+  pe: "PE 投资分析",
+  vc: "VC 投资分析",
+};
+
+const SUBJECT_LABELS: Record<string, string> = {
+  operating_company: "经营企业",
+  mature_target: "成熟企业标的",
+  venture_target: "创业企业标的",
+};
+
 function stepsFor(project: ProjectSummary): WorkflowStep[] {
   const base = project.research_path === "report_review_first" ? REVIEW_STEPS : BUILD_STEPS;
   if (!project.company_strategy_enabled) return base;
@@ -619,6 +631,10 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
   const completed = reviewFirst
     ? steps.filter((step) => project.workflow_status[step.key] === "completed").length
     : BUILD_STEPS.filter((step) => buildStepDone[step.key]).length;
+  const scenarioLabel = SCENARIO_LABELS[project.scenario_pack || ""];
+  const route = project.research_route_artifact;
+  const profile = project.entity_profile_artifact;
+  const subjectType = String(route?.data_scope.subject_type || "");
 
   return (
     <main className="workflowCanvas">
@@ -629,6 +645,19 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
         <p>通用报告与高级分析师模式可以相互切换，且已经完成的研究部分不会丢失</p>
       </header>
       <div className="workspaceMode"><span>工作模式</span><div><button className="active" type="button">快速通用报告</button><button type="button">高级分析师工作台</button></div><p>快速通用报告：依次确认市场口径、网页证据和报告内容，其他步骤自动衔接。</p></div>
+
+      {scenarioLabel && route && profile && (
+        <section className="scenarioResearchContext" aria-label="场景研究上下文">
+          <div className="scenarioContextLead">
+            <span className="eyebrow">SCENARIO → RESEARCH CORE</span>
+            <strong>{scenarioLabel}</strong>
+            <p>诊断访谈已作为研究约束进入共用行业研究底座；场景资料、判断与输出仍按项目独立保存。</p>
+          </div>
+          <div><span>已确认诊断画像</span><strong>{profile.entity_name}</strong><small>{profile.research_next_step}</small></div>
+          <div><span>推荐研究通路</span><strong>{route.mode_label}</strong><small>{route.rationale.join(" ")}</small></div>
+          <div><span>数据边界</span><strong>{SUBJECT_LABELS[subjectType] || subjectType || "当前项目"}</strong><small>仅引用本项目及已授权的长期记忆资产</small></div>
+        </section>
+      )}
 
       <section className="workflowSection" aria-label="研究进度">
         <div className="workflowSummary">
