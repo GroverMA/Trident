@@ -35,6 +35,9 @@ from src.services.action_planning import (
     confirm_action_plan,
     review_action,
 )
+from src.services.action_feedback import submit_action_feedback
+from src.services.strategy_report import generate_enterprise_decision_report
+from src.scenarios import builtin_scenario_packs
 
 
 class ProjectNotFoundError(LookupError):
@@ -170,6 +173,7 @@ class ResearchApplication:
                     "company_scorecard_artifact": None,
                     "action_plan_artifact": None,
                     "enterprise_decision_report_artifact": None,
+                    "action_feedback_artifact": None,
                     "content_revision_artifact": None,
                     "execution_authorized_at": None,
                     "market_scope_confirmed_at": None,
@@ -677,10 +681,60 @@ class ResearchApplication:
         statuses = dict(project.workflow_status)
         statuses["human_review"] = WorkflowStatus.COMPLETED
         statuses["decision_report"] = WorkflowStatus.COMPLETED
-        return self.projects.save(self._append_telemetry(project, telemetry).model_copy(update={
+        updated = self._append_telemetry(project, telemetry).model_copy(update={
             "general_report_artifact": report,
             "workflow_status": statuses,
             "current_step": "decision_report",
+            "updated_at": datetime.now(UTC),
+        })
+        if (
+            updated.company_strategy_enabled
+            and updated.company_scorecard_artifact is not None
+            and updated.company_scorecard_artifact.human_confirmed
+            and updated.action_plan_artifact is not None
+            and updated.action_plan_artifact.human_confirmed
+        ):
+            updated = updated.model_copy(update={
+                "enterprise_decision_report_artifact": generate_enterprise_decision_report(updated),
+            })
+        return self.projects.save(updated)
+
+    def submit_action_feedback(
+        self,
+        project_id: str,
+        *,
+        action_id: str,
+        progress_pct: int,
+        outcome_metrics: str = "",
+        blockers: str = "",
+        evidence_refs: list[str] | None = None,
+        scenario_fields: Mapping[str, str] | None = None,
+    ) -> ProjectState:
+        """Persist one versioned feedback event using the active scenario contract."""
+
+        project = self.get_project(project_id)
+        packs = {
+            item.descriptor.extension_id: item
+            for item in builtin_scenario_packs()
+        }
+        pack = packs.get(project.scenario_pack)
+        if pack is None or pack.descriptor.version != project.scenario_pack_version:
+            raise ResearchWorkflowError("项目引用的场景包不可用")
+        try:
+            artifact = submit_action_feedback(
+                project,
+                pack.feedback_policy(),
+                action_id=action_id,
+                progress_pct=progress_pct,
+                outcome_metrics=outcome_metrics,
+                blockers=blockers,
+                evidence_refs=evidence_refs,
+                scenario_fields=scenario_fields,
+            )
+        except ValueError as exc:
+            raise ResearchWorkflowError(str(exc)) from exc
+        return self.projects.save(project.model_copy(update={
+            "action_feedback_artifact": artifact,
             "updated_at": datetime.now(UTC),
         }))
 
@@ -698,6 +752,7 @@ class ResearchApplication:
             "company_scorecard_artifact": artifact,
             "action_plan_artifact": None,
             "enterprise_decision_report_artifact": None,
+            "action_feedback_artifact": None,
             "workflow_status": statuses,
             "current_step": "company_assessment",
             "updated_at": datetime.now(UTC),
@@ -739,6 +794,7 @@ class ResearchApplication:
             "company_scorecard_artifact": reviewed,
             "action_plan_artifact": None,
             "enterprise_decision_report_artifact": None,
+            "action_feedback_artifact": None,
             "workflow_status": statuses,
             "current_step": "action_plan" if confirm else "company_assessment",
             "updated_at": datetime.now(UTC),
@@ -756,6 +812,7 @@ class ResearchApplication:
         return self.projects.save(self._append_telemetry(project, telemetry).model_copy(update={
             "action_plan_artifact": artifact,
             "enterprise_decision_report_artifact": None,
+            "action_feedback_artifact": None,
             "workflow_status": statuses,
             "current_step": "action_plan",
             "updated_at": datetime.now(UTC),
@@ -794,6 +851,7 @@ class ResearchApplication:
         return self.projects.save(project.model_copy(update={
             "action_plan_artifact": reviewed,
             "enterprise_decision_report_artifact": None,
+            "action_feedback_artifact": None,
             "workflow_status": statuses,
             "current_step": "human_review" if confirm else "action_plan",
             "updated_at": datetime.now(UTC),

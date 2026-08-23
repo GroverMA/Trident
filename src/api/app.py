@@ -117,6 +117,15 @@ class StrategyReviewRequest(BaseModel):
     confirm: bool = False
 
 
+class ActionFeedbackRequest(BaseModel):
+    action_id: str = Field(min_length=1)
+    progress_pct: int = Field(ge=0, le=100)
+    outcome_metrics: str = ""
+    blockers: str = ""
+    evidence_refs: list[str] = Field(default_factory=list)
+    scenario_fields: dict[str, str] = Field(default_factory=dict)
+
+
 class ProjectScopeUpdate(BaseModel):
     """Editable scope fields shared by both research presentation paths."""
 
@@ -784,6 +793,26 @@ def generate_project_action_plan(project_id: str, research: ResearchApp) -> Proj
         raise HTTPException(status_code=503, detail="AI研究服务尚未完成配置") from exc
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/v1/projects/{project_id}/action-feedback", response_model=ProjectState)
+def submit_project_action_feedback(
+    project_id: str, payload: ActionFeedbackRequest, research: ResearchApp
+) -> ProjectState:
+    try:
+        return research.submit_action_feedback(
+            project_id,
+            action_id=payload.action_id,
+            progress_pct=payload.progress_pct,
+            outcome_metrics=payload.outcome_metrics,
+            blockers=payload.blockers,
+            evidence_refs=payload.evidence_refs,
+            scenario_fields=payload.scenario_fields,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ResearchWorkflowError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.patch("/v1/projects/{project_id}/action-plan", response_model=ProjectState)

@@ -305,6 +305,37 @@ export interface ActionPlanArtifact {
   human_confirmed: boolean;
 }
 
+export interface EnterpriseDecisionReportArtifact {
+  report_id: string;
+  title: string;
+  general_report_id: string;
+  scorecard_id: string;
+  action_plan_id: string;
+  markdown: string;
+  generated_at: string;
+}
+
+export interface ActionFeedbackEntry {
+  entry_id: string;
+  action_id: string;
+  progress_pct: number;
+  outcome_metrics: string;
+  blockers: string;
+  evidence_refs: string[];
+  scenario_fields: Record<string, string>;
+  submitted_at: string;
+}
+
+export interface ActionFeedbackArtifact {
+  artifact_id: string;
+  project_id: string;
+  scenario_id: string;
+  action_plan_id: string;
+  entries: ActionFeedbackEntry[];
+  version: number;
+  updated_at: string;
+}
+
 export interface ProjectSummary {
   project_id: string;
   project_name: string;
@@ -333,6 +364,8 @@ export interface ProjectSummary {
   general_report_artifact?: GeneralReportArtifact | null;
   company_scorecard_artifact?: CompanyScorecardArtifact | null;
   action_plan_artifact?: ActionPlanArtifact | null;
+  enterprise_decision_report_artifact?: EnterpriseDecisionReportArtifact | null;
+  action_feedback_artifact?: ActionFeedbackArtifact | null;
   interview_session_artifact?: {
     artifact_id: string;
     status: "in_progress" | "ready_for_profile" | "completed";
