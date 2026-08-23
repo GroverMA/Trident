@@ -250,6 +250,61 @@ export interface GeneralReportArtifact {
   generated_at: string;
 }
 
+export interface CompanyScoreDimension {
+  dimension_id: string;
+  title: string;
+  weight: number;
+  score: number | null;
+  benchmark_score: number | null;
+  strategic_target_score: number | null;
+  market_position_label: string;
+  strategic_gap: string;
+  core_metrics: string[];
+  confidence: number;
+  uncertainty: string;
+  review_status: "needs_review" | "accepted" | "rejected";
+  reviewer_note?: string | null;
+}
+
+export interface CompanyScorecardArtifact {
+  artifact_id: string;
+  dimensions: CompanyScoreDimension[];
+  weighted_score: number | null;
+  weighted_benchmark_score: number | null;
+  weighted_strategic_target_score: number | null;
+  overall_assessment: string;
+  strategic_advantages: string[];
+  critical_gaps: string[];
+  cross_dimension_risks: string[];
+  human_confirmed: boolean;
+}
+
+export interface StrategicAction {
+  action_id: string;
+  title: string;
+  rationale: string;
+  priority: "critical" | "high" | "medium" | "low";
+  owner_role: string;
+  timing: string;
+  resources: string[];
+  kpis: Array<{ name: string; kpi_type: "leading" | "outcome"; target: string; timing: string }>;
+  risks: string[];
+  stop_conditions: string[];
+  confidence: number;
+  uncertainty: string;
+  review_status: "needs_review" | "accepted" | "rejected";
+  reviewer_note?: string | null;
+}
+
+export interface ActionPlanArtifact {
+  artifact_id: string;
+  actions: StrategicAction[];
+  sequencing_logic: string[];
+  rejected_options: string[];
+  portfolio_risks: string[];
+  human_confirmed: boolean;
+}
+
 export interface ProjectSummary {
   project_id: string;
   project_name: string;
@@ -276,6 +331,8 @@ export interface ProjectSummary {
   industry_analysis_artifact?: IndustryAnalysisArtifact | null;
   future_intelligence_artifact?: FutureIntelligenceArtifact | null;
   general_report_artifact?: GeneralReportArtifact | null;
+  company_scorecard_artifact?: CompanyScorecardArtifact | null;
+  action_plan_artifact?: ActionPlanArtifact | null;
   interview_session_artifact?: {
     artifact_id: string;
     status: "in_progress" | "ready_for_profile" | "completed";

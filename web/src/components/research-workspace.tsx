@@ -25,6 +25,12 @@ type ActionState =
   | "future-generate"
   | "future-save"
   | "future-confirm"
+  | "scorecard-generate"
+  | "scorecard-save"
+  | "scorecard-confirm"
+  | "action-plan-generate"
+  | "action-plan-save"
+  | "action-plan-confirm"
   | "report-generate"
   | "report-first-generate"
   | "rewind";
@@ -110,6 +116,18 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
   const [gapAcknowledged, setGapAcknowledged] = useState(false);
   const [analysisChecked, setAnalysisChecked] = useState(false);
   const [futureChecked, setFutureChecked] = useState(false);
+  const [scorecardChecked, setScorecardChecked] = useState(false);
+  const [actionPlanChecked, setActionPlanChecked] = useState(false);
+  const [scorecardSelections, setScorecardSelections] = useState<Record<string, "accepted" | "rejected">>(() =>
+    Object.fromEntries(initialProject.company_scorecard_artifact?.dimensions.map((item) => [
+      item.dimension_id, item.review_status === "rejected" ? "rejected" : "accepted",
+    ]) || []) as Record<string, "accepted" | "rejected">,
+  );
+  const [actionPlanSelections, setActionPlanSelections] = useState<Record<string, "accepted" | "rejected">>(() =>
+    Object.fromEntries(initialProject.action_plan_artifact?.actions.map((item) => [
+      item.action_id, item.review_status === "rejected" ? "rejected" : "accepted",
+    ]) || []) as Record<string, "accepted" | "rejected">,
+  );
   const [gapResolution, setGapResolution] = useState("accept_analyst_handling");
   const [evidenceSelections, setEvidenceSelections] = useState<Record<string, "accepted" | "rejected">>(() =>
     Object.fromEntries(initialProject.evidence_collection_artifact?.task_runs.flatMap((run) =>
@@ -165,6 +183,16 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
         ...artifact.trends.map((item) => [item.trend_id, item.review_status === "rejected" ? "rejected" : "accepted"]),
         ...artifact.scenarios.map((item) => [item.scenario_id, item.review_status === "rejected" ? "rejected" : "accepted"]),
       ]) as Record<string, "accepted" | "rejected">);
+    }
+    if (result.company_scorecard_artifact) {
+      setScorecardSelections(Object.fromEntries(result.company_scorecard_artifact.dimensions.map((item) => [
+        item.dimension_id, item.review_status === "rejected" ? "rejected" : "accepted",
+      ])) as Record<string, "accepted" | "rejected">);
+    }
+    if (result.action_plan_artifact) {
+      setActionPlanSelections(Object.fromEntries(result.action_plan_artifact.actions.map((item) => [
+        item.action_id, item.review_status === "rejected" ? "rejected" : "accepted",
+      ])) as Record<string, "accepted" | "rejected">);
     }
     setMessage(success);
     setError("");
@@ -522,6 +550,64 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
     } finally { setAction(null); }
   }
 
+  async function generateScorecard() {
+    setAction("scorecard-generate"); setMessage(""); setError("");
+    try {
+      const result = await requestProject(`/api/projects/${project.project_id}/company-scorecard`, "POST");
+      acceptProject(result, "场景化 Company Scorecard 已生成，请重点审核差距、阈值和证据置信度。");
+      setScorecardChecked(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Company Scorecard 暂时未能生成。");
+    } finally { setAction(null); }
+  }
+
+  async function reviewScorecard(form: HTMLFormElement, confirm: boolean) {
+    const artifact = project.company_scorecard_artifact;
+    if (!artifact) return;
+    setAction(confirm ? "scorecard-confirm" : "scorecard-save"); setMessage(""); setError("");
+    const data = new FormData(form);
+    const decisions = artifact.dimensions.map((item) => ({
+      item_id: item.dimension_id,
+      status: scorecardSelections[item.dimension_id] || "accepted",
+      note: String(data.get(`scorecard_note_${item.dimension_id}`) || "").trim() || null,
+    }));
+    try {
+      const result = await requestProject(`/api/projects/${project.project_id}/company-scorecard`, "PATCH", { decisions, confirm });
+      acceptProject(result, confirm ? "Company Scorecard 已确认，Action Plan 节点已经开放。" : "评分审核决定已经保存。");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Company Scorecard 审核未能保存。");
+    } finally { setAction(null); }
+  }
+
+  async function generateActionPlan() {
+    setAction("action-plan-generate"); setMessage(""); setError("");
+    try {
+      const result = await requestProject(`/api/projects/${project.project_id}/action-plan`, "POST");
+      acceptProject(result, "场景化 Action Plan 已生成，请审核负责人、指标、风险和停止条件。");
+      setActionPlanChecked(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Action Plan 暂时未能生成。");
+    } finally { setAction(null); }
+  }
+
+  async function reviewActionPlan(form: HTMLFormElement, confirm: boolean) {
+    const artifact = project.action_plan_artifact;
+    if (!artifact) return;
+    setAction(confirm ? "action-plan-confirm" : "action-plan-save"); setMessage(""); setError("");
+    const data = new FormData(form);
+    const decisions = artifact.actions.map((item) => ({
+      item_id: item.action_id,
+      status: actionPlanSelections[item.action_id] || "accepted",
+      note: String(data.get(`action_note_${item.action_id}`) || "").trim() || null,
+    }));
+    try {
+      const result = await requestProject(`/api/projects/${project.project_id}/action-plan`, "PATCH", { decisions, confirm });
+      acceptProject(result, confirm ? "Action Plan 已确认，可以生成报告并进入执行反馈。" : "行动审核决定已经保存。");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Action Plan 审核未能保存。");
+    } finally { setAction(null); }
+  }
+
   async function generateGeneralReport() {
     setAction("report-generate"); setMessage(""); setError("");
     try {
@@ -590,6 +676,8 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
   const analysis = project.industry_analysis_artifact;
   const future = project.future_intelligence_artifact;
   const report = project.general_report_artifact;
+  const scorecard = project.company_scorecard_artifact;
+  const actionPlan = project.action_plan_artifact;
   const analysisFindings = analysis?.modules.flatMap((module) => module.findings) || [];
   const evidenceAdvisories = plan && evidence ? plan.tasks.flatMap((task) => {
     const run = evidence.task_runs.find((item) => item.task_id === task.task_id);
@@ -1074,7 +1162,47 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
         </section>
       )}
 
-      {!reviewFirst && future?.human_confirmed && !report && (
+      {!reviewFirst && project.company_strategy_enabled && future?.human_confirmed && !scorecard && (
+        <section className="artifactPanel artifactStart">
+          <span className="eyebrow">SCENARIO DECISION LAYER</span>
+          <h2>把行业结论映射为场景化 Company Scorecard</h2>
+          <p>系统将同时使用已确认的行业证据、未来情景和企业/标的一手信息；评分维度由 {scenarioLabel || "当前场景"} 场景包定义。</p>
+          {message && <div className="formSuccess" role="status">{message}</div>}{error && <div className="formError" role="alert">{error}</div>}
+          <button className="primaryButton artifactPrimary" type="button" disabled={action !== null} onClick={() => void generateScorecard()}>{action === "scorecard-generate" ? "AI 正在形成场景化评分…" : "生成 Company Scorecard"}</button>
+        </section>
+      )}
+
+      {!reviewFirst && scorecard && (
+        <section className="artifactPanel">
+          <div className="artifactHeading"><div><span className="eyebrow">COMPANY SCORECARD</span><h2>{scorecard.human_confirmed ? "场景适配与能力差距已经确认" : "审核场景评分、市场基准与战略阈值"}</h2><p>{scorecard.overall_assessment}</p></div><span className={scorecard.human_confirmed ? "confirmedLabel" : "reviewRequired"}>{scorecard.human_confirmed ? "已确认" : "人工确认"}</span></div>
+          <div className="planStats"><div><span>当前综合得分</span><strong>{scorecard.weighted_score ?? "—"}</strong></div><div><span>市场平均</span><strong>{scorecard.weighted_benchmark_score ?? "—"}</strong></div><div><span>战略要求</span><strong>{scorecard.weighted_strategic_target_score ?? "—"}</strong></div><div><span>评分维度</span><strong>{scorecard.dimensions.length}</strong></div></div>
+          <form onSubmit={(event) => { event.preventDefault(); if (scorecardChecked) void reviewScorecard(event.currentTarget, true); }}>
+            <div className="evidenceTableWrap strategyReviewTable"><table className="evidenceTable"><thead><tr><th>采用</th><th>评分维度</th><th>当前</th><th>市场平均</th><th>战略阈值</th><th>关键差距与指标</th><th>置信度</th><th>审核备注</th></tr></thead><tbody>{scorecard.dimensions.map((item) => <tr key={item.dimension_id} className={scorecardSelections[item.dimension_id] === "rejected" ? "evidenceRejectedRow" : ""}><td>{scorecard.human_confirmed ? (item.review_status === "accepted" ? "采用" : "排除") : <select aria-label={`${item.title} 审核决定`} value={scorecardSelections[item.dimension_id] || "accepted"} onChange={(event) => setScorecardSelections((current) => ({ ...current, [item.dimension_id]: event.target.value as "accepted" | "rejected" }))}><option value="accepted">采用</option><option value="rejected">排除</option></select>}</td><td><strong>{item.title}</strong><small className="tableSubline">{item.market_position_label}</small></td><td>{item.score ?? "—"}</td><td>{item.benchmark_score ?? "—"}</td><td>{item.strategic_target_score ?? "—"}</td><td>{item.strategic_gap}<small className="tableSubline">{item.core_metrics.join(" · ")}</small></td><td>{item.confidence}%</td><td>{scorecard.human_confirmed ? item.reviewer_note || "—" : <input name={`scorecard_note_${item.dimension_id}`} defaultValue={item.reviewer_note || ""} placeholder="可选" />}</td></tr>)}</tbody></table></div>
+            {!scorecard.human_confirmed && <><div className="nextStageNotice"><strong>默认采用未明确排除的评分维度</strong><span>无需逐项重复确认；只需排除不适合本次决策的判断。</span></div><label className="gateConfirmation requiredConfirmation"><input type="checkbox" checked={scorecardChecked} onChange={(event) => setScorecardChecked(event.target.checked)} /><span>我已重点核对关键差距、证据边界和战略要求分（必选）</span></label><div className="scopeActions"><button type="button" className="secondaryButton" disabled={action !== null} onClick={(event) => { const form = event.currentTarget.form; if (form) void reviewScorecard(form, false); }}>{action === "scorecard-save" ? "正在保存…" : "保存排除项"}</button><button type="submit" className="primaryButton" disabled={action !== null || !scorecardChecked}>{action === "scorecard-confirm" ? "正在确认…" : "确认 Scorecard 并进入 Action Plan"}</button></div></>}
+          </form>
+        </section>
+      )}
+
+      {!reviewFirst && scorecard?.human_confirmed && !actionPlan && (
+        <section className="artifactPanel artifactStart">
+          <span className="eyebrow">ACTION DESIGN</span><h2>将优先差距转化为可执行 Action Plan</h2><p>每项行动必须包含负责人、领先与结果指标、资源、风险和明确停止或转向条件；未来战略 Skill 可通过场景插件契约替换排序方法。</p>
+          {message && <div className="formSuccess" role="status">{message}</div>}{error && <div className="formError" role="alert">{error}</div>}
+          <button className="primaryButton artifactPrimary" type="button" disabled={action !== null} onClick={() => void generateActionPlan()}>{action === "action-plan-generate" ? "AI 正在设计行动组合…" : "生成 Action Plan"}</button>
+        </section>
+      )}
+
+      {!reviewFirst && actionPlan && (
+        <section className="artifactPanel">
+          <div className="artifactHeading"><div><span className="eyebrow">ACTION PLAN</span><h2>{actionPlan.human_confirmed ? "行动组合已经确认" : "审核行动优先级、衡量方式和停止条件"}</h2><p>{actionPlan.sequencing_logic.join("；")}</p></div><span className={actionPlan.human_confirmed ? "confirmedLabel" : "reviewRequired"}>{actionPlan.human_confirmed ? "已确认" : "人工确认"}</span></div>
+          <form onSubmit={(event) => { event.preventDefault(); if (actionPlanChecked) void reviewActionPlan(event.currentTarget, true); }}>
+            <div className="evidenceTableWrap strategyReviewTable"><table className="evidenceTable"><thead><tr><th>采用</th><th>行动</th><th>优先级/负责人</th><th>领先与结果指标</th><th>风险与停止条件</th><th>置信度</th><th>审核备注</th></tr></thead><tbody>{actionPlan.actions.map((item) => <tr key={item.action_id} className={actionPlanSelections[item.action_id] === "rejected" ? "evidenceRejectedRow" : ""}><td>{actionPlan.human_confirmed ? (item.review_status === "accepted" ? "采用" : "排除") : <select aria-label={`${item.title} 审核决定`} value={actionPlanSelections[item.action_id] || "accepted"} onChange={(event) => setActionPlanSelections((current) => ({ ...current, [item.action_id]: event.target.value as "accepted" | "rejected" }))}><option value="accepted">采用</option><option value="rejected">排除</option></select>}</td><td><strong>{item.title}</strong><small className="tableSubline">{item.rationale}</small></td><td>{item.priority} · {item.owner_role}<small className="tableSubline">{item.timing}</small></td><td>{item.kpis.map((kpi) => <span className="tableSubline" key={`${item.action_id}-${kpi.name}`}>{kpi.kpi_type === "leading" ? "领先" : "结果"}：{kpi.name} → {kpi.target}</span>)}</td><td>{item.risks.join("；")}<small className="tableSubline">停止/转向：{item.stop_conditions.join("；")}</small></td><td>{item.confidence}%</td><td>{actionPlan.human_confirmed ? item.reviewer_note || "—" : <input name={`action_note_${item.action_id}`} defaultValue={item.reviewer_note || ""} placeholder="可选" />}</td></tr>)}</tbody></table></div>
+            {!actionPlan.human_confirmed && <><div className="nextStageNotice"><strong>默认采用未明确排除的行动</strong><span>确认后进入报告和执行反馈；后续实际进展会反向更新计划与企业知识库。</span></div><label className="gateConfirmation requiredConfirmation"><input type="checkbox" checked={actionPlanChecked} onChange={(event) => setActionPlanChecked(event.target.checked)} /><span>我已核对负责人、指标、资源、风险和停止条件（必选）</span></label><div className="scopeActions"><button type="button" className="secondaryButton" disabled={action !== null} onClick={(event) => { const form = event.currentTarget.form; if (form) void reviewActionPlan(form, false); }}>{action === "action-plan-save" ? "正在保存…" : "保存排除项"}</button><button type="submit" className="primaryButton" disabled={action !== null || !actionPlanChecked}>{action === "action-plan-confirm" ? "正在确认…" : "确认 Action Plan"}</button></div></>}
+            {actionPlan.human_confirmed && <div className="scopeActions strategyCompletionActions"><Link className="secondaryButton linkButton" href="/feedback">进入执行反馈与动态调整</Link></div>}
+          </form>
+        </section>
+      )}
+
+      {!reviewFirst && future?.human_confirmed && (!project.company_strategy_enabled || actionPlan?.human_confirmed) && !report && (
         <section className="artifactPanel artifactStart">
           <span className="eyebrow">GATE 2 · CONTENT</span><h2>确认内容并生成 General Report</h2>
           <p>行业判断、趋势和情景已经完成内容选择。报告只组合已批准材料，生成失败不会清除任何审核结果，可以安全重试。</p>

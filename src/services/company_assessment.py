@@ -72,6 +72,14 @@ DEFAULT_CORE_METRICS: dict[str, list[str]] = {
     "route_to_market": ["目标客户覆盖率", "渠道产出", "报价至成交转化率"],
     "resource_gap": ["关键资源到位率", "能力缺口关闭率", "预算兑现率"],
     "risk_and_reversibility": ["关键假设验证率", "止损触发率", "可逆投入占比"],
+    "market_timing": ["目标市场增速", "需求触发事件", "市场窗口剩余周期"],
+    "founder_team": ["关键岗位完整度", "核心团队稳定性", "里程碑兑现率"],
+    "technology_moat": ["关键技术验证率", "性能领先周期", "知识产权与复现门槛"],
+    "product_market_evidence": ["付费客户数", "客户留存率", "使用频次与扩张率"],
+    "business_model": ["毛利率", "获客成本回收期", "净收入留存率"],
+    "milestone_feasibility": ["里程碑按期率", "验证任务完成率", "关键依赖关闭率"],
+    "financing_runway": ["现金可支撑月数", "月度净消耗", "下一轮融资触发条件完成率"],
+    "downside_risk": ["关键假设验证率", "止损条件触发数", "可逆投入比例"],
 }
 
 SCENARIO_DIMENSION_TITLES = {
@@ -83,6 +91,14 @@ SCENARIO_DIMENSION_TITLES = {
     "organization_execution": "组织资源与执行能力",
     "resource_gap": "资源与能力缺口",
     "risk_and_reversibility": "风险、验证成本与可逆性",
+    "market_timing": "市场时点与窗口",
+    "founder_team": "创始团队与组织能力",
+    "technology_moat": "技术壁垒与可防御性",
+    "product_market_evidence": "产品市场验证证据",
+    "business_model": "商业模式与单位经济性",
+    "milestone_feasibility": "关键里程碑可实现性",
+    "financing_runway": "融资需求与现金跑道",
+    "downside_risk": "下行情景与可逆性",
 }
 
 

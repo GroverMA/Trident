@@ -9,6 +9,7 @@ from src.core.container import ServiceContainer
 from src.models.evidence import EvidenceReviewStatus
 from src.models.analysis import AnalysisReviewStatus
 from src.models.future import ForecastReviewStatus
+from src.models.strategy import StrategyReviewStatus
 from src.models.research import MarketDefinition, ResearchBriefArtifact
 from src.observability.telemetry import StepRunTelemetry, finish_span, start_span
 from src.persistence.projects import ProjectRepository
@@ -24,6 +25,16 @@ from src.services.industry_analysis import (
     review_analysis_finding,
 )
 from src.services.future_intelligence import forecast_gate_reasons, review_forecast_item
+from src.services.company_assessment import (
+    confirm_scorecard,
+    review_score_dimension,
+    scorecard_gate_reasons,
+)
+from src.services.action_planning import (
+    action_plan_gate_reasons,
+    confirm_action_plan,
+    review_action,
+)
 
 
 class ProjectNotFoundError(LookupError):
@@ -670,6 +681,121 @@ class ResearchApplication:
             "general_report_artifact": report,
             "workflow_status": statuses,
             "current_step": "decision_report",
+            "updated_at": datetime.now(UTC),
+        }))
+
+    def generate_company_scorecard(self, project_id: str) -> ProjectState:
+        project = self.get_project(project_id)
+        artifact, telemetry = self._run_ai_step(
+            project,
+            "company_assessment",
+            lambda: self.services.company_assessment.generate(project),
+        )
+        statuses = dict(project.workflow_status)
+        statuses["company_assessment"] = WorkflowStatus.NEEDS_REVIEW
+        statuses["action_plan"] = WorkflowStatus.NOT_STARTED
+        return self.projects.save(self._append_telemetry(project, telemetry).model_copy(update={
+            "company_scorecard_artifact": artifact,
+            "action_plan_artifact": None,
+            "enterprise_decision_report_artifact": None,
+            "workflow_status": statuses,
+            "current_step": "company_assessment",
+            "updated_at": datetime.now(UTC),
+        }))
+
+    def review_company_scorecard(
+        self,
+        project_id: str,
+        *,
+        decisions: list[tuple[str, StrategyReviewStatus, str | None]],
+        confirm: bool,
+    ) -> ProjectState:
+        project = self.get_project(project_id)
+        artifact = project.company_scorecard_artifact
+        if artifact is None:
+            raise ResearchWorkflowError("请先生成Company Scorecard")
+        reviewed = artifact
+        for dimension_id, decision, note in decisions:
+            reviewed = review_score_dimension(reviewed, dimension_id, decision, note)
+        if confirm:
+            for item in reviewed.dimensions:
+                if item.review_status == StrategyReviewStatus.NEEDS_REVIEW:
+                    reviewed = review_score_dimension(
+                        reviewed,
+                        item.dimension_id,
+                        StrategyReviewStatus.ACCEPTED,
+                        "用户未明确排除，按场景默认建议采用",
+                    )
+            reasons = scorecard_gate_reasons(reviewed)
+            if reasons:
+                raise ResearchWorkflowError("；".join(reasons))
+            reviewed = confirm_scorecard(reviewed)
+        statuses = dict(project.workflow_status)
+        statuses["company_assessment"] = (
+            WorkflowStatus.COMPLETED if confirm else WorkflowStatus.NEEDS_REVIEW
+        )
+        statuses["action_plan"] = WorkflowStatus.READY if confirm else WorkflowStatus.NOT_STARTED
+        return self.projects.save(project.model_copy(update={
+            "company_scorecard_artifact": reviewed,
+            "action_plan_artifact": None,
+            "enterprise_decision_report_artifact": None,
+            "workflow_status": statuses,
+            "current_step": "action_plan" if confirm else "company_assessment",
+            "updated_at": datetime.now(UTC),
+        }))
+
+    def generate_action_plan(self, project_id: str) -> ProjectState:
+        project = self.get_project(project_id)
+        artifact, telemetry = self._run_ai_step(
+            project,
+            "action_plan",
+            lambda: self.services.action_planning.generate(project),
+        )
+        statuses = dict(project.workflow_status)
+        statuses["action_plan"] = WorkflowStatus.NEEDS_REVIEW
+        return self.projects.save(self._append_telemetry(project, telemetry).model_copy(update={
+            "action_plan_artifact": artifact,
+            "enterprise_decision_report_artifact": None,
+            "workflow_status": statuses,
+            "current_step": "action_plan",
+            "updated_at": datetime.now(UTC),
+        }))
+
+    def review_action_plan(
+        self,
+        project_id: str,
+        *,
+        decisions: list[tuple[str, StrategyReviewStatus, str | None]],
+        confirm: bool,
+    ) -> ProjectState:
+        project = self.get_project(project_id)
+        artifact = project.action_plan_artifact
+        if artifact is None:
+            raise ResearchWorkflowError("请先生成Action Plan")
+        reviewed = artifact
+        for action_id, decision, note in decisions:
+            reviewed = review_action(reviewed, action_id, decision, note)
+        if confirm:
+            for item in reviewed.actions:
+                if item.review_status == StrategyReviewStatus.NEEDS_REVIEW:
+                    reviewed = review_action(
+                        reviewed,
+                        item.action_id,
+                        StrategyReviewStatus.ACCEPTED,
+                        "用户未明确排除，按场景默认建议采用",
+                    )
+            reasons = action_plan_gate_reasons(reviewed)
+            if reasons:
+                raise ResearchWorkflowError("；".join(reasons))
+            reviewed = confirm_action_plan(reviewed)
+        statuses = dict(project.workflow_status)
+        statuses["action_plan"] = WorkflowStatus.COMPLETED if confirm else WorkflowStatus.NEEDS_REVIEW
+        statuses["human_review"] = WorkflowStatus.READY if confirm else statuses.get("human_review", WorkflowStatus.NOT_STARTED)
+        return self.projects.save(project.model_copy(update={
+            "action_plan_artifact": reviewed,
+            "enterprise_decision_report_artifact": None,
+            "workflow_status": statuses,
+            "current_step": "human_review" if confirm else "action_plan",
             "updated_at": datetime.now(UTC),
         }))
 
