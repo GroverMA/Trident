@@ -1,21 +1,20 @@
-# Design QA — Scenario and Workspace Layout
+# Design QA — Scenario Layout and Bilingual Interface
 
 - Source visual truth: `/var/folders/dp/dwbdn3jx1j36lscl0cpz0g5w0000gn/T/codex-clipboard-9e411963-0010-4d85-8d2a-b6050b11495b.png`
-- Implementation screenshot: `/Users/calin/Documents/PhD Application 2/Trident/qa-scenario-layout-after.png`
-- Combined comparison: `/Users/calin/Documents/PhD Application 2/Trident/qa-scenario-layout-comparison.png`
-- Viewport: 2509 × 1138 CSS pixels, desktop state, density normalized by matching source and implementation pixel dimensions before comparison.
-- Additional responsive check: 1440 × 900 desktop and 390 × 844 mobile.
+- Live implementation evidence: inspected in the in-app browser at 1600 × 1000 desktop and 390 × 844 mobile.
+- States compared: source screenshot, current Chinese interface, current English interface, and mobile English interface.
 
 **Full-view comparison evidence**
 
 - The source leaves the four-card group in a narrow central band and produces materially more unused space on the right side of an ultra-wide screen.
-- The implementation centers a 1480px workspace between the persistent sidebar and the right viewport edge. The four cards occupy a balanced 1480px row, each 358px wide and 312px tall.
+- The implementation centers a 1480px workspace between the persistent sidebar and the right viewport edge. At standard desktop width the four scenarios form a relaxed 2 × 2 grid with 352px minimum card height and larger inter-card spacing.
 - Header, hero, cards and shared-core strip retain the same interaction state and information architecture.
 
 **Focused comparison evidence**
 
 - Typography: existing Source Sans/PingFang fallback stack, restrained 48px desktop title, line height and wrapping retained.
-- Spacing/layout: hero-to-card gap reduced; card height reduced from 355px to 312px; internal gaps tightened; ultra-wide horizontal margins are symmetrical.
+- Spacing/layout: cards are taller and less compressed, internal sections have more breathing room, and the page uses balanced horizontal margins instead of leaving one large empty right region.
+- Bilingual behavior: CN/EN control stays at the upper-right, persists across routes, and translates navigation, scenarios, project management, enterprise knowledge, sensing, feedback and research-path UI. User answers, evidence originals and report bodies retain their source language.
 - Colors/tokens: existing navy, teal, off-white, border and state palette retained without new decorative treatments.
 - Image quality: the screen contains no raster illustration or custom imagery; there are no missing or substituted assets.
 - Copy/content: four scene names, descriptions, flow summaries and shared-core explanation remain unchanged.
@@ -28,8 +27,9 @@
 **Comparison history**
 
 1. Earlier finding: content capped at 1280px and 355px-tall cards made the main group feel narrow and left the ultra-wide page visually underused.
-2. Fix: introduced shared 1480px/1360px workspace tokens, widened scenario/platform/diagnostic pages, shortened cards, tightened vertical rhythm and widened the research-mode selector.
-3. Post-fix evidence: 2509px viewport shows a centered 1480px card row with no overflow; project, knowledge, sensing and feedback pages use the same width. The 390px mobile view remains a single-column stack with a working navigation drawer and no console errors.
+2. First fix: introduced shared 1480px/1360px workspace tokens and widened scenario/platform/diagnostic pages.
+3. Current fix: increased card height to 352px, expanded card gaps and padding, added persistent CN/EN interface state and routed scenario projects directly into the selected shared research core.
+4. Post-fix evidence: desktop CN and EN states remain aligned; the 390px mobile view is a single-column stack with no horizontal overflow, a separate navigation trigger and an unobstructed language switcher.
 
 **Implementation Checklist**
 
@@ -39,6 +39,9 @@
 - [x] Project, knowledge, sensing, feedback and diagnostic containers aligned.
 - [x] Research route width increased for visual consistency.
 - [x] Primary navigation and scenario cards remain interactive.
+- [x] CN/EN switch persists across routes and restores Chinese correctly.
+- [x] English mode contains no untranslated UI strings on the primary platform pages.
+- [x] Scenario-to-research handoff respects the route selected after diagnostic interview.
 - [x] Browser console checked: no errors.
 
 **Follow-up Polish**
