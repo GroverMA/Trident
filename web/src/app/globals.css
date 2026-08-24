@@ -283,6 +283,38 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
 .sensingSummary span, .sensingSummary small { display: block; }
 .sensingSummary span { color: var(--accent); font-size: 25px; font-weight: 760; }
 .sensingSummary small { margin-top: 5px; color: #7d899b; font-size: 9px; }
+.sensingSubscription { display: grid; grid-template-columns: minmax(260px,.8fr) minmax(320px,1.2fr) auto; gap: 18px; align-items: end; margin-bottom: 18px; padding: 22px; background: #fff; border: 1px solid var(--border); border-radius: 12px; }
+.sensingSubscription h2 { margin: 5px 0 7px; font-size: 19px; }
+.sensingSubscription p { margin: 0; color: #748095; font-size: 11px; line-height: 1.65; }
+.sensingSubscription label span { display: block; margin-bottom: 7px; color: #657187; font-size: 10px; font-weight: 700; }
+.sensingSubscription input { width: 100%; min-height: 42px; padding: 0 13px; border: 1px solid var(--border); border-radius: 8px; background: #fbfcfd; color: var(--ink); }
+.sensingSubscription .formError, .sensingSubscription .sensingWarning { grid-column: 1 / -1; margin: 0; }
+.sensingWarning { padding: 10px 12px; border-radius: 7px; background: #fff8e7; color: #816324; font-size: 10px; }
+.signalRow a { color: inherit; text-decoration: none; }
+.signalRow a:hover h3 { color: var(--accent); }
+.signalRow div > small { display: block; margin-top: 7px; color: #8390a3; font-size: 9px; }
+.signalRow em.impact-high { color: #a94141; background: #fff0f0; }
+.signalRow em.impact-medium { color: #7b651c; background: #fff8dc; }
+.signalRow em.impact-review { color: #567083; background: #eef4f6; }
+.signalReviewCard { margin-top: 12px; padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+.signalReviewCard > header { display: flex; gap: 8px; align-items: center; }
+.signalReviewCard > header span, .signalReviewCard > header em { padding: 5px 8px; border-radius: 999px; background: #edf5f6; color: var(--accent); font-size: 9px; font-style: normal; font-weight: 750; }
+.signalReviewCard > header small { margin-left: auto; color: #8290a3; font-size: 9px; }
+.signalReviewCard > a { color: inherit; text-decoration: none; }
+.signalReviewCard h3 { margin: 13px 0 7px; font-size: 15px; line-height: 1.45; }
+.signalReviewCard > a:hover h3 { color: var(--accent); }
+.signalReviewCard > p, .signalAssessment p { color: #667389; font-size: 10px; line-height: 1.65; }
+.signalSource { color: #8a95a6; font-size: 9px; }
+.signalAssessment { margin-top: 14px; padding: 13px 14px; border-left: 3px solid #6e9eaa; background: #f3f8f9; }
+.signalAssessment strong, .signalAssessment small { display: block; }
+.signalAssessment small { color: #647488; font-size: 9px; }
+.signalAssessment details { margin-top: 9px; color: #52677a; font-size: 9px; }
+.signalReviewCard > footer { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-top: 15px; padding-top: 13px; border-top: 1px solid #e5eaf0; }
+.signalReviewCard > footer > div { display: flex; gap: 8px; }
+.signalReviewCard > footer button { min-height: 34px; padding: 7px 12px; font-size: 9px; }
+.reviewStatus { color: #7f8b9d; font-size: 9px; font-weight: 700; }
+.reviewStatus.accepted { color: #2d755d; }
+.reviewStatus.ignored { color: #8a8f98; }
 .sensingLayout { display: grid; grid-template-columns: minmax(0,1.45fr) minmax(300px,.55fr); gap: 18px; }
 .signalFeed, .impactPanel, .knowledgeEntity, .knowledgeTimeline, .feedbackBoard { background: #fff; border: 1px solid var(--border); border-radius: 13px; box-shadow: var(--shadow); }
 .signalFeed { padding: 26px; }
@@ -489,6 +521,7 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
   .platformCapabilityGrid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .projectPortfolioGrid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .sensingLayout { grid-template-columns: 1fr; }
+  .sensingSubscription { grid-template-columns: 1fr; align-items: stretch; }
 }
 @media (max-width: 600px) {
   .consultingTopbar { min-height: 66px; padding: 0 104px 0 122px; }

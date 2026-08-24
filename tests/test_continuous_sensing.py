@@ -1,0 +1,108 @@
+from __future__ import annotations
+
+import requests
+import pytest
+
+# Import the delivery boundary first, matching application startup order.  The
+# services package re-exports planning services during initialization.
+from src.api.app import app  # noqa: F401
+from src.services.continuous_sensing import refresh_continuous_sensing
+from src.services.sensing_review import review_sensing_signal
+from src.models.sensing import SignalReviewStatus
+from src.state.project import ProjectState
+
+
+RSS = b"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Acme Medical receives regulatory approval for new IVD platform</title>
+    <link>https://example.com/acme-approval</link>
+    <description>Acme Medical expands its IVD diagnostics portfolio in China.</description>
+    <pubDate>Mon, 24 Aug 2026 08:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>Unrelated consumer story</title>
+    <link>https://example.com/unrelated</link>
+    <description>No monitored entities are mentioned.</description>
+  </item>
+</channel></rss>"""
+
+
+class FakeResponse:
+    def __init__(self, content: bytes = RSS, *, fails: bool = False) -> None:
+        self.content = content
+        self.fails = fails
+
+    def raise_for_status(self) -> None:
+        if self.fails:
+            raise requests.HTTPError("unavailable")
+
+
+def project() -> ProjectState:
+    return ProjectState(
+        project_name="Acme China IVD monitoring",
+        industry="IVD diagnostics",
+        region="China",
+        target_company="Acme Medical",
+        research_objective="Monitor company and industry changes",
+        time_horizon="2026-2030",
+    )
+
+
+def test_refresh_fetches_filters_classifies_and_deduplicates() -> None:
+    current = project()
+    first = refresh_continuous_sensing(current, http_get=lambda *args, **kwargs: FakeResponse())
+    assert len(first.signals) == 1
+    signal = first.signals[0]
+    assert signal.title.startswith("Acme Medical")
+    assert signal.impact == "high"
+    assert "Acme Medical" in signal.matched_terms
+    assert signal.source == "Google News"
+
+    updated = current.model_copy(update={"continuous_sensing_artifact": first})
+    second = refresh_continuous_sensing(updated, http_get=lambda *args, **kwargs: FakeResponse())
+    assert len(second.signals) == 1
+    assert second.signals[0].signal_id == signal.signal_id
+    assert second.artifact_id == first.artifact_id
+
+
+def test_refresh_records_source_failure_without_losing_previous_signals() -> None:
+    current = project()
+    first = refresh_continuous_sensing(current, http_get=lambda *args, **kwargs: FakeResponse())
+    updated = current.model_copy(update={"continuous_sensing_artifact": first})
+    failed = refresh_continuous_sensing(updated, http_get=lambda *args, **kwargs: FakeResponse(fails=True))
+    assert len(failed.signals) == 1
+    assert failed.fetch_errors == ["Google News: HTTPError"]
+
+
+def test_refresh_rejects_private_or_insecure_custom_feeds() -> None:
+    with pytest.raises(ValueError, match="HTTPS"):
+        refresh_continuous_sensing(project(), feed_urls=["http://example.com/feed"])
+    with pytest.raises(ValueError, match="私网"):
+        refresh_continuous_sensing(project(), feed_urls=["https://127.0.0.1/feed"])
+
+
+def test_human_acceptance_creates_assessment_and_timeline_without_replacing_plan() -> None:
+    current = project()
+    artifact = refresh_continuous_sensing(current, http_get=lambda *args, **kwargs: FakeResponse())
+    current = current.model_copy(update={"continuous_sensing_artifact": artifact})
+    signal_id = artifact.signals[0].signal_id
+    reviewed = review_sensing_signal(current, signal_id=signal_id, status=SignalReviewStatus.ACCEPTED)
+    signal = reviewed.continuous_sensing_artifact.signals[0]
+    assert signal.review_status == "accepted"
+    assert signal.assessment is not None
+    assert "research_scope" in signal.assessment.affected_assets
+    assert reviewed.action_plan_artifact is current.action_plan_artifact
+    assert reviewed.enterprise_timeline_events[-1].event_type == "sensing_signal_accepted"
+
+    repeated = review_sensing_signal(reviewed, signal_id=signal_id, status=SignalReviewStatus.ACCEPTED)
+    assert len(repeated.enterprise_timeline_events) == 1
+
+
+def test_human_ignore_does_not_create_impact_or_timeline() -> None:
+    current = project()
+    artifact = refresh_continuous_sensing(current, http_get=lambda *args, **kwargs: FakeResponse())
+    current = current.model_copy(update={"continuous_sensing_artifact": artifact})
+    reviewed = review_sensing_signal(current, signal_id=artifact.signals[0].signal_id, status=SignalReviewStatus.IGNORED)
+    assert reviewed.continuous_sensing_artifact.signals[0].assessment is None
+    assert reviewed.enterprise_timeline_events == []
