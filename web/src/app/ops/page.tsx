@@ -42,6 +42,10 @@ const stepLabels: Record<string, string> = {
   industry_analysis: "Industry Analysis",
   future_intelligence: "Future Intelligence",
   decision_report: "General Report",
+  company_assessment: "Company Scorecard",
+  action_planning: "Action Plan",
+  adaptive_plan: "Adaptive Plan",
+  interview_analysis: "AI Diagnostic Interview",
 };
 
 function number(value: number | null | undefined) {
@@ -56,7 +60,9 @@ function duration(milliseconds: number) {
 
 async function loadTelemetry(): Promise<{ data?: OpsPayload; error?: string }> {
   const key = process.env.TRIDENT_OPS_KEY;
-  if (!key) return { error: "TRIDENT_OPS_KEY 尚未配置。" };
+  const username = process.env.TRIDENT_OPS_USERNAME;
+  const password = process.env.TRIDENT_OPS_PASSWORD;
+  if (!key || !username || !password) return { error: "运营监测尚未连接：请在 Web 部署同时配置 TRIDENT_OPS_KEY、TRIDENT_OPS_USERNAME 与 TRIDENT_OPS_PASSWORD。配置后重新部署即可读取真实数据。" };
   try {
     const response = await fetch(tridentApiUrl("/v1/ops/telemetry"), {
       cache: "no-store",
@@ -102,7 +108,7 @@ export default async function OperationsPage() {
         </div>
       </header>
 
-      {error ? <div className="opsAlert">{error}</div> : null}
+      {error ? <div className="opsAlert"><strong>运营监测暂不可用</strong><span>{error}</span><small>页面已正常加载，研究主流程不受影响；这里不会用演示数字替代真实用量。</small></div> : null}
       {data ? (
         <>
           <section className="opsMetricGrid">

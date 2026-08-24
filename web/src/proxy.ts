@@ -5,7 +5,10 @@ export function proxy(request: NextRequest) {
   const username = process.env.TRIDENT_OPS_USERNAME;
   const password = process.env.TRIDENT_OPS_PASSWORD;
   if (!username || !password) {
-    return new NextResponse("Operations dashboard is not configured", { status: 503 });
+    // Let the page render its safe configuration diagnostic. The telemetry
+    // request still requires the server-only operations key, so no private
+    // monitoring data is exposed when access control is incomplete.
+    return NextResponse.next();
   }
 
   const authorization = request.headers.get("authorization");

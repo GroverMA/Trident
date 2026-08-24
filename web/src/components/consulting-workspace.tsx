@@ -158,23 +158,28 @@ export function ConsultingWorkspace({ initialScenario }: { initialScenario?: Exc
     type SpeechRecognizer = { lang: string; interimResults: boolean; continuous: boolean; maxAlternatives: number; onstart: () => void; onresult: (event: SpeechEvent) => void; onerror: (event: { error: string }) => void; onend: () => void; start: () => void; stop: () => void };
     const speechWindow = window as typeof window & { SpeechRecognition?: new () => SpeechRecognizer; webkitSpeechRecognition?: new () => SpeechRecognizer };
     const SpeechRecognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
-    if (!SpeechRecognition) { setVoiceStatus("当前浏览器不支持实时识别。请使用手机键盘的系统听写，文字仍会直接进入回答框。"); return; }
+    if (!window.isSecureContext) { setVoiceStatus("语音需要安全连接（HTTPS）。请打开线上地址，或使用手机键盘的系统听写。"); return; }
+    if (!SpeechRecognition) { setVoiceStatus("当前浏览器不支持网页语音识别。请点击回答框，使用手机键盘上的系统听写；文字会直接进入回答框并可发送给 AI。"); return; }
     if (listening) { recognitionRef.current?.stop(); return; }
     const recognition = new SpeechRecognition();
-    recognition.lang = "zh-CN"; recognition.interimResults = true; recognition.continuous = true; recognition.maxAlternatives = 1;
+    const isMobileWebKit = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+      || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+    recognition.lang = "zh-CN"; recognition.interimResults = true; recognition.continuous = !isMobileWebKit; recognition.maxAlternatives = 1;
     voiceBaseRef.current = answerRef.current.trim();
     voiceFinalRef.current = "";
     voiceInterimRef.current = "";
     voiceSubmittingRef.current = false;
     recognition.onstart = () => { setListening(true); setVoiceStatus("正在听，请自然说话；识别结果会转换成可编辑文字。"); };
     recognition.onresult = (event) => {
-      let finalText = "";
+      let newFinalText = "";
       let interim = "";
-      for (let index = 0; index < event.results.length; index += 1) {
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const transcript = event.results[index][0].transcript;
-        if (event.results[index].isFinal) finalText += transcript; else interim += transcript;
+        if (event.results[index].isFinal) newFinalText += transcript; else interim += transcript;
       }
-      voiceFinalRef.current = finalText.trim();
+      if (newFinalText.trim()) {
+        voiceFinalRef.current = [voiceFinalRef.current, newFinalText.trim()].filter(Boolean).join(" ");
+      }
       voiceInterimRef.current = interim.trim();
       const converted = [voiceBaseRef.current, voiceFinalRef.current, voiceInterimRef.current]
         .filter(Boolean)
@@ -184,17 +189,14 @@ export function ConsultingWorkspace({ initialScenario }: { initialScenario?: Exc
       setVoiceStatus(interim.trim() ? `正在识别：${interim.trim()}` : "语音已转换为文字，可以修改后发送给 AI。");
     };
     recognition.onerror = (event) => {
-      const messages: Record<string, string> = { "not-allowed": "没有获得麦克风权限，请在浏览器设置中允许后重试。", "audio-capture": "没有检测到可用麦克风。", "no-speech": "没有听清内容，请靠近麦克风后重试。", network: "语音识别服务连接失败，可改用系统听写或文字输入。" };
+      const messages: Record<string, string> = { "not-allowed": "没有获得麦克风权限。请在手机的浏览器设置中允许麦克风后刷新页面。", "service-not-allowed": "当前浏览器禁止语音识别服务，请改用系统听写或 Safari/Chrome。", "audio-capture": "没有检测到可用麦克风。", "no-speech": "没有听清内容，请靠近麦克风后重试。", aborted: "语音识别已停止，已经识别的文字仍保留在回答框。", network: "语音识别服务连接失败，可改用系统听写或文字输入。" };
       setVoiceStatus(messages[event.error] || `语音识别暂时中断（${event.error}），已保留现有文字。`);
     };
     recognition.onend = () => {
       setListening(false);
       recognitionRef.current = null;
       if (voiceSubmittingRef.current) { voiceSubmittingRef.current = false; return; }
-      const converted = [voiceBaseRef.current, voiceFinalRef.current, voiceInterimRef.current]
-        .filter(Boolean)
-        .join(" ")
-        .trim();
+      const converted = answerRef.current.trim() || [voiceBaseRef.current, voiceFinalRef.current, voiceInterimRef.current].filter(Boolean).join(" ").trim();
       answerRef.current = converted;
       setAnswer(converted);
       voiceInterimRef.current = "";
@@ -233,7 +235,7 @@ export function ConsultingWorkspace({ initialScenario }: { initialScenario?: Exc
 
         {stage === "interview" && <div className="interviewWorkspace">
           <section className="interviewChat"><div className="interviewProgress"><span style={{width:`${progress}%`}} /></div><div className="interviewThread">{(project?.interview_session_artifact?.turns || []).filter((turn) => turn.answer).map((turn) => <div className="answerPair" key={turn.turn_id}><div className="aiQuestion"><span>AI</span><p>{turn.question}</p></div><div className="userAnswer"><p>{turn.answer}</p><span>你的回答</span></div>{turn.analysis && <div className="answerAnalysis"><strong>AI 对本轮回答的判断</strong><p>{turn.analysis.summary}</p>{turn.analysis.ambiguities.length > 0 && <small>仍需澄清：{turn.analysis.ambiguities.join("；")}</small>}</div>}</div>)}<div className="aiQuestion current"><span>AI</span><div><small>动态问题 {answers.length + 1}</small><p>{question}</p><em>AI 会先分析本轮答案；信息不明确时会追问，充分后才进入下一主题。</em></div></div></div>
-            <form className="interviewComposer" onSubmit={submitAnswer}><textarea value={answer} onChange={(event) => { answerRef.current = event.target.value; setAnswer(event.target.value); }} rows={4} placeholder="用你习惯的方式回答，不需要整理成正式材料…" />{voiceStatus && <p className="voiceStatus" role="status">{voiceStatus}</p>}{project?.interview_session_artifact?.provider_warning && <p className="voiceStatus" role="status">{project.interview_session_artifact.provider_warning}</p>}{requestError && <p className="formError" role="alert">{requestError}</p>}<div><button type="button" className={listening ? "voiceButton listening" : "voiceButton"} onClick={startVoice}>{listening ? "停止并转换为文字" : "开始语音"}</button><button type="submit" className="primaryButton" disabled={busy}>{busy ? "AI 正在分析回答…" : "发送给 AI 并继续"}</button></div></form>
+            <form className="interviewComposer" onSubmit={submitAnswer}><textarea value={answer} onChange={(event) => { answerRef.current = event.target.value; setAnswer(event.target.value); }} rows={4} inputMode="text" enterKeyHint="done" placeholder="用你习惯的方式回答，不需要整理成正式材料…" />{voiceStatus && <p className="voiceStatus" role="status">{voiceStatus}</p>}{project?.interview_session_artifact?.provider_warning && <p className="voiceStatus" role="status">{project.interview_session_artifact.provider_warning}</p>}{requestError && <p className="formError" role="alert">{requestError}</p>}<div><button type="button" aria-pressed={listening} aria-label={listening ? "停止语音识别并保留文字" : "开始语音识别"} className={listening ? "voiceButton listening" : "voiceButton"} onClick={startVoice}>{listening ? "停止并保留文字" : "开始语音"}</button><button type="submit" className="primaryButton" disabled={busy}>{busy ? "AI 正在分析回答…" : "发送给 AI 并继续"}</button></div></form>
           </section>
           <aside className="evidenceDrawer"><span className="eyebrow">OPTIONAL MATERIALS</span><h2>有资料就上传，没有也可以继续</h2><p>资料用于校准判断，不是进入下一步的门槛。纸质材料可以先拍照或扫描。</p><div className="uploadGuide">{uploadItems.map((item) => <span key={item}>{item}</span>)}</div><input ref={fileRef} type="file" multiple hidden onChange={addFiles} /><button type="button" className="secondaryButton uploadButton" onClick={() => fileRef.current?.click()}>选择文件</button>{files.length > 0 && <ul className="uploadedFiles">{files.map((file) => <li key={file}>{file}</li>)}</ul>}<div className="oralOption"><strong>什么资料都没有？</strong><p>继续回答问题即可。系统会把老板或管理层的口述标记为“待验证判断”，后续再逐步补数。</p></div></aside>
         </div>}
