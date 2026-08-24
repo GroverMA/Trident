@@ -25,6 +25,7 @@ from src.models.analysis import AnalysisReviewStatus
 from src.models.future import ForecastReviewStatus
 from src.models.strategy import StrategyReviewStatus
 from src.models.feedback import ProposalReviewStatus
+from src.models.sensing import SignalReviewStatus
 from src.persistence.factory import create_project_repository
 from src.providers.base import ProviderError
 from src.core.registry import ExtensionRegistry
@@ -45,6 +46,8 @@ from src.services.company_assessment import CompanyAssessmentError
 from src.services.action_planning import ActionPlanningError
 from src.services.scenario_interview import ScenarioInterviewError, ScenarioInterviewService
 from src.services.research_routing import ScenarioResearchRouter
+from src.services.continuous_sensing import refresh_continuous_sensing
+from src.services.sensing_review import review_sensing_signal
 from src.state.project import (
     ProjectState,
     ResearchMode,
@@ -125,6 +128,17 @@ class ActionFeedbackRequest(BaseModel):
     blockers: str = ""
     evidence_refs: list[str] = Field(default_factory=list)
     scenario_fields: dict[str, str] = Field(default_factory=dict)
+
+
+class ContinuousSensingRequest(BaseModel):
+    watch_terms: list[str] = Field(default_factory=list)
+    feed_urls: list[str] = Field(default_factory=list)
+
+
+class SensingSignalReviewRequest(BaseModel):
+    signal_id: str = Field(min_length=1)
+    status: SignalReviewStatus
+    note: str | None = None
 
 
 class PlanRevisionDecision(BaseModel):
@@ -456,6 +470,49 @@ def get_project(project_id: str, research: ResearchApp) -> ProjectState:
         return research.get_project(project_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="project not found") from exc
+
+
+@app.post("/v1/projects/{project_id}/continuous-sensing", response_model=ProjectState)
+def refresh_project_continuous_sensing(
+    project_id: str,
+    payload: ContinuousSensingRequest,
+    research: ResearchApp,
+) -> ProjectState:
+    """Refresh public signals without promoting them to reviewed evidence."""
+    try:
+        project = research.get_project(project_id)
+        artifact = refresh_continuous_sensing(
+            project,
+            watch_terms=payload.watch_terms or None,
+            feed_urls=payload.feed_urls,
+        )
+        return research.save_project(
+            project.model_copy(update={"continuous_sensing_artifact": artifact})
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.patch("/v1/projects/{project_id}/continuous-sensing", response_model=ProjectState)
+def review_project_sensing_signal(
+    project_id: str,
+    payload: SensingSignalReviewRequest,
+    research: ResearchApp,
+) -> ProjectState:
+    try:
+        project = research.get_project(project_id)
+        return research.save_project(review_sensing_signal(
+            project,
+            signal_id=payload.signal_id,
+            status=payload.status,
+            note=payload.note,
+        ))
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/v1/projects/{project_id}/interview/start", response_model=ProjectState)

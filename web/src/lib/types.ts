@@ -380,6 +380,41 @@ export interface EnterpriseTimelineEvent {
   occurred_at: string;
 }
 
+export interface SensingSignal {
+  signal_id: string;
+  title: string;
+  summary: string;
+  url: string;
+  source: string;
+  published_at?: string | null;
+  captured_at: string;
+  category: "policy" | "competition" | "customer" | "technology" | "operations" | "other";
+  impact: "high" | "medium" | "review";
+  impact_reason: string;
+  matched_terms: string[];
+  relevance_score: number;
+  project_id: string;
+  review_status: "needs_review" | "accepted" | "ignored";
+  reviewer_note?: string | null;
+  reviewed_at?: string | null;
+  assessment?: {
+    affected_assets: string[];
+    affected_hypotheses: string[];
+    recommended_review: string;
+    confidence: number;
+  } | null;
+}
+
+export interface ContinuousSensingArtifact {
+  artifact_id: string;
+  project_id: string;
+  watch_terms: string[];
+  feed_urls: string[];
+  signals: SensingSignal[];
+  fetch_errors: string[];
+  refreshed_at: string;
+}
+
 export interface ProjectSummary {
   project_id: string;
   project_name: string;
@@ -415,6 +450,7 @@ export interface ProjectSummary {
   plan_revision_history?: PlanRevisionArtifact[];
   action_plan_history?: ActionPlanArtifact[];
   enterprise_timeline_events?: EnterpriseTimelineEvent[];
+  continuous_sensing_artifact?: ContinuousSensingArtifact | null;
   interview_session_artifact?: {
     artifact_id: string;
     status: "in_progress" | "ready_for_profile" | "completed";

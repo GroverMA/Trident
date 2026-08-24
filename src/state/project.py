@@ -17,6 +17,7 @@ from src.models.feedback import (
     EnterpriseTimelineEvent,
     PlanRevisionArtifact,
 )
+from src.models.sensing import ContinuousSensingArtifact
 from src.models.interview import EntityProfileArtifact, ScenarioInterviewArtifact
 from src.models.report import GeneralReportArtifact
 from src.models.revision import ContentRevisionArtifact
@@ -124,6 +125,7 @@ class ProjectState(BaseModel):
     plan_revision_history: list[PlanRevisionArtifact] = Field(default_factory=list)
     action_plan_history: list[ActionPlanArtifact] = Field(default_factory=list)
     enterprise_timeline_events: list[EnterpriseTimelineEvent] = Field(default_factory=list)
+    continuous_sensing_artifact: ContinuousSensingArtifact | None = None
     content_revision_artifact: ContentRevisionArtifact | None = None
     current_step: str = "research_brief"
     workflow_status: dict[str, WorkflowStatus] = Field(default_factory=default_workflow)
