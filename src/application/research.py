@@ -10,6 +10,7 @@ from src.models.evidence import EvidenceReviewStatus
 from src.models.analysis import AnalysisReviewStatus
 from src.models.future import ForecastReviewStatus
 from src.models.strategy import StrategyReviewStatus
+from src.models.feedback import EnterpriseTimelineEvent, ProposalReviewStatus
 from src.models.research import MarketDefinition, ResearchBriefArtifact
 from src.observability.telemetry import StepRunTelemetry, finish_span, start_span
 from src.persistence.projects import ProjectRepository
@@ -37,6 +38,11 @@ from src.services.action_planning import (
 )
 from src.services.action_feedback import submit_action_feedback
 from src.services.strategy_report import generate_enterprise_decision_report
+from src.services.adaptive_planning import (
+    AdaptivePlanningError,
+    approve_plan_revision,
+    review_revision_proposal,
+)
 from src.scenarios import builtin_scenario_packs
 
 
@@ -174,6 +180,7 @@ class ResearchApplication:
                     "action_plan_artifact": None,
                     "enterprise_decision_report_artifact": None,
                     "action_feedback_artifact": None,
+                    "plan_revision_artifact": None,
                     "content_revision_artifact": None,
                     "execution_authorized_at": None,
                     "market_scope_confirmed_at": None,
@@ -735,6 +742,77 @@ class ResearchApplication:
             raise ResearchWorkflowError(str(exc)) from exc
         return self.projects.save(project.model_copy(update={
             "action_feedback_artifact": artifact,
+            "plan_revision_artifact": None,
+            "updated_at": datetime.now(UTC),
+        }))
+
+    def generate_plan_revision(self, project_id: str) -> ProjectState:
+        project = self.get_project(project_id)
+        packs = {
+            item.descriptor.extension_id: item
+            for item in builtin_scenario_packs()
+        }
+        pack = packs.get(project.scenario_pack)
+        if pack is None or pack.descriptor.version != project.scenario_pack_version:
+            raise ResearchWorkflowError("项目引用的场景包不可用")
+        try:
+            artifact, telemetry = self._run_ai_step(
+                project,
+                "adaptive_plan",
+                lambda: self.services.adaptive_planning.generate(
+                    project, pack.feedback_policy()
+                ),
+            )
+        except AdaptivePlanningError as exc:
+            raise ResearchWorkflowError(str(exc)) from exc
+        return self.projects.save(self._append_telemetry(project, telemetry).model_copy(update={
+            "plan_revision_artifact": artifact,
+            "updated_at": datetime.now(UTC),
+        }))
+
+    def review_plan_revision(
+        self,
+        project_id: str,
+        *,
+        decisions: list[tuple[str, ProposalReviewStatus, str | None]],
+        confirm: bool,
+    ) -> ProjectState:
+        project = self.get_project(project_id)
+        artifact = project.plan_revision_artifact
+        if artifact is None:
+            raise ResearchWorkflowError("请先生成偏差诊断与候选调整")
+        try:
+            reviewed = artifact
+            for proposal_id, status, note in decisions:
+                reviewed = review_revision_proposal(reviewed, proposal_id, status, note)
+            if not confirm:
+                return self.projects.save(project.model_copy(update={
+                    "plan_revision_artifact": reviewed,
+                    "updated_at": datetime.now(UTC),
+                }))
+            confirmed, revised_plan = approve_plan_revision(project, reviewed)
+        except AdaptivePlanningError as exc:
+            raise ResearchWorkflowError(str(exc)) from exc
+        old_plan = project.action_plan_artifact
+        feedback = project.action_feedback_artifact
+        assert old_plan is not None and feedback is not None
+        event = EnterpriseTimelineEvent(
+            event_type="action_plan_revision_approved",
+            project_id=project.project_id,
+            scenario_id=project.scenario_pack,
+            title=f"Action Plan V{revised_plan.version} 已批准",
+            summary=confirmed.summary,
+            artifact_ids=[old_plan.artifact_id, feedback.artifact_id, confirmed.artifact_id, revised_plan.artifact_id],
+        )
+        return self.projects.save(project.model_copy(update={
+            "action_plan_history": [*project.action_plan_history, old_plan],
+            "action_feedback_history": [*project.action_feedback_history, feedback],
+            "plan_revision_history": [*project.plan_revision_history, confirmed],
+            "action_plan_artifact": revised_plan,
+            "action_feedback_artifact": None,
+            "plan_revision_artifact": None,
+            "enterprise_decision_report_artifact": None,
+            "enterprise_timeline_events": [*project.enterprise_timeline_events, event],
             "updated_at": datetime.now(UTC),
         }))
 
@@ -753,6 +831,7 @@ class ResearchApplication:
             "action_plan_artifact": None,
             "enterprise_decision_report_artifact": None,
             "action_feedback_artifact": None,
+            "plan_revision_artifact": None,
             "workflow_status": statuses,
             "current_step": "company_assessment",
             "updated_at": datetime.now(UTC),
@@ -795,6 +874,7 @@ class ResearchApplication:
             "action_plan_artifact": None,
             "enterprise_decision_report_artifact": None,
             "action_feedback_artifact": None,
+            "plan_revision_artifact": None,
             "workflow_status": statuses,
             "current_step": "action_plan" if confirm else "company_assessment",
             "updated_at": datetime.now(UTC),
@@ -813,6 +893,7 @@ class ResearchApplication:
             "action_plan_artifact": artifact,
             "enterprise_decision_report_artifact": None,
             "action_feedback_artifact": None,
+            "plan_revision_artifact": None,
             "workflow_status": statuses,
             "current_step": "action_plan",
             "updated_at": datetime.now(UTC),

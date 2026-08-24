@@ -348,6 +348,9 @@ class ActionPlanArtifact(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     human_confirmed: bool = False
     confirmed_at: datetime | None = None
+    version: int = Field(default=1, ge=1)
+    parent_action_plan_id: str | None = None
+    revision_note: str | None = None
 
 
 class EnterpriseDecisionReportArtifact(BaseModel):

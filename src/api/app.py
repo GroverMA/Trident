@@ -24,6 +24,7 @@ from src.models.evidence import EvidenceReviewStatus
 from src.models.analysis import AnalysisReviewStatus
 from src.models.future import ForecastReviewStatus
 from src.models.strategy import StrategyReviewStatus
+from src.models.feedback import ProposalReviewStatus
 from src.persistence.factory import create_project_repository
 from src.providers.base import ProviderError
 from src.core.registry import ExtensionRegistry
@@ -124,6 +125,17 @@ class ActionFeedbackRequest(BaseModel):
     blockers: str = ""
     evidence_refs: list[str] = Field(default_factory=list)
     scenario_fields: dict[str, str] = Field(default_factory=dict)
+
+
+class PlanRevisionDecision(BaseModel):
+    proposal_id: str
+    status: ProposalReviewStatus
+    note: str | None = None
+
+
+class PlanRevisionReviewRequest(BaseModel):
+    decisions: list[PlanRevisionDecision] = Field(default_factory=list)
+    confirm: bool = False
 
 
 class ProjectScopeUpdate(BaseModel):
@@ -353,6 +365,7 @@ def capabilities() -> dict:
             "report-generation",
             "company-scorecard",
             "action-plan",
+            "adaptive-plan-revision",
         ],
         "integration_surfaces": [
             surface.as_dict() for surface in builtin_integration_surfaces()
@@ -808,6 +821,39 @@ def submit_project_action_feedback(
             blockers=payload.blockers,
             evidence_refs=payload.evidence_refs,
             scenario_fields=payload.scenario_fields,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ResearchWorkflowError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/v1/projects/{project_id}/plan-revision", response_model=ProjectState)
+def generate_project_plan_revision(project_id: str, research: ResearchApp) -> ProjectState:
+    try:
+        return research.generate_plan_revision(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ResearchWorkflowError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ConfigurationError as exc:
+        raise HTTPException(status_code=503, detail="AI研究服务尚未完成配置") from exc
+    except ProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.patch("/v1/projects/{project_id}/plan-revision", response_model=ProjectState)
+def review_project_plan_revision(
+    project_id: str, payload: PlanRevisionReviewRequest, research: ResearchApp
+) -> ProjectState:
+    try:
+        return research.review_plan_revision(
+            project_id,
+            decisions=[
+                (item.proposal_id, item.status, item.note)
+                for item in payload.decisions
+            ],
+            confirm=payload.confirm,
         )
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="project not found") from exc

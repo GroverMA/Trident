@@ -17,6 +17,7 @@ from src.providers.hkgai_structured_rest import HKGAIStructuredRestProvider
 from src.providers.search_router import SearchRouter
 from src.scenarios import ScenarioWorkflowRunner, builtin_scenario_packs
 from src.services.action_planning import ActionPlanningService
+from src.services.adaptive_planning import AdaptivePlanningService
 from src.services.company_assessment import CompanyAssessmentService
 from src.services.evidence_collection import EvidenceCollectionService
 from src.services.future_intelligence import FutureIntelligenceService
@@ -109,6 +110,10 @@ class ServiceContainer:
         return ActionPlanningService(
             model=self._model(), sop=self.sop, scenario_packs=self.scenario_packs
         )
+
+    @cached_property
+    def adaptive_planning(self) -> AdaptivePlanningService:
+        return AdaptivePlanningService(model=self._model())
 
     @cached_property
     def reviewer_revision(self) -> ReviewerRevisionService:

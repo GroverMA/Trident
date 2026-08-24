@@ -303,6 +303,9 @@ export interface ActionPlanArtifact {
   rejected_options: string[];
   portfolio_risks: string[];
   human_confirmed: boolean;
+  version?: number;
+  parent_action_plan_id?: string | null;
+  revision_note?: string | null;
 }
 
 export interface EnterpriseDecisionReportArtifact {
@@ -336,6 +339,47 @@ export interface ActionFeedbackArtifact {
   updated_at: string;
 }
 
+export type ProposalReviewStatus = "needs_review" | "accepted" | "rejected";
+
+export interface ActionAdjustmentProposal {
+  proposal_id: string;
+  action_id: string;
+  feedback_entry_ids: string[];
+  deviation_class: "decision_assumption" | "action_design" | "execution_quality" | "external_change";
+  diagnosis: string;
+  recommendation: string;
+  proposed_rationale: string;
+  proposed_timing?: string | null;
+  confidence: number;
+  review_status: ProposalReviewStatus;
+  reviewer_note?: string | null;
+  reviewed_at?: string | null;
+}
+
+export interface PlanRevisionArtifact {
+  artifact_id: string;
+  project_id: string;
+  scenario_id: string;
+  base_action_plan_id: string;
+  feedback_artifact_id: string;
+  proposals: ActionAdjustmentProposal[];
+  summary: string;
+  generated_at: string;
+  human_confirmed: boolean;
+  confirmed_at?: string | null;
+}
+
+export interface EnterpriseTimelineEvent {
+  event_id: string;
+  event_type: string;
+  project_id: string;
+  scenario_id: string;
+  title: string;
+  summary: string;
+  artifact_ids: string[];
+  occurred_at: string;
+}
+
 export interface ProjectSummary {
   project_id: string;
   project_name: string;
@@ -366,6 +410,11 @@ export interface ProjectSummary {
   action_plan_artifact?: ActionPlanArtifact | null;
   enterprise_decision_report_artifact?: EnterpriseDecisionReportArtifact | null;
   action_feedback_artifact?: ActionFeedbackArtifact | null;
+  action_feedback_history?: ActionFeedbackArtifact[];
+  plan_revision_artifact?: PlanRevisionArtifact | null;
+  plan_revision_history?: PlanRevisionArtifact[];
+  action_plan_history?: ActionPlanArtifact[];
+  enterprise_timeline_events?: EnterpriseTimelineEvent[];
   interview_session_artifact?: {
     artifact_id: string;
     status: "in_progress" | "ready_for_profile" | "completed";
