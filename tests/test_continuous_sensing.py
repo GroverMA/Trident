@@ -27,6 +27,29 @@ RSS = b"""<?xml version="1.0" encoding="UTF-8"?>
   </item>
 </channel></rss>"""
 
+NOISY_RSS = b"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>China consumer confidence update</title>
+    <link>https://example.com/china-only</link>
+    <description>China macroeconomic news unrelated to diagnostics.</description>
+    <pubDate>Mon, 24 Aug 2026 08:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>Acme Medical opens a new diagnostics facility</title>
+    <link>https://example.com/acme-new</link>
+    <description>Acme Medical expands IVD diagnostics capacity in China.</description>
+    <source>Healthcare Daily</source>
+    <pubDate>Mon, 24 Aug 2026 08:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>Acme Medical legacy announcement</title>
+    <link>https://example.com/acme-old</link>
+    <description>Acme Medical historic update.</description>
+    <pubDate>Mon, 24 Aug 2020 08:00:00 GMT</pubDate>
+  </item>
+</channel></rss>"""
+
 
 class FakeResponse:
     def __init__(self, content: bytes = RSS, *, fails: bool = False) -> None:
@@ -73,6 +96,31 @@ def test_refresh_records_source_failure_without_losing_previous_signals() -> Non
     failed = refresh_continuous_sensing(updated, http_get=lambda *args, **kwargs: FakeResponse(fails=True))
     assert len(failed.signals) == 1
     assert failed.fetch_errors == ["Google News: HTTPError"]
+
+
+def test_refresh_rejects_region_only_noise_and_stale_items_and_keeps_publisher() -> None:
+    artifact = refresh_continuous_sensing(
+        project(),
+        http_get=lambda *args, **kwargs: FakeResponse(NOISY_RSS),
+    )
+    assert len(artifact.signals) == 1
+    assert artifact.signals[0].title.startswith("Acme Medical opens")
+    assert artifact.signals[0].source == "Healthcare Daily"
+    assert artifact.signals[0].relevance_score >= 70
+
+
+def test_refresh_uses_separate_company_and_industry_queries_with_recency() -> None:
+    urls: list[str] = []
+
+    def capture(url: str, **kwargs: object) -> FakeResponse:
+        urls.append(url)
+        return FakeResponse()
+
+    refresh_continuous_sensing(project(), http_get=capture)
+    assert len(urls) == 2
+    assert all("when%3A180d" in url for url in urls)
+    assert any("Acme+Medical" in url for url in urls)
+    assert any("IVD+diagnostics" in url for url in urls)
 
 
 def test_refresh_rejects_private_or_insecure_custom_feeds() -> None:
