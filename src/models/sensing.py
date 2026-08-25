@@ -30,6 +30,18 @@ class SignalReviewStatus(StrEnum):
     IGNORED = "ignored"
 
 
+class ImpactReviewTaskStatus(StrEnum):
+    NEEDS_REVIEW = "needs_review"
+    APPROVED_FOR_REVISION = "approved_for_revision"
+    DISMISSED = "dismissed"
+
+
+class ImpactReviewTarget(StrEnum):
+    RESEARCH_SCOPE = "research_scope"
+    COMPANY_SCORECARD = "company_scorecard"
+    ACTION_PLAN = "action_plan"
+
+
 class SignalImpactAssessment(BaseModel):
     affected_assets: list[str] = Field(default_factory=list)
     affected_hypotheses: list[str] = Field(default_factory=list)
@@ -57,11 +69,30 @@ class SensingSignal(BaseModel):
     assessment: SignalImpactAssessment | None = None
 
 
+class SensingImpactReviewTask(BaseModel):
+    task_id: str = Field(default_factory=lambda: f"SRT-{uuid4().hex[:10]}")
+    project_id: str
+    signal_id: str
+    source_artifact_id: str
+    target: ImpactReviewTarget
+    affected_assets: list[str] = Field(min_length=1)
+    affected_hypotheses: list[str] = Field(default_factory=list)
+    recommended_review: str
+    base_artifact_id: str | None = None
+    base_version: int | None = Field(default=None, ge=1)
+    proposed_version: int = Field(default=1, ge=1)
+    status: ImpactReviewTaskStatus = ImpactReviewTaskStatus.NEEDS_REVIEW
+    reviewer_note: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    reviewed_at: datetime | None = None
+
+
 class ContinuousSensingArtifact(BaseModel):
     artifact_id: str = Field(default_factory=lambda: uuid4().hex)
     project_id: str
     watch_terms: list[str]
     feed_urls: list[str] = Field(default_factory=list)
     signals: list[SensingSignal] = Field(default_factory=list)
+    review_tasks: list[SensingImpactReviewTask] = Field(default_factory=list)
     fetch_errors: list[str] = Field(default_factory=list)
     refreshed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

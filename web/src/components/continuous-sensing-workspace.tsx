@@ -13,6 +13,9 @@ const impacts: Record<string, string> = { high: "高影响", medium: "中影响"
 const assets: Record<string, string> = {
   research_scope: "研究范围与假设", company_scorecard: "Company Scorecard", action_plan: "Action Plan",
 };
+const taskTargets: Record<string, string> = {
+  research_scope: "研究范围", company_scorecard: "Company Scorecard", action_plan: "Action Plan",
+};
 
 export function ContinuousSensingWorkspace() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -24,6 +27,7 @@ export function ContinuousSensingWorkspace() {
   const active = projects.find((project) => project.project_id === activeId);
   const artifact = active?.continuous_sensing_artifact;
   const signals = artifact?.signals || [];
+  const reviewTasks = artifact?.review_tasks || [];
   const watchTerms = drafts[activeId] ?? (artifact?.watch_terms || []).join("、");
   const visible = filter === "全部" ? signals : signals.filter((signal) => categories[signal.category] === filter);
 
@@ -79,6 +83,21 @@ export function ContinuousSensingWorkspace() {
     finally { setBusy(""); }
   }
 
+  async function reviewTask(taskId: string, status: "approved_for_revision" | "dismissed") {
+    if (!active) return;
+    setBusy(taskId); setError("");
+    try {
+      const response = await fetch(`/api/projects/${active.project_id}/continuous-sensing/review-task`, {
+        method: "PATCH", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ task_id: taskId, status, note: "" }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || "影响复核失败");
+      replaceProject(payload);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "影响复核失败"); }
+    finally { setBusy(""); }
+  }
+
   const today = new Date().toDateString();
   const todayCount = signals.filter((signal) => new Date(signal.published_at || signal.captured_at).toDateString() === today).length;
   const acceptedCount = signals.filter((signal) => signal.review_status === "accepted").length;
@@ -94,7 +113,7 @@ export function ContinuousSensingWorkspace() {
       <div className="sensingLayout"><section className="signalFeed"><div className="sectionTitle"><div><span className="eyebrow">SIGNAL INBOX</span><h2>新闻与变化信号</h2></div><small>{artifact ? `更新于 ${new Date(artifact.refreshed_at).toLocaleString("zh-CN")}` : "尚未刷新"}</small></div><div className="signalFilters">{["全部", "政策", "竞争", "客户", "技术", "经营 KPI", "其他"].map((item) => <button key={item} className={filter === item ? "selected" : ""} onClick={() => setFilter(item)}>{item}</button>)}</div>
         {visible.map((signal) => <article className="signalReviewCard" key={signal.signal_id}><header><span>{categories[signal.category]}</span><em className={`impact-${signal.impact}`}>{impacts[signal.impact]}</em><small>相关性 {signal.relevance_score}</small></header><a href={signal.url} target="_blank" rel="noreferrer"><h3>{signal.title}</h3></a><p>{signal.summary || signal.impact_reason}</p><div className="signalSource">{signal.source} · {new Date(signal.published_at || signal.captured_at).toLocaleString("zh-CN")} · 命中 {signal.matched_terms.join("、")}</div>{signal.assessment && <div className="signalAssessment"><strong>候选影响分析</strong><p>{signal.assessment.recommended_review}</p><small>关联：{signal.assessment.affected_assets.map((item) => assets[item] || item).join("、")} · 置信度 {signal.assessment.confidence}</small>{signal.assessment.affected_hypotheses.length > 0 && <details><summary>可能受影响的研究假设</summary><ul>{signal.assessment.affected_hypotheses.map((item) => <li key={item}>{item}</li>)}</ul></details>}</div>}<footer><span className={`reviewStatus ${signal.review_status}`}>{signal.review_status === "accepted" ? "已接受并写入时间线" : signal.review_status === "ignored" ? "已忽略" : "等待人工判断"}</span><div><button className="secondaryButton" disabled={busy === signal.signal_id} onClick={() => void review(signal, "ignored")}>忽略</button><button className="primaryButton" disabled={busy === signal.signal_id} onClick={() => void review(signal, "accepted")}>接受并评估影响</button></div></footer></article>)}
         {!visible.length && <div className="platformEmpty"><h2>{active ? "尚无匹配信号" : "请先选择联动项目"}</h2><p>{active ? "确认关注词后刷新，系统将保存与该项目相关的真实公开新闻。" : "不同企业和投资标的的信号分别保存。"}</p></div>}
-      </section><aside className="impactPanel"><span className="eyebrow">HUMAN-GOVERNED ROUTER</span><h2>信号不会直接改写决策</h2><ol><li><span>01</span><div><strong>抓取、清理和去重</strong><small>保留来源链接与发布时间</small></div></li><li><span>02</span><div><strong>项目与实体匹配</strong><small>按公司、行业和关注主题关联</small></div></li><li><span>03</span><div><strong>人工接受或忽略</strong><small>接受后才生成候选影响分析</small></div></li><li><span>04</span><div><strong>进入后续复核</strong><small>只写时间线，不覆盖报告或计划</small></div></li></ol><Link className="primaryButton linkButton" href={active ? `/projects/${active.project_id}` : "/projects"}>回到项目处理影响</Link></aside></div>
+      </section><aside className="impactPanel"><span className="eyebrow">HUMAN-GOVERNED ROUTER</span><h2>信号不会直接改写决策</h2><ol><li><span>01</span><div><strong>抓取、清理和去重</strong><small>保留来源链接与发布时间</small></div></li><li><span>02</span><div><strong>项目与实体匹配</strong><small>按公司、行业和关注主题关联</small></div></li><li><span>03</span><div><strong>人工接受或忽略</strong><small>接受后生成版本化影响复核任务</small></div></li><li><span>04</span><div><strong>授权候选版本</strong><small>批准只开放修订，不覆盖已批准资产</small></div></li></ol><div className="impactTaskList"><h3>版本化影响复核</h3>{reviewTasks.map((task) => <article key={task.task_id}><header><strong>{taskTargets[task.target]}</strong><span>候选 V{task.proposed_version}</span></header><p>{task.recommended_review}</p><small>{task.base_artifact_id ? `基于 ${task.base_artifact_id}${task.base_version ? ` · V${task.base_version}` : ""}` : "尚无基准资产，将进入首版复核"}</small>{task.status === "needs_review" ? <footer><button className="secondaryButton" disabled={busy === task.task_id} onClick={() => void reviewTask(task.task_id, "dismissed")}>关闭</button><button className="primaryButton" disabled={busy === task.task_id} onClick={() => void reviewTask(task.task_id, "approved_for_revision")}>批准生成候选版</button></footer> : <em>{task.status === "approved_for_revision" ? "已授权候选修订" : "已关闭"}</em>}</article>)}{!reviewTasks.length && <p className="impactTaskEmpty">接受一条新闻后，系统会按当前项目阶段生成复核任务。</p>}</div><Link className="primaryButton linkButton" href={active ? `/projects/${active.project_id}` : "/projects"}>回到项目处理影响</Link></aside></div>
     </section>
   </main>;
 }

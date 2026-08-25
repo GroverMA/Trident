@@ -339,6 +339,15 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
 .impactPanel strong { color: #fff; font-size: 11px; }
 .impactPanel small { margin-top: 5px; color: #8596ac; font-size: 9px; line-height: 1.5; }
 .impactPanel .primaryButton { width: 100%; margin-top: 22px; }
+.impactTaskList { margin-top: 22px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,.12); }
+.impactTaskList > h3 { margin: 0 0 12px; color: #fff; font-size: 12px; }
+.impactTaskList article { margin-top: 10px; padding: 12px; border: 1px solid rgba(128,205,211,.22); border-radius: 9px; background: rgba(255,255,255,.05); }
+.impactTaskList article header, .impactTaskList article footer { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.impactTaskList article header strong { font-size: 10px; }
+.impactTaskList article header span, .impactTaskList article > small, .impactTaskList article > em { color: #80cdd3; font-size: 8px; font-style: normal; }
+.impactTaskList article p, .impactTaskEmpty { color: #a8b4c5; font-size: 9px; line-height: 1.55; }
+.impactTaskList article footer { margin-top: 10px; }
+.impactTaskList article footer button { width: auto; min-height: 30px; margin: 0; padding: 6px 8px; font-size: 8px; }
 .knowledgeEntity, .feedbackBoard { margin-bottom: 22px; padding: 26px 28px; display: flex; justify-content: space-between; align-items: center; }
 .knowledgeEntity span { color: var(--accent); font-size: 9px; font-weight: 760; }
 .knowledgeEntity h2, .feedbackBoard h2 { margin: 7px 0; }
