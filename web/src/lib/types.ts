@@ -411,6 +411,22 @@ export interface ContinuousSensingArtifact {
   watch_terms: string[];
   feed_urls: string[];
   signals: SensingSignal[];
+  review_tasks: Array<{
+    task_id: string;
+    signal_id: string;
+    source_artifact_id: string;
+    target: "research_scope" | "company_scorecard" | "action_plan";
+    affected_assets: string[];
+    affected_hypotheses: string[];
+    recommended_review: string;
+    base_artifact_id?: string | null;
+    base_version?: number | null;
+    proposed_version: number;
+    status: "needs_review" | "approved_for_revision" | "dismissed";
+    reviewer_note?: string | null;
+    created_at: string;
+    reviewed_at?: string | null;
+  }>;
   fetch_errors: string[];
   refreshed_at: string;
 }

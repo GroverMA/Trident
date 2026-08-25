@@ -203,6 +203,7 @@ def refresh_continuous_sensing(
         watch_terms=terms,
         feed_urls=custom_urls,
         signals=signals,
+        review_tasks=list(previous.review_tasks) if previous else [],
         fetch_errors=errors,
     )
     if previous:

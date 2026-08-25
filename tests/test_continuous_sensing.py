@@ -7,8 +7,8 @@ import pytest
 # services package re-exports planning services during initialization.
 from src.api.app import app  # noqa: F401
 from src.services.continuous_sensing import refresh_continuous_sensing
-from src.services.sensing_review import review_sensing_signal
-from src.models.sensing import SignalReviewStatus
+from src.services.sensing_review import review_sensing_impact_task, review_sensing_signal
+from src.models.sensing import ImpactReviewTaskStatus, SignalReviewStatus
 from src.state.project import ProjectState
 
 
@@ -142,9 +142,14 @@ def test_human_acceptance_creates_assessment_and_timeline_without_replacing_plan
     assert "research_scope" in signal.assessment.affected_assets
     assert reviewed.action_plan_artifact is current.action_plan_artifact
     assert reviewed.enterprise_timeline_events[-1].event_type == "sensing_signal_accepted"
+    assert len(reviewed.continuous_sensing_artifact.review_tasks) == 1
+    task = reviewed.continuous_sensing_artifact.review_tasks[0]
+    assert task.target == "research_scope"
+    assert task.status == "needs_review"
 
     repeated = review_sensing_signal(reviewed, signal_id=signal_id, status=SignalReviewStatus.ACCEPTED)
     assert len(repeated.enterprise_timeline_events) == 1
+    assert len(repeated.continuous_sensing_artifact.review_tasks) == 1
 
 
 def test_human_ignore_does_not_create_impact_or_timeline() -> None:
@@ -154,3 +159,27 @@ def test_human_ignore_does_not_create_impact_or_timeline() -> None:
     reviewed = review_sensing_signal(current, signal_id=artifact.signals[0].signal_id, status=SignalReviewStatus.IGNORED)
     assert reviewed.continuous_sensing_artifact.signals[0].assessment is None
     assert reviewed.enterprise_timeline_events == []
+    assert reviewed.continuous_sensing_artifact.review_tasks == []
+
+
+def test_impact_task_approval_authorizes_candidate_but_does_not_replace_assets() -> None:
+    current = project()
+    artifact = refresh_continuous_sensing(current, http_get=lambda *args, **kwargs: FakeResponse())
+    accepted = review_sensing_signal(
+        current.model_copy(update={"continuous_sensing_artifact": artifact}),
+        signal_id=artifact.signals[0].signal_id,
+        status=SignalReviewStatus.ACCEPTED,
+    )
+    task = accepted.continuous_sensing_artifact.review_tasks[0]
+    reviewed = review_sensing_impact_task(
+        accepted,
+        task_id=task.task_id,
+        status=ImpactReviewTaskStatus.APPROVED_FOR_REVISION,
+        note="进入下一轮研究范围复核",
+    )
+    updated = reviewed.continuous_sensing_artifact.review_tasks[0]
+    assert updated.status == "approved_for_revision"
+    assert reviewed.research_brief_artifact is accepted.research_brief_artifact
+    assert reviewed.company_scorecard_artifact is accepted.company_scorecard_artifact
+    assert reviewed.action_plan_artifact is accepted.action_plan_artifact
+    assert reviewed.enterprise_timeline_events[-1].event_type == "sensing_revision_authorized"
