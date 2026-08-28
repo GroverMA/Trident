@@ -426,6 +426,24 @@ export interface ContinuousSensingArtifact {
     reviewer_note?: string | null;
     created_at: string;
     reviewed_at?: string | null;
+    candidate?: {
+      candidate_id: string;
+      target: "research_scope" | "company_scorecard" | "action_plan";
+      proposed_version: number;
+      title: string;
+      rationale: string;
+      proposed_changes: string[];
+      retained_constraints: string[];
+      evidence_signal_ids: string[];
+      scenario_id: string;
+      scenario_version: string;
+      skill_versions: Record<string, string>;
+      skill_hashes: Record<string, string>;
+      gate_status: "not_generated" | "needs_review" | "approved" | "rejected";
+      gate_note?: string | null;
+      generated_at: string;
+      reviewed_at?: string | null;
+    } | null;
   }>;
   fetch_errors: string[];
   refreshed_at: string;

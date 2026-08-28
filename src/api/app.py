@@ -25,7 +25,7 @@ from src.models.analysis import AnalysisReviewStatus
 from src.models.future import ForecastReviewStatus
 from src.models.strategy import StrategyReviewStatus
 from src.models.feedback import ProposalReviewStatus
-from src.models.sensing import ImpactReviewTaskStatus, SignalReviewStatus
+from src.models.sensing import CandidateGateStatus, ImpactReviewTaskStatus, SignalReviewStatus
 from src.persistence.factory import create_project_repository
 from src.providers.base import ProviderError
 from src.core.registry import ExtensionRegistry
@@ -47,7 +47,11 @@ from src.services.action_planning import ActionPlanningError
 from src.services.scenario_interview import ScenarioInterviewError, ScenarioInterviewService
 from src.services.research_routing import ScenarioResearchRouter
 from src.services.continuous_sensing import refresh_continuous_sensing
-from src.services.sensing_review import review_sensing_impact_task, review_sensing_signal
+from src.services.sensing_review import (
+    review_sensing_impact_task,
+    review_sensing_revision_candidate,
+    review_sensing_signal,
+)
 from src.state.project import (
     ProjectState,
     ResearchMode,
@@ -144,6 +148,12 @@ class SensingSignalReviewRequest(BaseModel):
 class SensingImpactTaskReviewRequest(BaseModel):
     task_id: str = Field(min_length=1)
     status: ImpactReviewTaskStatus
+    note: str | None = None
+
+
+class SensingCandidateGateRequest(BaseModel):
+    task_id: str = Field(min_length=1)
+    status: CandidateGateStatus
     note: str | None = None
 
 
@@ -530,6 +540,26 @@ def review_project_sensing_impact_task(
     try:
         project = research.get_project(project_id)
         return research.save_project(review_sensing_impact_task(
+            project,
+            task_id=payload.task_id,
+            status=payload.status,
+            note=payload.note,
+        ))
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.patch("/v1/projects/{project_id}/continuous-sensing/candidate-gate", response_model=ProjectState)
+def review_project_sensing_candidate_gate(
+    project_id: str,
+    payload: SensingCandidateGateRequest,
+    research: ResearchApp,
+) -> ProjectState:
+    try:
+        project = research.get_project(project_id)
+        return research.save_project(review_sensing_revision_candidate(
             project,
             task_id=payload.task_id,
             status=payload.status,
