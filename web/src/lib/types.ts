@@ -386,6 +386,9 @@ export interface SensingSignal {
   summary: string;
   url: string;
   source: string;
+  source_id?: string | null;
+  source_type: "news_aggregator" | "company_official" | "regulator_government" | "exchange_disclosure" | "professional_media" | "internal_kpi";
+  source_tier: number;
   published_at?: string | null;
   captured_at: string;
   category: "policy" | "competition" | "customer" | "technology" | "operations" | "other";
@@ -410,6 +413,17 @@ export interface ContinuousSensingArtifact {
   project_id: string;
   watch_terms: string[];
   feed_urls: string[];
+  sources: Array<{
+    source_id: string;
+    name: string;
+    source_type: "news_aggregator" | "company_official" | "regulator_government" | "exchange_disclosure" | "professional_media" | "internal_kpi";
+    tier: number;
+    url: string;
+    enabled: boolean;
+    status: "ready" | "succeeded" | "failed";
+    last_checked_at?: string | null;
+    last_error?: string | null;
+  }>;
   signals: SensingSignal[];
   review_tasks: Array<{
     task_id: string;

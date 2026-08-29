@@ -359,6 +359,10 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
 .assetVersionDraft > p { margin: 8px 0; }
 .assetVersionDraft pre { max-height: 280px; overflow: auto; padding: 10px; border-radius: 6px; background: rgba(0,0,0,.24); color: #d8e2ed; font-size: 7px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .sensingSchedule { grid-column: 1 / -1; margin: 0; color: #376f78; font-size: 9px; }
+.sensingSources { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 7px; }
+.sensingSources span { padding: 6px 9px; border: 1px solid #cbd8df; border-radius: 999px; background: #fff; color: #526579; font-size: 8px; }
+.sensingSources .source-succeeded { border-color: #9bc9b4; color: #287052; }
+.sensingSources .source-failed { border-color: #e8b6b3; color: #a94742; }
 .sensingDigest { display: grid; grid-template-columns: minmax(220px,.7fr) 1fr auto; gap: 22px; align-items: center; margin-bottom: 18px; padding: 18px 22px; border: 1px solid #b9dadd; border-radius: 12px; background: #edf7f6; }
 .sensingDigest h2, .sensingDigest p { margin: 4px 0 0; }
 .sensingDigest p { color: #596a7d; line-height: 1.6; }

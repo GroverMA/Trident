@@ -13,7 +13,7 @@ from src.services.sensing_review import (
     review_sensing_revision_candidate,
     review_sensing_signal,
 )
-from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, ImpactReviewTaskStatus, SignalReviewStatus
+from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, ImpactReviewTaskStatus, SensingSourceDefinition, SignalReviewStatus
 from src.state.project import ProjectState
 
 
@@ -153,6 +153,29 @@ def test_refresh_rejects_private_or_insecure_custom_feeds() -> None:
         refresh_continuous_sensing(project(), feed_urls=["http://example.com/feed"])
     with pytest.raises(ValueError, match="私网"):
         refresh_continuous_sensing(project(), feed_urls=["https://127.0.0.1/feed"])
+
+
+def test_registered_primary_source_tracks_health_and_signal_provenance() -> None:
+    source = SensingSourceDefinition(
+        source_id="official-acme",
+        name="Acme Medical Official",
+        source_type="company_official",
+        tier=1,
+        url="https://example.com/company-feed.xml",
+    )
+    artifact = refresh_continuous_sensing(
+        project(),
+        sources=[source],
+        http_get=lambda *args, **kwargs: FakeResponse(),
+    )
+    registered = artifact.sources[0]
+    assert registered.source_id == "official-acme"
+    assert registered.status == "succeeded"
+    assert registered.last_checked_at is not None
+    signal = artifact.signals[0]
+    assert signal.source_id == "official-acme"
+    assert signal.source_type == "company_official"
+    assert signal.source_tier == 1
 
 
 def test_human_acceptance_creates_assessment_and_timeline_without_replacing_plan() -> None:

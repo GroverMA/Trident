@@ -61,6 +61,21 @@ class SensingRunStatus(StrEnum):
     FAILED = "failed"
 
 
+class SensingSourceType(StrEnum):
+    NEWS_AGGREGATOR = "news_aggregator"
+    COMPANY_OFFICIAL = "company_official"
+    REGULATOR_GOVERNMENT = "regulator_government"
+    EXCHANGE_DISCLOSURE = "exchange_disclosure"
+    PROFESSIONAL_MEDIA = "professional_media"
+    INTERNAL_KPI = "internal_kpi"
+
+
+class SensingSourceStatus(StrEnum):
+    READY = "ready"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
 class ImpactReviewTarget(StrEnum):
     RESEARCH_SCOPE = "research_scope"
     COMPANY_SCORECARD = "company_scorecard"
@@ -116,6 +131,9 @@ class SensingSignal(BaseModel):
     summary: str = ""
     url: HttpUrl
     source: str
+    source_id: str | None = None
+    source_type: SensingSourceType = SensingSourceType.NEWS_AGGREGATOR
+    source_tier: int = Field(default=3, ge=1, le=4)
     published_at: datetime | None = None
     captured_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     category: SignalCategory = SignalCategory.OTHER
@@ -168,11 +186,24 @@ class SensingManagementDigest(BaseModel):
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class SensingSourceDefinition(BaseModel):
+    source_id: str = Field(default_factory=lambda: f"SSO-{uuid4().hex[:10]}")
+    name: str
+    source_type: SensingSourceType
+    tier: int = Field(ge=1, le=4)
+    url: HttpUrl
+    enabled: bool = True
+    status: SensingSourceStatus = SensingSourceStatus.READY
+    last_checked_at: datetime | None = None
+    last_error: str | None = None
+
+
 class ContinuousSensingArtifact(BaseModel):
     artifact_id: str = Field(default_factory=lambda: uuid4().hex)
     project_id: str
     watch_terms: list[str]
     feed_urls: list[str] = Field(default_factory=list)
+    sources: list[SensingSourceDefinition] = Field(default_factory=list)
     signals: list[SensingSignal] = Field(default_factory=list)
     review_tasks: list[SensingImpactReviewTask] = Field(default_factory=list)
     subscription: SensingSubscription = Field(default_factory=SensingSubscription)
