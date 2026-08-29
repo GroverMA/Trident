@@ -43,6 +43,12 @@ class CandidateGateStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class AssetDraftGateStatus(StrEnum):
+    NEEDS_REVIEW = "needs_review"
+    ACTIVATED = "activated"
+    REJECTED = "rejected"
+
+
 class ImpactReviewTarget(StrEnum):
     RESEARCH_SCOPE = "research_scope"
     COMPANY_SCORECARD = "company_scorecard"
@@ -54,6 +60,22 @@ class SignalImpactAssessment(BaseModel):
     affected_hypotheses: list[str] = Field(default_factory=list)
     recommended_review: str
     confidence: int = Field(ge=0, le=100)
+
+
+class SensingAssetVersionDraft(BaseModel):
+    draft_id: str = Field(default_factory=lambda: f"SAD-{uuid4().hex[:10]}")
+    target: ImpactReviewTarget
+    base_artifact_id: str | None = None
+    base_version: int | None = Field(default=None, ge=1)
+    proposed_artifact_id: str
+    proposed_version: int = Field(ge=1)
+    artifact_payload: dict[str, object]
+    change_summary: list[str] = Field(min_length=1)
+    validation_checks: list[str] = Field(min_length=1)
+    gate_status: AssetDraftGateStatus = AssetDraftGateStatus.NEEDS_REVIEW
+    gate_note: str | None = None
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    reviewed_at: datetime | None = None
 
 
 class SensingRevisionCandidate(BaseModel):
@@ -73,6 +95,7 @@ class SensingRevisionCandidate(BaseModel):
     gate_note: str | None = None
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     reviewed_at: datetime | None = None
+    asset_draft: SensingAssetVersionDraft | None = None
 
 
 class SensingSignal(BaseModel):

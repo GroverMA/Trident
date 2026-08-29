@@ -8,11 +8,12 @@ import pytest
 from src.api.app import app  # noqa: F401
 from src.services.continuous_sensing import refresh_continuous_sensing
 from src.services.sensing_review import (
+    review_sensing_asset_draft,
     review_sensing_impact_task,
     review_sensing_revision_candidate,
     review_sensing_signal,
 )
-from src.models.sensing import CandidateGateStatus, ImpactReviewTaskStatus, SignalReviewStatus
+from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, ImpactReviewTaskStatus, SignalReviewStatus
 from src.state.project import ProjectState
 
 
@@ -202,10 +203,55 @@ def test_impact_task_approval_authorizes_candidate_but_does_not_replace_assets()
     )
     gated_task = gated.continuous_sensing_artifact.review_tasks[0]
     assert gated_task.candidate.gate_status == "approved"
+    assert gated_task.candidate.asset_draft is not None
+    assert gated_task.candidate.asset_draft.gate_status == "needs_review"
+    assert gated_task.candidate.asset_draft.validation_checks
     assert gated.research_brief_artifact is accepted.research_brief_artifact
     assert gated.company_scorecard_artifact is accepted.company_scorecard_artifact
     assert gated.action_plan_artifact is accepted.action_plan_artifact
     assert gated.enterprise_timeline_events[-1].event_type == "sensing_candidate_approved"
+
+    activated = review_sensing_asset_draft(
+        gated,
+        task_id=task.task_id,
+        status=AssetDraftGateStatus.ACTIVATED,
+        note="人工确认新范围版本",
+    )
+    activated_task = activated.continuous_sensing_artifact.review_tasks[0]
+    assert activated_task.candidate.asset_draft.gate_status == "activated"
+    assert activated.research_brief_artifact is not None
+    assert activated.research_brief_artifact.human_confirmed is True
+    assert activated.research_brief_artifact.artifact_id == activated_task.candidate.asset_draft.proposed_artifact_id
+    assert activated.research_brief_history == []
+    assert activated.enterprise_timeline_events[-1].event_type == "sensing_asset_activated"
+
+
+def test_asset_gate_rejection_keeps_current_asset_unchanged() -> None:
+    current = project()
+    artifact = refresh_continuous_sensing(current, http_get=lambda *args, **kwargs: FakeResponse())
+    accepted = review_sensing_signal(
+        current.model_copy(update={"continuous_sensing_artifact": artifact}),
+        signal_id=artifact.signals[0].signal_id,
+        status=SignalReviewStatus.ACCEPTED,
+    )
+    task = accepted.continuous_sensing_artifact.review_tasks[0]
+    candidate = review_sensing_impact_task(
+        accepted,
+        task_id=task.task_id,
+        status=ImpactReviewTaskStatus.APPROVED_FOR_REVISION,
+    )
+    draft = review_sensing_revision_candidate(
+        candidate,
+        task_id=task.task_id,
+        status=CandidateGateStatus.APPROVED,
+    )
+    rejected = review_sensing_asset_draft(
+        draft,
+        task_id=task.task_id,
+        status=AssetDraftGateStatus.REJECTED,
+    )
+    assert rejected.research_brief_artifact is None
+    assert rejected.continuous_sensing_artifact.review_tasks[0].candidate.asset_draft.gate_status == "rejected"
 
 
 def test_candidate_gate_requires_generated_candidate() -> None:
