@@ -36,6 +36,13 @@ class ImpactReviewTaskStatus(StrEnum):
     DISMISSED = "dismissed"
 
 
+class CandidateGateStatus(StrEnum):
+    NOT_GENERATED = "not_generated"
+    NEEDS_REVIEW = "needs_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class ImpactReviewTarget(StrEnum):
     RESEARCH_SCOPE = "research_scope"
     COMPANY_SCORECARD = "company_scorecard"
@@ -47,6 +54,25 @@ class SignalImpactAssessment(BaseModel):
     affected_hypotheses: list[str] = Field(default_factory=list)
     recommended_review: str
     confidence: int = Field(ge=0, le=100)
+
+
+class SensingRevisionCandidate(BaseModel):
+    candidate_id: str = Field(default_factory=lambda: f"SRC-{uuid4().hex[:10]}")
+    target: ImpactReviewTarget
+    proposed_version: int = Field(ge=1)
+    title: str
+    rationale: str
+    proposed_changes: list[str] = Field(min_length=1)
+    retained_constraints: list[str] = Field(min_length=1)
+    evidence_signal_ids: list[str] = Field(min_length=1)
+    scenario_id: str
+    scenario_version: str
+    skill_versions: dict[str, str] = Field(default_factory=dict)
+    skill_hashes: dict[str, str] = Field(default_factory=dict)
+    gate_status: CandidateGateStatus = CandidateGateStatus.NEEDS_REVIEW
+    gate_note: str | None = None
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    reviewed_at: datetime | None = None
 
 
 class SensingSignal(BaseModel):
@@ -85,6 +111,7 @@ class SensingImpactReviewTask(BaseModel):
     reviewer_note: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     reviewed_at: datetime | None = None
+    candidate: SensingRevisionCandidate | None = None
 
 
 class ContinuousSensingArtifact(BaseModel):

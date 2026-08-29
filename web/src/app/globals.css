@@ -348,6 +348,13 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
 .impactTaskList article p, .impactTaskEmpty { color: #a8b4c5; font-size: 9px; line-height: 1.55; }
 .impactTaskList article footer { margin-top: 10px; }
 .impactTaskList article footer button { width: auto; min-height: 30px; margin: 0; padding: 6px 8px; font-size: 8px; }
+.revisionCandidate { margin-top: 12px; padding: 12px; border-radius: 8px; background: rgba(128,205,211,.08); border-left: 2px solid #80cdd3; }
+.revisionCandidate > div { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+.revisionCandidate h4 { margin: 12px 0 6px; color: #fff; font-size: 9px; }
+.revisionCandidate ul { margin: 6px 0 0; padding-left: 16px; }
+.revisionCandidate li { display: list-item; padding: 3px 0; color: #b9c5d4; border: 0; font-size: 8px; line-height: 1.5; }
+.revisionCandidate details { margin-top: 10px; color: #80cdd3; font-size: 8px; }
+.revisionCandidate summary { cursor: pointer; }
 .knowledgeEntity, .feedbackBoard { margin-bottom: 22px; padding: 26px 28px; display: flex; justify-content: space-between; align-items: center; }
 .knowledgeEntity span { color: var(--accent); font-size: 9px; font-weight: 760; }
 .knowledgeEntity h2, .feedbackBoard h2 { margin: 7px 0; }

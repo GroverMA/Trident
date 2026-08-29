@@ -7,8 +7,12 @@ import pytest
 # services package re-exports planning services during initialization.
 from src.api.app import app  # noqa: F401
 from src.services.continuous_sensing import refresh_continuous_sensing
-from src.services.sensing_review import review_sensing_impact_task, review_sensing_signal
-from src.models.sensing import ImpactReviewTaskStatus, SignalReviewStatus
+from src.services.sensing_review import (
+    review_sensing_impact_task,
+    review_sensing_revision_candidate,
+    review_sensing_signal,
+)
+from src.models.sensing import CandidateGateStatus, ImpactReviewTaskStatus, SignalReviewStatus
 from src.state.project import ProjectState
 
 
@@ -179,7 +183,42 @@ def test_impact_task_approval_authorizes_candidate_but_does_not_replace_assets()
     )
     updated = reviewed.continuous_sensing_artifact.review_tasks[0]
     assert updated.status == "approved_for_revision"
+    assert updated.candidate is not None
+    assert updated.candidate.gate_status == "needs_review"
+    assert updated.candidate.scenario_id == accepted.scenario_pack
+    assert updated.candidate.evidence_signal_ids == [task.signal_id]
+    assert updated.candidate.proposed_changes
+    assert "defining-industry-markets" in updated.candidate.skill_versions
     assert reviewed.research_brief_artifact is accepted.research_brief_artifact
     assert reviewed.company_scorecard_artifact is accepted.company_scorecard_artifact
     assert reviewed.action_plan_artifact is accepted.action_plan_artifact
     assert reviewed.enterprise_timeline_events[-1].event_type == "sensing_revision_authorized"
+
+    gated = review_sensing_revision_candidate(
+        reviewed,
+        task_id=task.task_id,
+        status=CandidateGateStatus.APPROVED,
+        note="同意进入后续研究范围再生成",
+    )
+    gated_task = gated.continuous_sensing_artifact.review_tasks[0]
+    assert gated_task.candidate.gate_status == "approved"
+    assert gated.research_brief_artifact is accepted.research_brief_artifact
+    assert gated.company_scorecard_artifact is accepted.company_scorecard_artifact
+    assert gated.action_plan_artifact is accepted.action_plan_artifact
+    assert gated.enterprise_timeline_events[-1].event_type == "sensing_candidate_approved"
+
+
+def test_candidate_gate_requires_generated_candidate() -> None:
+    current = project()
+    artifact = refresh_continuous_sensing(current, http_get=lambda *args, **kwargs: FakeResponse())
+    accepted = review_sensing_signal(
+        current.model_copy(update={"continuous_sensing_artifact": artifact}),
+        signal_id=artifact.signals[0].signal_id,
+        status=SignalReviewStatus.ACCEPTED,
+    )
+    with pytest.raises(ValueError, match="尚未生成候选版本"):
+        review_sensing_revision_candidate(
+            accepted,
+            task_id=accepted.continuous_sensing_artifact.review_tasks[0].task_id,
+            status=CandidateGateStatus.APPROVED,
+        )
