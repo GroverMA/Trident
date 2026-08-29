@@ -49,6 +49,18 @@ class AssetDraftGateStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class SensingCadence(StrEnum):
+    MANUAL = "manual"
+    DAILY = "daily"
+    WEEKLY = "weekly"
+
+
+class SensingRunStatus(StrEnum):
+    SUCCEEDED = "succeeded"
+    PARTIAL = "partial"
+    FAILED = "failed"
+
+
 class ImpactReviewTarget(StrEnum):
     RESEARCH_SCOPE = "research_scope"
     COMPANY_SCORECARD = "company_scorecard"
@@ -137,6 +149,25 @@ class SensingImpactReviewTask(BaseModel):
     candidate: SensingRevisionCandidate | None = None
 
 
+class SensingSubscription(BaseModel):
+    enabled: bool = False
+    cadence: SensingCadence = SensingCadence.MANUAL
+    next_run_at: datetime | None = None
+    last_run_at: datetime | None = None
+    last_run_status: SensingRunStatus | None = None
+    last_run_error: str | None = None
+
+
+class SensingManagementDigest(BaseModel):
+    headline: str
+    summary: str
+    high_impact_count: int = Field(ge=0)
+    pending_review_count: int = Field(ge=0)
+    new_signal_count: int = Field(ge=0)
+    top_signal_ids: list[str] = Field(default_factory=list)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class ContinuousSensingArtifact(BaseModel):
     artifact_id: str = Field(default_factory=lambda: uuid4().hex)
     project_id: str
@@ -144,5 +175,7 @@ class ContinuousSensingArtifact(BaseModel):
     feed_urls: list[str] = Field(default_factory=list)
     signals: list[SensingSignal] = Field(default_factory=list)
     review_tasks: list[SensingImpactReviewTask] = Field(default_factory=list)
+    subscription: SensingSubscription = Field(default_factory=SensingSubscription)
+    management_digest: SensingManagementDigest | None = None
     fetch_errors: list[str] = Field(default_factory=list)
     refreshed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

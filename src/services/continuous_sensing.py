@@ -19,6 +19,10 @@ from src.models.sensing import (
     SensingSignal,
     SignalCategory,
     SignalImpact,
+    SensingCadence,
+    SensingManagementDigest,
+    SensingRunStatus,
+    SensingSubscription,
 )
 from src.state.project import ProjectState
 
@@ -33,6 +37,59 @@ _CATEGORY_TERMS = {
 }
 _HIGH_IMPACT_TERMS = ("监管", "禁令", "召回", "收购", "破产", "获批", "审批", "重大", "ban", "recall", "acquisition", "regulatory", "approval")
 _DEFAULT_MAX_AGE_DAYS = 180
+
+
+def _next_run(cadence: SensingCadence, now: datetime) -> datetime | None:
+    if cadence == SensingCadence.DAILY:
+        return now + timedelta(days=1)
+    if cadence == SensingCadence.WEEKLY:
+        return now + timedelta(days=7)
+    return None
+
+
+def configure_sensing_subscription(
+    project: ProjectState,
+    *,
+    enabled: bool,
+    cadence: SensingCadence,
+) -> ProjectState:
+    if enabled and cadence == SensingCadence.MANUAL:
+        raise ValueError("启用自动感知时必须选择每日或每周频率")
+    now = datetime.now(UTC)
+    previous = project.continuous_sensing_artifact
+    artifact = previous or ContinuousSensingArtifact(
+        project_id=project.project_id,
+        watch_terms=default_watch_terms(project),
+    )
+    subscription = SensingSubscription(
+        enabled=enabled,
+        cadence=cadence,
+        next_run_at=_next_run(cadence, now) if enabled else None,
+        last_run_at=artifact.subscription.last_run_at,
+        last_run_status=artifact.subscription.last_run_status,
+        last_run_error=artifact.subscription.last_run_error,
+    )
+    return project.model_copy(update={
+        "continuous_sensing_artifact": artifact.model_copy(update={"subscription": subscription}),
+        "updated_at": now,
+    })
+
+
+def _digest(signals: list[SensingSignal], previous_ids: set[str]) -> SensingManagementDigest:
+    new_signals = [item for item in signals if item.signal_id not in previous_ids]
+    high = [item for item in signals if item.impact == SignalImpact.HIGH and item.review_status == "needs_review"]
+    pending = [item for item in signals if item.review_status == "needs_review"]
+    headline = f"新增 {len(new_signals)} 条信号，{len(high)} 条高影响待复核"
+    top = (high or new_signals or pending)[:5]
+    summary = "；".join(item.title for item in top) or "本轮未发现新的匹配信号"
+    return SensingManagementDigest(
+        headline=headline,
+        summary=summary,
+        high_impact_count=len(high),
+        pending_review_count=len(pending),
+        new_signal_count=len(new_signals),
+        top_signal_ids=[item.signal_id for item in top],
+    )
 
 
 def default_watch_terms(project: ProjectState) -> list[str]:
@@ -136,6 +193,7 @@ def refresh_continuous_sensing(
     cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
     anchor_terms = [term for term in terms if term.casefold() != (project.region or "").strip().casefold()]
     previous = project.continuous_sensing_artifact
+    previous_ids = {item.signal_id for item in previous.signals} if previous else set()
     by_id = {
         item.signal_id: item
         for item in (previous.signals if previous else [])
@@ -198,12 +256,23 @@ def refresh_continuous_sensing(
         key=lambda item: (item.published_at or item.captured_at, item.relevance_score),
         reverse=True,
     )[:200]
+    now = datetime.now(UTC)
+    prior_subscription = previous.subscription if previous else SensingSubscription()
+    run_status = SensingRunStatus.PARTIAL if errors else SensingRunStatus.SUCCEEDED
+    subscription = prior_subscription.model_copy(update={
+        "last_run_at": now,
+        "last_run_status": run_status,
+        "last_run_error": "；".join(errors) or None,
+        "next_run_at": _next_run(prior_subscription.cadence, now) if prior_subscription.enabled else None,
+    })
     payload = dict(
         project_id=project.project_id,
         watch_terms=terms,
         feed_urls=custom_urls,
         signals=signals,
         review_tasks=list(previous.review_tasks) if previous else [],
+        subscription=subscription,
+        management_digest=_digest(signals, previous_ids),
         fetch_errors=errors,
     )
     if previous:
