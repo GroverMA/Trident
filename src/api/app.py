@@ -25,7 +25,7 @@ from src.models.analysis import AnalysisReviewStatus
 from src.models.future import ForecastReviewStatus
 from src.models.strategy import StrategyReviewStatus
 from src.models.feedback import ProposalReviewStatus
-from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, ImpactReviewTaskStatus, SensingCadence, SignalReviewStatus
+from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, ImpactReviewTaskStatus, SensingCadence, SensingSourceDefinition, SignalReviewStatus
 from src.persistence.factory import create_project_repository
 from src.providers.base import ProviderError
 from src.core.registry import ExtensionRegistry
@@ -138,6 +138,7 @@ class ActionFeedbackRequest(BaseModel):
 class ContinuousSensingRequest(BaseModel):
     watch_terms: list[str] = Field(default_factory=list)
     feed_urls: list[str] = Field(default_factory=list)
+    sources: list[SensingSourceDefinition] = Field(default_factory=list)
 
 
 class SensingSubscriptionRequest(BaseModel):
@@ -513,6 +514,7 @@ def refresh_project_continuous_sensing(
             project,
             watch_terms=payload.watch_terms or None,
             feed_urls=payload.feed_urls,
+            sources=payload.sources or None,
         )
         return research.save_project(
             project.model_copy(update={"continuous_sensing_artifact": artifact})
@@ -563,6 +565,7 @@ def run_due_sensing_subscriptions(research: ResearchApp) -> dict:
                 project,
                 watch_terms=artifact.watch_terms,
                 feed_urls=artifact.feed_urls,
+                sources=artifact.sources,
             )
             research.save_project(project.model_copy(update={"continuous_sensing_artifact": refreshed}))
             results.append({"project_id": project.project_id, "status": refreshed.subscription.last_run_status})

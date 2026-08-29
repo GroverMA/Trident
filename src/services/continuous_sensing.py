@@ -22,6 +22,9 @@ from src.models.sensing import (
     SensingCadence,
     SensingManagementDigest,
     SensingRunStatus,
+    SensingSourceDefinition,
+    SensingSourceStatus,
+    SensingSourceType,
     SensingSubscription,
 )
 from src.state.project import ProjectState
@@ -143,7 +146,12 @@ def _rank(
     return matched, relevance, SignalImpact.REVIEW, "来源命中检索式，但仍需人工判断与项目的关系"
 
 
-def _rss_urls(project: ProjectState, watch_terms: list[str], custom_urls: list[str], max_age_days: int) -> list[tuple[str, str]]:
+def _rss_sources(
+    project: ProjectState,
+    watch_terms: list[str],
+    custom_sources: list[SensingSourceDefinition],
+    max_age_days: int,
+) -> list[SensingSourceDefinition]:
     recency = f"when:{max_age_days}d"
     queries: list[str] = []
     if project.target_company:
@@ -153,12 +161,23 @@ def _rss_urls(project: ProjectState, watch_terms: list[str], custom_urls: list[s
         queries.append(industry_query)
     extra_terms = [term for term in watch_terms if term not in {project.target_company, project.industry, project.region}]
     queries.extend(f'"{term}" {recency}' for term in extra_terms[:5])
-    defaults = [
-        ("Google News", f"https://news.google.com/rss/search?q={quote_plus(query)}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans")
+    defaults = [SensingSourceDefinition(
+        source_id=f"google-news-{sha256(query.encode()).hexdigest()[:10]}",
+        name="Google News",
+        source_type=SensingSourceType.NEWS_AGGREGATOR,
+        tier=3,
+        url=f"https://news.google.com/rss/search?q={quote_plus(query)}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+    )
         for query in dict.fromkeys(queries)
     ]
     configured = [_safe_feed_url(url.strip()) for url in os.getenv("TRIDENT_SENSING_RSS_URLS", "").split(",") if url.strip()]
-    return [*defaults, *(("自定义 RSS", url) for url in [*configured, *custom_urls])]
+    env_sources = [SensingSourceDefinition(
+        name="部署环境 RSS",
+        source_type=SensingSourceType.PROFESSIONAL_MEDIA,
+        tier=2,
+        url=url,
+    ) for url in configured]
+    return [*defaults, *env_sources, *(source for source in custom_sources if source.enabled)]
 
 
 def _safe_feed_url(url: str) -> str:
@@ -180,19 +199,30 @@ def refresh_continuous_sensing(
     *,
     watch_terms: list[str] | None = None,
     feed_urls: list[str] | None = None,
+    sources: list[SensingSourceDefinition] | None = None,
     http_get=requests.get,
 ) -> ContinuousSensingArtifact:
     terms = list(dict.fromkeys(term.strip() for term in (watch_terms or default_watch_terms(project)) if term.strip()))
     if not terms:
         raise ValueError("持续感知至少需要一个公司、行业或主题关注词")
     custom_urls = list(dict.fromkeys(_safe_feed_url(url.strip()) for url in (feed_urls or []) if url.strip()))
+    previous = project.continuous_sensing_artifact
+    custom_sources = list(sources if sources is not None else (previous.sources if previous else []))
+    known_urls = {str(source.url) for source in custom_sources}
+    custom_sources.extend(SensingSourceDefinition(
+        name="自定义 RSS",
+        source_type=SensingSourceType.PROFESSIONAL_MEDIA,
+        tier=2,
+        url=url,
+    ) for url in custom_urls if url not in known_urls)
+    for source in custom_sources:
+        _safe_feed_url(str(source.url))
     try:
         max_age_days = max(1, int(os.getenv("TRIDENT_SENSING_MAX_AGE_DAYS", str(_DEFAULT_MAX_AGE_DAYS))))
     except ValueError:
         max_age_days = _DEFAULT_MAX_AGE_DAYS
     cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
     anchor_terms = [term for term in terms if term.casefold() != (project.region or "").strip().casefold()]
-    previous = project.continuous_sensing_artifact
     previous_ids = {item.signal_id for item in previous.signals} if previous else set()
     by_id = {
         item.signal_id: item
@@ -202,9 +232,10 @@ def refresh_continuous_sensing(
     title_ids = {re.sub(r"\W+", "", item.title).casefold(): item.signal_id for item in by_id.values()}
     errors: list[str] = []
 
-    for source_name, url in _rss_urls(project, terms, custom_urls, max_age_days):
+    source_results: dict[str, SensingSourceDefinition] = {source.source_id: source for source in custom_sources}
+    for source in _rss_sources(project, terms, custom_sources, max_age_days):
         try:
-            response = http_get(url, timeout=10, headers={"User-Agent": "TridentResearch/1.0"})
+            response = http_get(str(source.url), timeout=10, headers={"User-Agent": "TridentResearch/1.0"})
             response.raise_for_status()
             root = ET.fromstring(response.content)
             for item in root.findall(".//item")[:50]:
@@ -227,13 +258,16 @@ def refresh_continuous_sensing(
                 title_key = re.sub(r"\W+", "", title).casefold()
                 signal_id = title_ids.get(title_key) or sha256(title_key.encode("utf-8")).hexdigest()[:24]
                 title_ids[title_key] = signal_id
-                publisher = _clean(item.findtext("source")) or source_name
+                publisher = _clean(item.findtext("source")) or source.name
                 by_id[signal_id] = SensingSignal(
                     signal_id=signal_id,
                     title=title,
                     summary=summary[:600],
                     url=link,
                     source=publisher,
+                    source_id=source.source_id,
+                    source_type=source.source_type,
+                    source_tier=source.tier,
                     published_at=published_at,
                     category=_classify(f"{title} {summary}"),
                     impact=impact,
@@ -246,14 +280,26 @@ def refresh_continuous_sensing(
                     reviewed_at=by_id[signal_id].reviewed_at if signal_id in by_id else None,
                     assessment=by_id[signal_id].assessment if signal_id in by_id else None,
                 )
+            if source.source_id in source_results:
+                source_results[source.source_id] = source.model_copy(update={
+                    "status": SensingSourceStatus.SUCCEEDED,
+                    "last_checked_at": datetime.now(UTC),
+                    "last_error": None,
+                })
         except (requests.RequestException, ET.ParseError, ValueError) as exc:
-            error = f"{source_name}: {type(exc).__name__}"
+            error = f"{source.name}: {type(exc).__name__}"
             if error not in errors:
                 errors.append(error)
+            if source.source_id in source_results:
+                source_results[source.source_id] = source.model_copy(update={
+                    "status": SensingSourceStatus.FAILED,
+                    "last_checked_at": datetime.now(UTC),
+                    "last_error": type(exc).__name__,
+                })
 
     signals = sorted(
         by_id.values(),
-        key=lambda item: (item.published_at or item.captured_at, item.relevance_score),
+        key=lambda item: (item.source_tier == 1, item.relevance_score, item.published_at or item.captured_at),
         reverse=True,
     )[:200]
     now = datetime.now(UTC)
@@ -269,6 +315,7 @@ def refresh_continuous_sensing(
         project_id=project.project_id,
         watch_terms=terms,
         feed_urls=custom_urls,
+        sources=list(source_results.values()),
         signals=signals,
         review_tasks=list(previous.review_tasks) if previous else [],
         subscription=subscription,
