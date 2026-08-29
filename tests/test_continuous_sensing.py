@@ -6,7 +6,7 @@ import pytest
 # Import the delivery boundary first, matching application startup order.  The
 # services package re-exports planning services during initialization.
 from src.api.app import app  # noqa: F401
-from src.services.continuous_sensing import refresh_continuous_sensing
+from src.services.continuous_sensing import configure_sensing_subscription, refresh_continuous_sensing
 from src.services.sensing_review import (
     review_sensing_asset_draft,
     review_sensing_impact_task,
@@ -86,12 +86,32 @@ def test_refresh_fetches_filters_classifies_and_deduplicates() -> None:
     assert signal.impact == "high"
     assert "Acme Medical" in signal.matched_terms
     assert signal.source == "Google News"
+    assert first.management_digest is not None
+    assert first.management_digest.new_signal_count == 1
+    assert first.subscription.last_run_status == "succeeded"
 
     updated = current.model_copy(update={"continuous_sensing_artifact": first})
     second = refresh_continuous_sensing(updated, http_get=lambda *args, **kwargs: FakeResponse())
     assert len(second.signals) == 1
     assert second.signals[0].signal_id == signal.signal_id
     assert second.artifact_id == first.artifact_id
+    assert second.management_digest.new_signal_count == 0
+
+
+def test_subscription_requires_automatic_cadence_and_preserves_schedule_on_refresh() -> None:
+    current = project()
+    with pytest.raises(ValueError, match="每日或每周"):
+        configure_sensing_subscription(current, enabled=True, cadence="manual")
+    subscribed = configure_sensing_subscription(current, enabled=True, cadence="daily")
+    subscription = subscribed.continuous_sensing_artifact.subscription
+    assert subscription.enabled is True
+    assert subscription.cadence == "daily"
+    assert subscription.next_run_at is not None
+    refreshed = refresh_continuous_sensing(subscribed, http_get=lambda *args, **kwargs: FakeResponse())
+    assert refreshed.subscription.enabled is True
+    assert refreshed.subscription.cadence == "daily"
+    assert refreshed.subscription.last_run_at is not None
+    assert refreshed.subscription.next_run_at > refreshed.subscription.last_run_at
 
 
 def test_refresh_records_source_failure_without_losing_previous_signals() -> None:

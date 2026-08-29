@@ -460,6 +460,23 @@ export interface ContinuousSensingArtifact {
       } | null;
     } | null;
   }>;
+  subscription: {
+    enabled: boolean;
+    cadence: "manual" | "daily" | "weekly";
+    next_run_at?: string | null;
+    last_run_at?: string | null;
+    last_run_status?: "succeeded" | "partial" | "failed" | null;
+    last_run_error?: string | null;
+  };
+  management_digest?: {
+    headline: string;
+    summary: string;
+    high_impact_count: number;
+    pending_review_count: number;
+    new_signal_count: number;
+    top_signal_ids: string[];
+    generated_at: string;
+  } | null;
   fetch_errors: string[];
   refreshed_at: string;
 }

@@ -25,7 +25,7 @@ from src.models.analysis import AnalysisReviewStatus
 from src.models.future import ForecastReviewStatus
 from src.models.strategy import StrategyReviewStatus
 from src.models.feedback import ProposalReviewStatus
-from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, ImpactReviewTaskStatus, SignalReviewStatus
+from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, ImpactReviewTaskStatus, SensingCadence, SignalReviewStatus
 from src.persistence.factory import create_project_repository
 from src.providers.base import ProviderError
 from src.core.registry import ExtensionRegistry
@@ -46,7 +46,7 @@ from src.services.company_assessment import CompanyAssessmentError
 from src.services.action_planning import ActionPlanningError
 from src.services.scenario_interview import ScenarioInterviewError, ScenarioInterviewService
 from src.services.research_routing import ScenarioResearchRouter
-from src.services.continuous_sensing import refresh_continuous_sensing
+from src.services.continuous_sensing import configure_sensing_subscription, refresh_continuous_sensing
 from src.services.sensing_review import (
     review_sensing_asset_draft,
     review_sensing_impact_task,
@@ -138,6 +138,11 @@ class ActionFeedbackRequest(BaseModel):
 class ContinuousSensingRequest(BaseModel):
     watch_terms: list[str] = Field(default_factory=list)
     feed_urls: list[str] = Field(default_factory=list)
+
+
+class SensingSubscriptionRequest(BaseModel):
+    enabled: bool
+    cadence: SensingCadence
 
 
 class SensingSignalReviewRequest(BaseModel):
@@ -516,6 +521,62 @@ def refresh_project_continuous_sensing(
         raise HTTPException(status_code=404, detail="project not found") from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.put("/v1/projects/{project_id}/continuous-sensing/subscription", response_model=ProjectState)
+def update_project_sensing_subscription(
+    project_id: str,
+    payload: SensingSubscriptionRequest,
+    research: ResearchApp,
+) -> ProjectState:
+    try:
+        project = research.get_project(project_id)
+        return research.save_project(configure_sensing_subscription(
+            project,
+            enabled=payload.enabled,
+            cadence=payload.cadence,
+        ))
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/v1/ops/continuous-sensing/run", dependencies=[Depends(_require_ops_access)])
+def run_due_sensing_subscriptions(research: ResearchApp) -> dict:
+    now = datetime.now(UTC)
+    projects = research.list_projects(limit=500)
+    due = [
+        project for project in projects
+        if project.continuous_sensing_artifact
+        and project.continuous_sensing_artifact.subscription.enabled
+        and (
+            project.continuous_sensing_artifact.subscription.next_run_at is None
+            or project.continuous_sensing_artifact.subscription.next_run_at <= now
+        )
+    ]
+    results = []
+    for project in due:
+        artifact = project.continuous_sensing_artifact
+        try:
+            refreshed = refresh_continuous_sensing(
+                project,
+                watch_terms=artifact.watch_terms,
+                feed_urls=artifact.feed_urls,
+            )
+            research.save_project(project.model_copy(update={"continuous_sensing_artifact": refreshed}))
+            results.append({"project_id": project.project_id, "status": refreshed.subscription.last_run_status})
+        except Exception as exc:
+            failed = artifact.model_copy(update={
+                "subscription": artifact.subscription.model_copy(update={
+                    "last_run_at": now,
+                    "last_run_status": "failed",
+                    "last_run_error": type(exc).__name__,
+                })
+            })
+            research.save_project(project.model_copy(update={"continuous_sensing_artifact": failed}))
+            results.append({"project_id": project.project_id, "status": "failed", "error": type(exc).__name__})
+    return {"run_at": now.isoformat(), "due_projects": len(due), "results": results}
 
 
 @app.patch("/v1/projects/{project_id}/continuous-sensing", response_model=ProjectState)

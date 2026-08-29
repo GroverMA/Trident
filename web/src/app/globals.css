@@ -358,6 +358,12 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
 .assetVersionDraft { margin-top: 12px; padding: 12px; border: 1px solid rgba(128,205,211,.32); border-radius: 8px; background: rgba(4,18,36,.62); }
 .assetVersionDraft > p { margin: 8px 0; }
 .assetVersionDraft pre { max-height: 280px; overflow: auto; padding: 10px; border-radius: 6px; background: rgba(0,0,0,.24); color: #d8e2ed; font-size: 7px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sensingSchedule { grid-column: 1 / -1; margin: 0; color: #376f78; font-size: 9px; }
+.sensingDigest { display: grid; grid-template-columns: minmax(220px,.7fr) 1fr auto; gap: 22px; align-items: center; margin-bottom: 18px; padding: 18px 22px; border: 1px solid #b9dadd; border-radius: 12px; background: #edf7f6; }
+.sensingDigest h2, .sensingDigest p { margin: 4px 0 0; }
+.sensingDigest p { color: #596a7d; line-height: 1.6; }
+.sensingDigest small { color: #376f78; white-space: nowrap; }
+@media (max-width: 900px) { .sensingDigest { grid-template-columns: 1fr; gap: 8px; } .sensingDigest small { white-space: normal; } }
 .knowledgeEntity, .feedbackBoard { margin-bottom: 22px; padding: 26px 28px; display: flex; justify-content: space-between; align-items: center; }
 .knowledgeEntity span { color: var(--accent); font-size: 9px; font-weight: 760; }
 .knowledgeEntity h2, .feedbackBoard h2 { margin: 7px 0; }
