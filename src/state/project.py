@@ -107,6 +107,7 @@ class ProjectState(BaseModel):
     scenario_pack: str = "general"
     scenario_pack_version: str = "1.0.0"
     research_brief_artifact: ResearchBriefArtifact | None = None
+    research_brief_history: list[ResearchBriefArtifact] = Field(default_factory=list)
     research_plan_artifact: ResearchPlanArtifact | None = None
     evidence_collection_artifact: EvidenceCollectionArtifact | None = None
     industry_analysis_artifact: IndustryAnalysisArtifact | None = None
@@ -117,6 +118,7 @@ class ProjectState(BaseModel):
     research_route_artifact: ResearchRouteDecision | None = None
     general_report_artifact: GeneralReportArtifact | None = None
     company_scorecard_artifact: CompanyScorecardArtifact | None = None
+    company_scorecard_history: list[CompanyScorecardArtifact] = Field(default_factory=list)
     action_plan_artifact: ActionPlanArtifact | None = None
     enterprise_decision_report_artifact: EnterpriseDecisionReportArtifact | None = None
     action_feedback_artifact: ActionFeedbackArtifact | None = None

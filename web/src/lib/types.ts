@@ -443,6 +443,21 @@ export interface ContinuousSensingArtifact {
       gate_note?: string | null;
       generated_at: string;
       reviewed_at?: string | null;
+      asset_draft?: {
+        draft_id: string;
+        target: "research_scope" | "company_scorecard" | "action_plan";
+        base_artifact_id?: string | null;
+        base_version?: number | null;
+        proposed_artifact_id: string;
+        proposed_version: number;
+        artifact_payload: Record<string, unknown>;
+        change_summary: string[];
+        validation_checks: string[];
+        gate_status: "needs_review" | "activated" | "rejected";
+        gate_note?: string | null;
+        generated_at: string;
+        reviewed_at?: string | null;
+      } | null;
     } | null;
   }>;
   fetch_errors: string[];
@@ -470,12 +485,14 @@ export interface ProjectSummary {
   workflow_status: Record<string, string>;
   market_scope_confirmed_at?: string | null;
   research_brief_artifact?: ResearchBriefArtifact | null;
+  research_brief_history?: ResearchBriefArtifact[];
   research_plan_artifact?: ResearchPlanArtifact | null;
   evidence_collection_artifact?: EvidenceCollectionArtifact | null;
   industry_analysis_artifact?: IndustryAnalysisArtifact | null;
   future_intelligence_artifact?: FutureIntelligenceArtifact | null;
   general_report_artifact?: GeneralReportArtifact | null;
   company_scorecard_artifact?: CompanyScorecardArtifact | null;
+  company_scorecard_history?: CompanyScorecardArtifact[];
   action_plan_artifact?: ActionPlanArtifact | null;
   enterprise_decision_report_artifact?: EnterpriseDecisionReportArtifact | null;
   action_feedback_artifact?: ActionFeedbackArtifact | null;
