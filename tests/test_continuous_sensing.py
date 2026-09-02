@@ -55,6 +55,11 @@ NOISY_RSS = b"""<?xml version="1.0" encoding="UTF-8"?>
   </item>
 </channel></rss>"""
 
+OFFICIAL_HTML = b"""<!doctype html><html><body>
+<a href="/news/acme-approval">Acme Medical receives regulatory approval for new IVD platform</a>
+<a href="/about">About us</a>
+</body></html>"""
+
 
 class FakeResponse:
     def __init__(self, content: bytes = RSS, *, fails: bool = False) -> None:
@@ -176,6 +181,26 @@ def test_registered_primary_source_tracks_health_and_signal_provenance() -> None
     assert signal.source_id == "official-acme"
     assert signal.source_type == "company_official"
     assert signal.source_tier == 1
+
+
+def test_html_connector_extracts_matching_official_announcements() -> None:
+    source = SensingSourceDefinition(
+        source_id="official-html",
+        name="Acme Medical Official",
+        source_type="company_official",
+        source_format="html",
+        tier=1,
+        url="https://example.com/news",
+    )
+
+    def html_or_rss(url: str, **kwargs: object) -> FakeResponse:
+        return FakeResponse(OFFICIAL_HTML if url == "https://example.com/news" else RSS)
+
+    artifact = refresh_continuous_sensing(project(), sources=[source], http_get=html_or_rss)
+    official = next(item for item in artifact.signals if item.source_id == "official-html")
+    assert str(official.url) == "https://example.com/news/acme-approval"
+    assert official.source_type == "company_official"
+    assert official.source_tier == 1
 
 
 def test_human_acceptance_creates_assessment_and_timeline_without_replacing_plan() -> None:

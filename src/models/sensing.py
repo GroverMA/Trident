@@ -76,6 +76,12 @@ class SensingSourceStatus(StrEnum):
     FAILED = "failed"
 
 
+class SensingSourceFormat(StrEnum):
+    AUTO = "auto"
+    RSS = "rss"
+    HTML = "html"
+
+
 class ImpactReviewTarget(StrEnum):
     RESEARCH_SCOPE = "research_scope"
     COMPANY_SCORECARD = "company_scorecard"
@@ -190,6 +196,7 @@ class SensingSourceDefinition(BaseModel):
     source_id: str = Field(default_factory=lambda: f"SSO-{uuid4().hex[:10]}")
     name: str
     source_type: SensingSourceType
+    source_format: SensingSourceFormat = SensingSourceFormat.AUTO
     tier: int = Field(ge=1, le=4)
     url: HttpUrl
     enabled: bool = True

@@ -417,6 +417,7 @@ export interface ContinuousSensingArtifact {
     source_id: string;
     name: string;
     source_type: "news_aggregator" | "company_official" | "regulator_government" | "exchange_disclosure" | "professional_media" | "internal_kpi";
+    source_format: "auto" | "rss" | "html";
     tier: number;
     url: string;
     enabled: boolean;
