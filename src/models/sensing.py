@@ -148,7 +148,10 @@ class SensingSignal(BaseModel):
     matched_terms: list[str] = Field(default_factory=list)
     relevance_score: int = Field(ge=0, le=100)
     project_id: str
+    is_read: bool = False
+    read_at: datetime | None = None
     review_status: SignalReviewStatus = SignalReviewStatus.NEEDS_REVIEW
+    reviewed_by: str | None = None
     reviewer_note: str | None = None
     reviewed_at: datetime | None = None
     assessment: SignalImpactAssessment | None = None

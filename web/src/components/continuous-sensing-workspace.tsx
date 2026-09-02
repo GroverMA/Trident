@@ -27,6 +27,9 @@ export function ContinuousSensingWorkspace() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [sourceType, setSourceType] = useState<"company_official" | "regulator_government" | "exchange_disclosure" | "professional_media">("company_official");
   const [sourceFormat, setSourceFormat] = useState<"auto" | "rss" | "html">("auto");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [reviewNote, setReviewNote] = useState("");
+  const [reviewer, setReviewer] = useState("");
   const active = projects.find((project) => project.project_id === activeId);
   const artifact = active?.continuous_sensing_artifact;
   const signals = artifact?.signals || [];
@@ -47,6 +50,7 @@ export function ContinuousSensingWorkspace() {
 
   function selectProject(projectId: string) {
     setActiveId(projectId);
+    setSelectedIds([]);
     window.localStorage.setItem(ACTIVE_PROJECT_KEY, projectId);
   }
 
@@ -101,13 +105,34 @@ export function ContinuousSensingWorkspace() {
     try {
       const response = await fetch(`/api/projects/${active.project_id}/continuous-sensing`, {
         method: "PATCH", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ signal_id: signal.signal_id, status, note: "" }),
+        body: JSON.stringify({ signal_id: signal.signal_id, status, note: reviewNote, reviewer }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.detail || "信号审核失败");
       replaceProject(payload);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "信号审核失败"); }
     finally { setBusy(""); }
+  }
+
+  async function updateInbox(status?: "accepted" | "ignored") {
+    if (!active || !selectedIds.length) return;
+    setBusy("inbox"); setError("");
+    try {
+      const response = await fetch(`/api/projects/${active.project_id}/continuous-sensing/inbox`, {
+        method: "PATCH", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ signal_ids: selectedIds, status: status || null, note: reviewNote, reviewer }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || "批量处理失败");
+      replaceProject(payload);
+      setSelectedIds([]);
+      if (status) setReviewNote("");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "批量处理失败"); }
+    finally { setBusy(""); }
+  }
+
+  function toggleSignal(signalId: string) {
+    setSelectedIds((current) => current.includes(signalId) ? current.filter((id) => id !== signalId) : [...current, signalId]);
   }
 
   async function reviewTask(taskId: string, status: "approved_for_revision" | "dismissed") {
@@ -169,7 +194,8 @@ export function ContinuousSensingWorkspace() {
       {artifact?.management_digest && <div className="sensingDigest"><div><span className="eyebrow">MANAGEMENT DIGEST</span><h2>{artifact.management_digest.headline}</h2></div><p>{artifact.management_digest.summary}</p><small>本轮新增 {artifact.management_digest.new_signal_count} · 高影响 {artifact.management_digest.high_impact_count} · 待复核 {artifact.management_digest.pending_review_count}</small></div>}
       <div className="sensingSummary"><article><span>{todayCount}</span><small>今日新增</small></article><article><span>{signals.length}</span><small>累计信号</small></article><article><span>{pendingCount}</span><small>待人工复核</small></article><article><span>{acceptedCount}</span><small>已接受并路由</small></article></div>
       <div className="sensingLayout"><section className="signalFeed"><div className="sectionTitle"><div><span className="eyebrow">SIGNAL INBOX</span><h2>新闻与变化信号</h2></div><small>{artifact ? `更新于 ${new Date(artifact.refreshed_at).toLocaleString("zh-CN")}` : "尚未刷新"}</small></div><div className="signalFilters">{["全部", "政策", "竞争", "客户", "技术", "经营 KPI", "其他"].map((item) => <button key={item} className={filter === item ? "selected" : ""} onClick={() => setFilter(item)}>{item}</button>)}</div>
-        {visible.map((signal) => <article className="signalReviewCard" key={signal.signal_id}><header><span>{categories[signal.category]}</span><em className={`impact-${signal.impact}`}>{impacts[signal.impact]}</em><small>Tier {signal.source_tier} · 相关性 {signal.relevance_score}</small></header><a href={signal.url} target="_blank" rel="noreferrer"><h3>{signal.title}</h3></a><p>{signal.summary || signal.impact_reason}</p><div className="signalSource">{signal.source} · {new Date(signal.published_at || signal.captured_at).toLocaleString("zh-CN")} · 命中 {signal.matched_terms.join("、")}</div>{signal.assessment && <div className="signalAssessment"><strong>候选影响分析</strong><p>{signal.assessment.recommended_review}</p><small>关联：{signal.assessment.affected_assets.map((item) => assets[item] || item).join("、")} · 置信度 {signal.assessment.confidence}</small>{signal.assessment.affected_hypotheses.length > 0 && <details><summary>可能受影响的研究假设</summary><ul>{signal.assessment.affected_hypotheses.map((item) => <li key={item}>{item}</li>)}</ul></details>}</div>}<footer><span className={`reviewStatus ${signal.review_status}`}>{signal.review_status === "accepted" ? "已接受并写入时间线" : signal.review_status === "ignored" ? "已忽略" : "等待人工判断"}</span><div><button className="secondaryButton" disabled={busy === signal.signal_id} onClick={() => void review(signal, "ignored")}>忽略</button><button className="primaryButton" disabled={busy === signal.signal_id} onClick={() => void review(signal, "accepted")}>接受并评估影响</button></div></footer></article>)}
+        {signals.length > 0 && <div className="signalBatchBar"><label><input type="checkbox" checked={visible.length > 0 && visible.every((signal) => selectedIds.includes(signal.signal_id))} onChange={(event) => setSelectedIds(event.target.checked ? visible.map((signal) => signal.signal_id) : [])}/>选择当前列表</label><input value={reviewer} onChange={(event) => setReviewer(event.target.value)} placeholder="审核人（可选）"/><input value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} placeholder="统一审核备注（可选）"/><span>已选 {selectedIds.length}</span><button disabled={!selectedIds.length || busy === "inbox"} onClick={() => void updateInbox()}>标记已读</button><button disabled={!selectedIds.length || busy === "inbox"} onClick={() => void updateInbox("ignored")}>批量忽略</button><button className="primaryButton" disabled={!selectedIds.length || busy === "inbox"} onClick={() => void updateInbox("accepted")}>批量接受并路由</button></div>}
+        {visible.map((signal) => <article className={`signalReviewCard ${signal.is_read ? "" : "unread"}`} key={signal.signal_id}><header><input aria-label={`选择 ${signal.title}`} type="checkbox" checked={selectedIds.includes(signal.signal_id)} onChange={() => toggleSignal(signal.signal_id)}/><span>{signal.is_read ? "已读" : "未读"}</span><span>{categories[signal.category]}</span><em className={`impact-${signal.impact}`}>{impacts[signal.impact]}</em><small>Tier {signal.source_tier} · 相关性 {signal.relevance_score}</small></header><a href={signal.url} target="_blank" rel="noreferrer"><h3>{signal.title}</h3></a><p>{signal.summary || signal.impact_reason}</p><div className="signalSource">{signal.source} · {new Date(signal.published_at || signal.captured_at).toLocaleString("zh-CN")} · 命中 {signal.matched_terms.join("、")}</div>{signal.assessment && <div className="signalAssessment"><strong>候选影响分析</strong><p>{signal.assessment.recommended_review}</p><small>关联：{signal.assessment.affected_assets.map((item) => assets[item] || item).join("、")} · 置信度 {signal.assessment.confidence}</small>{signal.assessment.affected_hypotheses.length > 0 && <details><summary>可能受影响的研究假设</summary><ul>{signal.assessment.affected_hypotheses.map((item) => <li key={item}>{item}</li>)}</ul></details>}</div>}<footer><span className={`reviewStatus ${signal.review_status}`}>{signal.review_status === "accepted" ? `已接受并写入时间线${signal.reviewed_by ? ` · ${signal.reviewed_by}` : ""}` : signal.review_status === "ignored" ? `已忽略${signal.reviewed_by ? ` · ${signal.reviewed_by}` : ""}` : "等待人工判断"}</span><div><button className="secondaryButton" disabled={busy === signal.signal_id} onClick={() => void review(signal, "ignored")}>忽略</button><button className="primaryButton" disabled={busy === signal.signal_id} onClick={() => void review(signal, "accepted")}>接受并评估影响</button></div></footer></article>)}
         {!visible.length && <div className="platformEmpty"><h2>{active ? "尚无匹配信号" : "请先选择联动项目"}</h2><p>{active ? "确认关注词后刷新，系统将保存与该项目相关的真实公开新闻。" : "不同企业和投资标的的信号分别保存。"}</p></div>}
       </section><aside className="impactPanel"><span className="eyebrow">HUMAN-GOVERNED ROUTER</span><h2>信号不会直接改写决策</h2><ol><li><span>01</span><div><strong>抓取、清理和去重</strong><small>保留来源链接与发布时间</small></div></li><li><span>02</span><div><strong>项目与实体匹配</strong><small>按公司、行业和关注主题关联</small></div></li><li><span>03</span><div><strong>人工接受或忽略</strong><small>接受后生成版本化影响复核任务</small></div></li><li><span>04</span><div><strong>两级版本 Gate</strong><small>先批准候选方向，再审核完整资产草稿</small></div></li></ol><div className="impactTaskList"><h3>版本化影响复核</h3>{reviewTasks.map((task) => <article key={task.task_id}><header><strong>{taskTargets[task.target]}</strong><span>候选 V{task.proposed_version}</span></header><p>{task.recommended_review}</p><small>{task.base_artifact_id ? `基于 ${task.base_artifact_id}${task.base_version ? ` · V${task.base_version}` : ""}` : "尚无基准资产，将进入首版复核"}</small>{task.status === "needs_review" ? <footer><button className="secondaryButton" disabled={busy === task.task_id} onClick={() => void reviewTask(task.task_id, "dismissed")}>关闭</button><button className="primaryButton" disabled={busy === task.task_id} onClick={() => void reviewTask(task.task_id, "approved_for_revision")}>批准生成候选版</button></footer> : <em>{task.status === "approved_for_revision" ? "已生成候选修订" : "已关闭"}</em>}{task.candidate && <div className="revisionCandidate"><div><strong>{task.candidate.title}</strong><small>{task.candidate.scenario_id}@{task.candidate.scenario_version}</small></div><p>{task.candidate.rationale}</p><h4>候选变更</h4><ul>{task.candidate.proposed_changes.map((item) => <li key={item}>{item}</li>)}</ul><details><summary>不可变约束与方法来源</summary><ul>{task.candidate.retained_constraints.map((item) => <li key={item}>{item}</li>)}</ul><small>Skills：{Object.entries(task.candidate.skill_versions).map(([id, version]) => `${id}@${version}`).join("、") || "场景契约与研究 SOP"}</small></details>{task.candidate.gate_status === "needs_review" ? <footer><button className="secondaryButton" disabled={busy === `candidate-${task.task_id}`} onClick={() => void reviewCandidate(task.task_id, "rejected")}>退回候选版</button><button className="primaryButton" disabled={busy === `candidate-${task.task_id}`} onClick={() => void reviewCandidate(task.task_id, "approved")}>通过候选 Gate 并生成资产草稿</button></footer> : <em>{task.candidate.gate_status === "approved" ? "候选方向已通过，完整资产草稿如下" : "候选版本已退回"}</em>}{task.candidate.asset_draft && <div className="assetVersionDraft"><header><strong>完整资产 V{task.candidate.asset_draft.proposed_version}</strong><small>{task.candidate.asset_draft.proposed_artifact_id}</small></header><p>旧版本仍在使用；以下草稿通过结构校验，但不会在最终资产 Gate 前生效。</p><h4>相对基准版本的变化</h4><ul>{task.candidate.asset_draft.change_summary.map((item) => <li key={item}>{item}</li>)}</ul><details><summary>完整资产内容与校验结果</summary><pre>{JSON.stringify(task.candidate.asset_draft.artifact_payload, null, 2)}</pre><ul>{task.candidate.asset_draft.validation_checks.map((item) => <li key={item}>{item}</li>)}</ul></details>{task.candidate.asset_draft.gate_status === "needs_review" ? <footer><button className="secondaryButton" disabled={busy === `asset-${task.task_id}`} onClick={() => void reviewAsset(task.task_id, "rejected")}>退回资产草稿</button><button className="primaryButton" disabled={busy === `asset-${task.task_id}`} onClick={() => void reviewAsset(task.task_id, "activated")}>批准并切换至 V{task.candidate.asset_draft.proposed_version}</button></footer> : <em>{task.candidate.asset_draft.gate_status === "activated" ? "新版本已启用，旧版本已进入历史" : "资产草稿已退回，当前版本保持不变"}</em>}</div>}</div>}</article>)}{!reviewTasks.length && <p className="impactTaskEmpty">接受一条新闻后，系统会按当前项目阶段生成复核任务。</p>}</div><Link className="primaryButton linkButton" href={active ? `/projects/${active.project_id}` : "/projects"}>回到项目处理影响</Link></aside></div>
     </section>

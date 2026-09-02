@@ -12,6 +12,7 @@ from src.services.sensing_review import (
     review_sensing_impact_task,
     review_sensing_revision_candidate,
     review_sensing_signal,
+    update_sensing_inbox,
 )
 from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, ImpactReviewTaskStatus, SensingSourceDefinition, SignalReviewStatus
 from src.state.project import ProjectState
@@ -233,6 +234,40 @@ def test_human_ignore_does_not_create_impact_or_timeline() -> None:
     assert reviewed.continuous_sensing_artifact.signals[0].assessment is None
     assert reviewed.enterprise_timeline_events == []
     assert reviewed.continuous_sensing_artifact.review_tasks == []
+
+
+def test_inbox_can_mark_selected_signals_read_without_reviewing_them() -> None:
+    current = project()
+    artifact = refresh_continuous_sensing(current, http_get=lambda *args, **kwargs: FakeResponse())
+    current = current.model_copy(update={"continuous_sensing_artifact": artifact})
+    signal_id = artifact.signals[0].signal_id
+    updated = update_sensing_inbox(current, signal_ids=[signal_id])
+    signal = updated.continuous_sensing_artifact.signals[0]
+    assert signal.is_read is True
+    assert signal.read_at is not None
+    assert signal.review_status == "needs_review"
+    assert updated.enterprise_timeline_events == []
+
+
+def test_batch_acceptance_records_reviewer_and_creates_one_task_per_signal() -> None:
+    current = project()
+    artifact = refresh_continuous_sensing(current, http_get=lambda *args, **kwargs: FakeResponse())
+    first = artifact.signals[0]
+    second = first.model_copy(update={"signal_id": "second-signal", "title": "Acme Medical customer demand changes"})
+    artifact = artifact.model_copy(update={"signals": [first, second]})
+    current = current.model_copy(update={"continuous_sensing_artifact": artifact})
+    updated = update_sensing_inbox(
+        current,
+        signal_ids=[first.signal_id, second.signal_id],
+        status=SignalReviewStatus.ACCEPTED,
+        note="进入本周管理层复核",
+        reviewer="Research Ops",
+    )
+    assert all(signal.is_read for signal in updated.continuous_sensing_artifact.signals)
+    assert all(signal.review_status == "accepted" for signal in updated.continuous_sensing_artifact.signals)
+    assert all(signal.reviewed_by == "Research Ops" for signal in updated.continuous_sensing_artifact.signals)
+    assert len(updated.continuous_sensing_artifact.review_tasks) == 2
+    assert len(updated.enterprise_timeline_events) == 2
 
 
 def test_impact_task_approval_authorizes_candidate_but_does_not_replace_assets() -> None:
