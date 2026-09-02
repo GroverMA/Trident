@@ -88,6 +88,23 @@ class ImpactReviewTarget(StrEnum):
     ACTION_PLAN = "action_plan"
 
 
+class KpiDirection(StrEnum):
+    HIGHER_IS_BETTER = "higher_is_better"
+    LOWER_IS_BETTER = "lower_is_better"
+
+
+class InternalKpiObservation(BaseModel):
+    metric_name: str = Field(min_length=1)
+    value: float
+    unit: str = Field(min_length=1)
+    period: str = Field(min_length=1)
+    direction: KpiDirection = KpiDirection.HIGHER_IS_BETTER
+    comparison_value: float | None = None
+    target_value: float | None = None
+    note: str = ""
+    observed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class SignalImpactAssessment(BaseModel):
     affected_assets: list[str] = Field(default_factory=list)
     affected_hypotheses: list[str] = Field(default_factory=list)
@@ -155,6 +172,7 @@ class SensingSignal(BaseModel):
     reviewer_note: str | None = None
     reviewed_at: datetime | None = None
     assessment: SignalImpactAssessment | None = None
+    kpi_observation: InternalKpiObservation | None = None
 
 
 class SensingImpactReviewTask(BaseModel):

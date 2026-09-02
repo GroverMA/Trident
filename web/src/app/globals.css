@@ -290,6 +290,14 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
 .sensingSubscription input { width: 100%; min-height: 42px; padding: 0 13px; border: 1px solid var(--border); border-radius: 8px; background: #fbfcfd; color: var(--ink); }
 .sensingSubscription .formError, .sensingSubscription .sensingWarning { grid-column: 1 / -1; margin: 0; }
 .sensingWarning { padding: 10px 12px; border-radius: 7px; background: #fff8e7; color: #816324; font-size: 10px; }
+.internalKpiEntry { display: grid; grid-template-columns: minmax(230px,1.2fr) repeat(4,minmax(100px,.55fr)); gap: 12px; align-items: end; margin-bottom: 18px; padding: 22px; border: 1px solid var(--border); border-radius: 12px; background: #f4f8f8; }
+.internalKpiEntry h2 { margin: 5px 0 7px; font-size: 19px; }
+.internalKpiEntry p { margin: 0; color: #748095; font-size: 10px; line-height: 1.55; }
+.internalKpiEntry label span { display: block; margin-bottom: 6px; color: #657187; font-size: 9px; font-weight: 700; }
+.internalKpiEntry input, .internalKpiEntry select { width: 100%; min-height: 39px; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px; background: #fff; color: var(--ink); }
+.internalKpiEntry .kpiNote { grid-column: 2 / span 3; }
+.kpiSignalDetail { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.kpiSignalDetail span { padding: 6px 9px; border-radius: 6px; background: #eaf4f4; color: var(--accent); font-size: 9px; font-weight: 700; }
 .signalRow a { color: inherit; text-decoration: none; }
 .signalRow a:hover h3 { color: var(--accent); }
 .signalRow div > small { display: block; margin-top: 7px; color: #8390a3; font-size: 9px; }
@@ -584,6 +592,8 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
   .knowledgeEntity button, .feedbackBoard button { margin-top: 18px; }
   .signalFilters { overflow-x: auto; }
   .signalBatchBar { grid-template-columns: 1fr 1fr; }
+  .internalKpiEntry { grid-template-columns: 1fr 1fr; }
+  .internalKpiEntry > div, .internalKpiEntry .kpiNote { grid-column: 1 / -1; }
   .diagnosticHeader { display: block; padding: 24px 21px; }
   .diagnosticStage { margin-top: 20px; }
   .goalMain, .profileWorkspace { padding: 22px 18px; }

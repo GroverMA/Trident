@@ -409,6 +409,17 @@ export interface SensingSignal {
     recommended_review: string;
     confidence: number;
   } | null;
+  kpi_observation?: {
+    metric_name: string;
+    value: number;
+    unit: string;
+    period: string;
+    direction: "higher_is_better" | "lower_is_better";
+    comparison_value?: number | null;
+    target_value?: number | null;
+    note: string;
+    observed_at: string;
+  } | null;
 }
 
 export interface ContinuousSensingArtifact {
