@@ -52,6 +52,7 @@ from src.services.sensing_review import (
     review_sensing_impact_task,
     review_sensing_revision_candidate,
     review_sensing_signal,
+    update_sensing_inbox,
 )
 from src.state.project import (
     ProjectState,
@@ -150,6 +151,14 @@ class SensingSignalReviewRequest(BaseModel):
     signal_id: str = Field(min_length=1)
     status: SignalReviewStatus
     note: str | None = None
+    reviewer: str | None = None
+
+
+class SensingInboxUpdateRequest(BaseModel):
+    signal_ids: list[str] = Field(min_length=1)
+    status: SignalReviewStatus | None = None
+    note: str | None = None
+    reviewer: str | None = None
 
 
 class SensingImpactTaskReviewRequest(BaseModel):
@@ -595,6 +604,28 @@ def review_project_sensing_signal(
             signal_id=payload.signal_id,
             status=payload.status,
             note=payload.note,
+            reviewer=payload.reviewer,
+        ))
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.patch("/v1/projects/{project_id}/continuous-sensing/inbox", response_model=ProjectState)
+def update_project_sensing_inbox(
+    project_id: str,
+    payload: SensingInboxUpdateRequest,
+    research: ResearchApp,
+) -> ProjectState:
+    try:
+        project = research.get_project(project_id)
+        return research.save_project(update_sensing_inbox(
+            project,
+            signal_ids=payload.signal_ids,
+            status=payload.status,
+            note=payload.note,
+            reviewer=payload.reviewer,
         ))
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="project not found") from exc

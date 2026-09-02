@@ -397,7 +397,10 @@ export interface SensingSignal {
   matched_terms: string[];
   relevance_score: number;
   project_id: string;
+  is_read: boolean;
+  read_at?: string | null;
   review_status: "needs_review" | "accepted" | "ignored";
+  reviewed_by?: string | null;
   reviewer_note?: string | null;
   reviewed_at?: string | null;
   assessment?: {

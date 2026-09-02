@@ -239,6 +239,7 @@ def review_sensing_signal(
     signal_id: str,
     status: SignalReviewStatus,
     note: str | None = None,
+    reviewer: str | None = None,
 ) -> ProjectState:
     artifact = project.continuous_sensing_artifact
     if artifact is None:
@@ -257,7 +258,10 @@ def review_sensing_signal(
         found = True
         assessment = _assess(project, signal.category) if status == SignalReviewStatus.ACCEPTED else None
         updated = signal.model_copy(update={
+            "is_read": True,
+            "read_at": signal.read_at or now,
             "review_status": status,
+            "reviewed_by": (reviewer or "").strip() or None,
             "reviewer_note": (note or "").strip() or None,
             "reviewed_at": now,
             "assessment": assessment,
@@ -285,6 +289,54 @@ def review_sensing_signal(
     return project.model_copy(update={
         "continuous_sensing_artifact": artifact.model_copy(update={"signals": signals, "review_tasks": tasks}),
         "enterprise_timeline_events": timeline,
+    })
+
+
+def update_sensing_inbox(
+    project: ProjectState,
+    *,
+    signal_ids: list[str],
+    status: SignalReviewStatus | None = None,
+    note: str | None = None,
+    reviewer: str | None = None,
+) -> ProjectState:
+    """Mark signals read or apply one governed review decision to a selection."""
+    unique_ids = list(dict.fromkeys(item.strip() for item in signal_ids if item.strip()))
+    if not unique_ids:
+        raise ValueError("请至少选择一条感知信号")
+    artifact = project.continuous_sensing_artifact
+    if artifact is None:
+        raise ValueError("当前项目尚无持续感知信号")
+    known_ids = {signal.signal_id for signal in artifact.signals}
+    missing = [signal_id for signal_id in unique_ids if signal_id not in known_ids]
+    if missing:
+        raise ValueError(f"unknown sensing signals: {', '.join(missing)}")
+
+    current = project
+    if status is not None:
+        if status == SignalReviewStatus.NEEDS_REVIEW:
+            raise ValueError("批量审核必须选择接受或忽略")
+        for signal_id in unique_ids:
+            current = review_sensing_signal(
+                current,
+                signal_id=signal_id,
+                status=status,
+                note=note,
+                reviewer=reviewer,
+            )
+        return current
+
+    now = datetime.now(UTC)
+    current_artifact = current.continuous_sensing_artifact
+    return current.model_copy(update={
+        "continuous_sensing_artifact": current_artifact.model_copy(update={
+            "signals": [
+                signal.model_copy(update={"is_read": True, "read_at": signal.read_at or now})
+                if signal.signal_id in unique_ids else signal
+                for signal in current_artifact.signals
+            ]
+        }),
+        "updated_at": now,
     })
 
 

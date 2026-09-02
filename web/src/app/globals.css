@@ -297,6 +297,7 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
 .signalRow em.impact-medium { color: #7b651c; background: #fff8dc; }
 .signalRow em.impact-review { color: #567083; background: #eef4f6; }
 .signalReviewCard { margin-top: 12px; padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+.signalReviewCard.unread { border-left: 4px solid var(--accent); background: #fbfefe; }
 .signalReviewCard > header { display: flex; gap: 8px; align-items: center; }
 .signalReviewCard > header span, .signalReviewCard > header em { padding: 5px 8px; border-radius: 999px; background: #edf5f6; color: var(--accent); font-size: 9px; font-style: normal; font-weight: 750; }
 .signalReviewCard > header small { margin-left: auto; color: #8290a3; font-size: 9px; }
@@ -324,6 +325,10 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
 .signalFilters { display: flex; gap: 7px; margin: 22px 0 10px; }
 .signalFilters button { padding: 7px 11px; color: #728094; background: #f3f5f6; border: 0; border-radius: 999px; }
 .signalFilters button.selected { color: #fff; background: var(--accent); }
+.signalBatchBar { display: grid; grid-template-columns: auto minmax(110px, .7fr) minmax(160px, 1fr) auto auto auto auto; gap: 8px; align-items: center; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: #f7f9fa; }
+.signalBatchBar label, .signalBatchBar span { display: flex; gap: 6px; align-items: center; color: #657286; font-size: 9px; white-space: nowrap; }
+.signalBatchBar input:not([type="checkbox"]) { min-width: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; background: #fff; font-size: 9px; }
+.signalBatchBar button { min-height: 32px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 7px; background: #fff; color: var(--ink); font-size: 9px; }
 .signalRow { padding: 18px 0; display: grid; grid-template-columns: 48px 1fr auto; gap: 14px; align-items: start; border-top: 1px solid var(--border); }
 .signalRow > span { padding: 6px 5px; color: var(--accent); background: #e7f2f2; border-radius: 6px; font-size: 9px; text-align: center; }
 .signalRow h3 { margin: 0; font-size: 14px; }
@@ -578,6 +583,7 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
   .knowledgeEntity, .feedbackBoard { display: block; }
   .knowledgeEntity button, .feedbackBoard button { margin-top: 18px; }
   .signalFilters { overflow-x: auto; }
+  .signalBatchBar { grid-template-columns: 1fr 1fr; }
   .diagnosticHeader { display: block; padding: 24px 21px; }
   .diagnosticStage { margin-top: 20px; }
   .goalMain, .profileWorkspace { padding: 22px 18px; }
