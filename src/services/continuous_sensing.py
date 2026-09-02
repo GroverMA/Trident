@@ -6,10 +6,11 @@ from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from hashlib import sha256
 from html import unescape
+from html.parser import HTMLParser
 import ipaddress
 import os
 import re
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import quote_plus, urljoin, urlparse
 import xml.etree.ElementTree as ET
 
 import requests
@@ -23,6 +24,7 @@ from src.models.sensing import (
     SensingManagementDigest,
     SensingRunStatus,
     SensingSourceDefinition,
+    SensingSourceFormat,
     SensingSourceStatus,
     SensingSourceType,
     SensingSubscription,
@@ -40,6 +42,59 @@ _CATEGORY_TERMS = {
 }
 _HIGH_IMPACT_TERMS = ("监管", "禁令", "召回", "收购", "破产", "获批", "审批", "重大", "ban", "recall", "acquisition", "regulatory", "approval")
 _DEFAULT_MAX_AGE_DAYS = 180
+
+
+class _LinkParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.links: list[tuple[str, str]] = []
+        self._href: str | None = None
+        self._text: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() != "a":
+            return
+        self._href = next((value for key, value in attrs if key.lower() == "href" and value), None)
+        self._text = []
+
+    def handle_data(self, data: str) -> None:
+        if self._href:
+            self._text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() == "a" and self._href:
+            text = _clean(" ".join(self._text))
+            if text:
+                self.links.append((text, self._href))
+            self._href = None
+            self._text = []
+
+
+def _source_items(source: SensingSourceDefinition, content: bytes) -> list[tuple[str, str, str, datetime | None, str | None]]:
+    stripped = content.lstrip().lower()
+    use_html = source.source_format == SensingSourceFormat.HTML or (
+        source.source_format == SensingSourceFormat.AUTO
+        and not (stripped.startswith(b"<?xml") or stripped.startswith(b"<rss") or stripped.startswith(b"<feed"))
+    )
+    if use_html:
+        parser = _LinkParser()
+        parser.feed(content.decode("utf-8", errors="replace"))
+        return [
+            (title, urljoin(str(source.url), href), "", None, None)
+            for title, href in parser.links[:100]
+            if urlparse(urljoin(str(source.url), href)).scheme in {"http", "https"}
+        ]
+    root = ET.fromstring(content)
+    return [
+        (
+            _clean(item.findtext("title")),
+            _clean(item.findtext("link")),
+            _clean(item.findtext("description")),
+            _published(item.findtext("pubDate")),
+            _clean(item.findtext("source")) or None,
+        )
+        for item in root.findall(".//item")[:50]
+    ]
 
 
 def _next_run(cadence: SensingCadence, now: datetime) -> datetime | None:
@@ -237,14 +292,9 @@ def refresh_continuous_sensing(
         try:
             response = http_get(str(source.url), timeout=10, headers={"User-Agent": "TridentResearch/1.0"})
             response.raise_for_status()
-            root = ET.fromstring(response.content)
-            for item in root.findall(".//item")[:50]:
-                title = _clean(item.findtext("title"))
-                link = _clean(item.findtext("link"))
+            for title, link, summary, published_at, item_source in _source_items(source, response.content):
                 if not title or not link:
                     continue
-                summary = _clean(item.findtext("description"))
-                published_at = _published(item.findtext("pubDate"))
                 if published_at and published_at < cutoff:
                     continue
                 matched, score, impact, reason = _rank(
@@ -258,7 +308,7 @@ def refresh_continuous_sensing(
                 title_key = re.sub(r"\W+", "", title).casefold()
                 signal_id = title_ids.get(title_key) or sha256(title_key.encode("utf-8")).hexdigest()[:24]
                 title_ids[title_key] = signal_id
-                publisher = _clean(item.findtext("source")) or source.name
+                publisher = item_source or source.name
                 by_id[signal_id] = SensingSignal(
                     signal_id=signal_id,
                     title=title,
