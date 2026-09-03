@@ -17,6 +17,8 @@ import requests
 
 from src.models.sensing import (
     ContinuousSensingArtifact,
+    InternalKpiObservation,
+    KpiDirection,
     SensingSignal,
     SignalCategory,
     SignalImpact,
@@ -155,6 +157,79 @@ def default_watch_terms(project: ProjectState) -> list[str]:
     if project.research_brief_artifact:
         candidates.extend(project.research_brief_artifact.market_definition.inclusions[:3])
     return list(dict.fromkeys(term.strip() for term in candidates if term and term.strip()))
+
+
+def _kpi_impact(observation: InternalKpiObservation) -> tuple[SignalImpact, str]:
+    reference = observation.target_value if observation.target_value is not None else observation.comparison_value
+    reference_name = "目标" if observation.target_value is not None else "对比基准"
+    if reference is None:
+        return SignalImpact.REVIEW, "尚无目标或对比基准，需要人工判断该经营变化的重要性"
+    denominator = max(abs(reference), 1e-9)
+    gap = (observation.value - reference) / denominator
+    adverse_gap = -gap if observation.direction == KpiDirection.HIGHER_IS_BETTER else gap
+    if adverse_gap >= 0.2:
+        return SignalImpact.HIGH, f"当前值相对{reference_name}出现 {abs(gap):.1%} 的重大不利偏差"
+    if adverse_gap > 0:
+        return SignalImpact.MEDIUM, f"当前值相对{reference_name}出现 {abs(gap):.1%} 的不利偏差"
+    return SignalImpact.MEDIUM, f"当前值达到或优于{reference_name}，需要复核其对既有假设和行动的影响"
+
+
+def ingest_internal_kpi(project: ProjectState, observation: InternalKpiObservation) -> ProjectState:
+    """Create a governed operations signal from a structured internal KPI observation."""
+    now = datetime.now(UTC)
+    previous = project.continuous_sensing_artifact
+    artifact = previous or ContinuousSensingArtifact(
+        project_id=project.project_id,
+        watch_terms=default_watch_terms(project),
+    )
+    stable_key = f"{project.project_id}|{observation.metric_name.casefold()}|{observation.period.casefold()}"
+    signal_id = f"KPI-{sha256(stable_key.encode()).hexdigest()[:20]}"
+    existing = next((item for item in artifact.signals if item.signal_id == signal_id), None)
+    impact, reason = _kpi_impact(observation)
+    references = []
+    if observation.comparison_value is not None:
+        references.append(f"对比值 {observation.comparison_value:g}{observation.unit}")
+    if observation.target_value is not None:
+        references.append(f"目标值 {observation.target_value:g}{observation.unit}")
+    summary = f"当前值 {observation.value:g}{observation.unit}"
+    if references:
+        summary += "；" + "；".join(references)
+    if observation.note.strip():
+        summary += f"；说明：{observation.note.strip()}"
+    signal = SensingSignal(
+        signal_id=signal_id,
+        title=f"{observation.metric_name} · {observation.period}",
+        summary=summary,
+        url="https://trident-research.vercel.app/sensing",
+        source="企业内部经营数据",
+        source_id="internal-kpi",
+        source_type=SensingSourceType.INTERNAL_KPI,
+        source_tier=1,
+        published_at=observation.observed_at,
+        category=SignalCategory.OPERATIONS,
+        impact=impact,
+        impact_reason=reason,
+        matched_terms=[observation.metric_name],
+        relevance_score=100,
+        project_id=project.project_id,
+        is_read=existing.is_read if existing else False,
+        read_at=existing.read_at if existing else None,
+        review_status=existing.review_status if existing else "needs_review",
+        reviewed_by=existing.reviewed_by if existing else None,
+        reviewer_note=existing.reviewer_note if existing else None,
+        reviewed_at=existing.reviewed_at if existing else None,
+        assessment=existing.assessment if existing else None,
+        kpi_observation=observation,
+    )
+    signals = [item for item in artifact.signals if item.signal_id != signal_id]
+    signals.insert(0, signal)
+    previous_ids = {item.signal_id for item in artifact.signals}
+    updated_artifact = artifact.model_copy(update={
+        "signals": signals[:200],
+        "management_digest": _digest(signals[:200], previous_ids),
+        "refreshed_at": now,
+    })
+    return project.model_copy(update={"continuous_sensing_artifact": updated_artifact, "updated_at": now})
 
 
 def _clean(value: str | None) -> str:
@@ -325,7 +400,10 @@ def refresh_continuous_sensing(
                     matched_terms=matched,
                     relevance_score=score,
                     project_id=project.project_id,
+                    is_read=by_id[signal_id].is_read if signal_id in by_id else False,
+                    read_at=by_id[signal_id].read_at if signal_id in by_id else None,
                     review_status=by_id[signal_id].review_status if signal_id in by_id else "needs_review",
+                    reviewed_by=by_id[signal_id].reviewed_by if signal_id in by_id else None,
                     reviewer_note=by_id[signal_id].reviewer_note if signal_id in by_id else None,
                     reviewed_at=by_id[signal_id].reviewed_at if signal_id in by_id else None,
                     assessment=by_id[signal_id].assessment if signal_id in by_id else None,

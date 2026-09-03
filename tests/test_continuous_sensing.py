@@ -6,7 +6,7 @@ import pytest
 # Import the delivery boundary first, matching application startup order.  The
 # services package re-exports planning services during initialization.
 from src.api.app import app  # noqa: F401
-from src.services.continuous_sensing import configure_sensing_subscription, refresh_continuous_sensing
+from src.services.continuous_sensing import configure_sensing_subscription, ingest_internal_kpi, refresh_continuous_sensing
 from src.services.sensing_review import (
     review_sensing_asset_draft,
     review_sensing_impact_task,
@@ -14,7 +14,7 @@ from src.services.sensing_review import (
     review_sensing_signal,
     update_sensing_inbox,
 )
-from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, ImpactReviewTaskStatus, SensingSourceDefinition, SignalReviewStatus
+from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, ImpactReviewTaskStatus, InternalKpiObservation, SensingSourceDefinition, SignalReviewStatus
 from src.state.project import ProjectState
 
 
@@ -102,6 +102,23 @@ def test_refresh_fetches_filters_classifies_and_deduplicates() -> None:
     assert second.signals[0].signal_id == signal.signal_id
     assert second.artifact_id == first.artifact_id
     assert second.management_digest.new_signal_count == 0
+
+
+def test_refresh_preserves_inbox_read_and_reviewer_metadata() -> None:
+    current = project()
+    first = refresh_continuous_sensing(current, http_get=lambda *args, **kwargs: FakeResponse())
+    accepted = update_sensing_inbox(
+        current.model_copy(update={"continuous_sensing_artifact": first}),
+        signal_ids=[first.signals[0].signal_id],
+        status=SignalReviewStatus.ACCEPTED,
+        reviewer="Research Ops",
+    )
+    refreshed = refresh_continuous_sensing(accepted, http_get=lambda *args, **kwargs: FakeResponse())
+    signal = refreshed.signals[0]
+    assert signal.is_read is True
+    assert signal.read_at is not None
+    assert signal.reviewed_by == "Research Ops"
+    assert signal.review_status == "accepted"
 
 
 def test_subscription_requires_automatic_cadence_and_preserves_schedule_on_refresh() -> None:
@@ -268,6 +285,39 @@ def test_batch_acceptance_records_reviewer_and_creates_one_task_per_signal() -> 
     assert all(signal.reviewed_by == "Research Ops" for signal in updated.continuous_sensing_artifact.signals)
     assert len(updated.continuous_sensing_artifact.review_tasks) == 2
     assert len(updated.enterprise_timeline_events) == 2
+
+
+def test_internal_kpi_becomes_high_impact_governed_operations_signal() -> None:
+    observation = InternalKpiObservation(
+        metric_name="月度订单额",
+        value=70,
+        unit="万元",
+        period="2026-08",
+        comparison_value=95,
+        target_value=100,
+        note="两个核心客户延期",
+    )
+    updated = ingest_internal_kpi(project(), observation)
+    signal = updated.continuous_sensing_artifact.signals[0]
+    assert signal.signal_id.startswith("KPI-")
+    assert str(signal.url) == "https://trident-research.vercel.app/sensing"
+    assert signal.source_type == "internal_kpi"
+    assert signal.category == "operations"
+    assert signal.impact == "high"
+    assert signal.review_status == "needs_review"
+    assert signal.kpi_observation == observation
+    assert updated.continuous_sensing_artifact.review_tasks == []
+
+
+def test_internal_kpi_same_metric_and_period_updates_without_duplicate() -> None:
+    first = ingest_internal_kpi(project(), InternalKpiObservation(
+        metric_name="交付周期", value=18, unit="天", period="2026-W35", direction="lower_is_better", target_value=14,
+    ))
+    second = ingest_internal_kpi(first, InternalKpiObservation(
+        metric_name="交付周期", value=16, unit="天", period="2026-W35", direction="lower_is_better", target_value=14,
+    ))
+    assert len(second.continuous_sensing_artifact.signals) == 1
+    assert second.continuous_sensing_artifact.signals[0].kpi_observation.value == 16
 
 
 def test_impact_task_approval_authorizes_candidate_but_does_not_replace_assets() -> None:
