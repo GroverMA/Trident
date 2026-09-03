@@ -518,6 +518,20 @@ export interface ContinuousSensingArtifact {
     top_signal_ids: string[];
     generated_at: string;
   } | null;
+  notification_outbox: Array<{
+    notification_id: string;
+    notification_type: "high_impact_signal" | "source_failure" | "connector_failure";
+    severity: "critical" | "warning";
+    title: string;
+    message: string;
+    target_ref: string;
+    status: "pending" | "acknowledged" | "closed";
+    delivery_channels: string[];
+    created_at: string;
+    acknowledged_at?: string | null;
+    acknowledged_by?: string | null;
+    resolution_note?: string | null;
+  }>;
   fetch_errors: string[];
   refreshed_at: string;
 }
