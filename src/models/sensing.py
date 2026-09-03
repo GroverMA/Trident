@@ -243,6 +243,20 @@ class SensingManagementDigest(BaseModel):
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class SensingRunRecord(BaseModel):
+    run_id: str = Field(default_factory=lambda: f"SEN-{uuid4().hex[:12]}")
+    started_at: datetime
+    completed_at: datetime
+    duration_ms: int = Field(ge=0)
+    status: SensingRunStatus
+    new_signal_count: int = Field(default=0, ge=0)
+    source_success_count: int = Field(default=0, ge=0)
+    source_failure_count: int = Field(default=0, ge=0)
+    connector_success_count: int = Field(default=0, ge=0)
+    connector_failure_count: int = Field(default=0, ge=0)
+    errors: list[str] = Field(default_factory=list)
+
+
 class SensingSourceDefinition(BaseModel):
     source_id: str = Field(default_factory=lambda: f"SSO-{uuid4().hex[:10]}")
     name: str
@@ -267,5 +281,6 @@ class ContinuousSensingArtifact(BaseModel):
     review_tasks: list[SensingImpactReviewTask] = Field(default_factory=list)
     subscription: SensingSubscription = Field(default_factory=SensingSubscription)
     management_digest: SensingManagementDigest | None = None
+    run_history: list[SensingRunRecord] = Field(default_factory=list)
     fetch_errors: list[str] = Field(default_factory=list)
     refreshed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

@@ -424,6 +424,8 @@ def test_scheduled_cycle_refreshes_news_and_feishu_kpis(monkeypatch: pytest.Monk
     assert artifact.kpi_connectors[0].status == "succeeded"
     assert any(signal.source_type == "internal_kpi" for signal in artifact.signals)
     assert artifact.subscription.last_run_status == "succeeded"
+    assert artifact.run_history[0].connector_success_count == 1
+    assert artifact.run_history[0].new_signal_count == 1
 
 
 def test_scheduled_cycle_marks_connector_failure_as_partial(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -440,6 +442,8 @@ def test_scheduled_cycle_marks_connector_failure_as_partial(monkeypatch: pytest.
     assert artifact.kpi_connectors[0].status == "failed"
     assert artifact.subscription.last_run_status == "partial"
     assert "飞书经营 KPI" in artifact.subscription.last_run_error
+    assert artifact.run_history[0].connector_failure_count == 1
+    assert artifact.run_history[0].status == "partial"
 
 
 def test_impact_task_approval_authorizes_candidate_but_does_not_replace_assets() -> None:

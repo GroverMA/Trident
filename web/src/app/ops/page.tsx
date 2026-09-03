@@ -31,8 +31,16 @@ interface OpsPayload {
     model_call_count: number;
     total_tokens: number;
     average_tokens_per_completed_report?: number | null;
+    sensing_run_count: number;
+    sensing_failed_or_partial_count: number;
   };
   runs: OpsRun[];
+  sensing_runs: Array<{
+    run_id: string; project_id: string; project_name: string; started_at: string;
+    status: "succeeded" | "partial" | "failed"; duration_ms: number; new_signal_count: number;
+    source_success_count: number; source_failure_count: number;
+    connector_success_count: number; connector_failure_count: number; errors: string[];
+  }>;
 }
 
 const stepLabels: Record<string, string> = {
@@ -161,6 +169,18 @@ export default async function OperationsPage() {
                 </tr>
               ))}</tbody>
             </table></div>
+          </section>
+
+          <section className="opsPanel opsTablePanel">
+            <div className="opsPanelTitle"><div><span>Continuous Sensing</span><h2>自动感知运行记录</h2></div><small>{number(data.summary.sensing_run_count)} 次运行 · {number(data.summary.sensing_failed_or_partial_count)} 次需关注</small></div>
+            <div className="opsTableWrap"><table className="opsTable">
+              <thead><tr><th>开始时间</th><th>项目</th><th>状态</th><th>新增信号</th><th>公开来源</th><th>内部连接器</th><th>耗时</th><th>错误</th></tr></thead>
+              <tbody>{data.sensing_runs.slice(0, 100).map((run) => <tr key={run.run_id}>
+                <td>{new Date(run.started_at).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</td><td>{run.project_name}</td>
+                <td><span className={`opsStatus ${run.status === "succeeded" ? "" : "failed"}`}>{run.status === "succeeded" ? "完成" : run.status === "partial" ? "部分成功" : "失败"}</span></td>
+                <td>{run.new_signal_count}</td><td>{run.source_success_count} 成功 / {run.source_failure_count} 失败</td><td>{run.connector_success_count} 成功 / {run.connector_failure_count} 失败</td><td>{duration(run.duration_ms)}</td><td>{run.errors.join("；") || "—"}</td>
+              </tr>)}</tbody>
+            </table>{!data.sensing_runs.length ? <p className="opsEmpty">自动感知调度运行后，这里会显示真实来源与连接器健康记录。</p> : null}</div>
           </section>
 
           <footer className="opsSource">数据源：{data.source}。覆盖从本次埋点上线后的新模型调用开始，历史调用不作推算回填。</footer>

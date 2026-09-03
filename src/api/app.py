@@ -390,6 +390,16 @@ def ops_telemetry(research: ResearchApp) -> dict:
     completed_reports = sum(
         project.general_report_artifact is not None for project in projects
     )
+    sensing_runs = [
+        {
+            **run.model_dump(mode="json"),
+            "project_id": project.project_id,
+            "project_name": project.project_name,
+        }
+        for project in projects
+        if project.continuous_sensing_artifact
+        for run in project.continuous_sensing_artifact.run_history
+    ]
     return {
         "generated_at": datetime.now(UTC).isoformat(),
         "source": "ProjectState.telemetry_runs / provider-reported usage",
@@ -406,8 +416,13 @@ def ops_telemetry(research: ResearchApp) -> dict:
             "average_tokens_per_completed_report": (
                 round(total_tokens / completed_reports) if completed_reports else None
             ),
+            "sensing_run_count": len(sensing_runs),
+            "sensing_failed_or_partial_count": sum(
+                row["status"] in {"failed", "partial"} for row in sensing_runs
+            ),
         },
         "runs": sorted(rows, key=lambda row: row["started_at"], reverse=True),
+        "sensing_runs": sorted(sensing_runs, key=lambda row: row["started_at"], reverse=True),
     }
 
 
@@ -602,6 +617,27 @@ def run_due_sensing_subscriptions(research: ResearchApp) -> dict:
             research.save_project(project.model_copy(update={"continuous_sensing_artifact": failed}))
             results.append({"project_id": project.project_id, "status": "failed", "error": type(exc).__name__})
     return {"run_at": now.isoformat(), "due_projects": len(due), "results": results}
+
+
+@app.post("/v1/ops/continuous-sensing/projects/{project_id}/run", dependencies=[Depends(_require_ops_access)])
+def retry_project_sensing_run(project_id: str, research: ResearchApp) -> dict:
+    """Run one project immediately using the same governed scheduler path."""
+    try:
+        project = research.get_project(project_id)
+        updated = research.save_project(run_continuous_sensing_cycle(project))
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    artifact = updated.continuous_sensing_artifact
+    latest = artifact.run_history[0]
+    return {
+        "project_id": project_id,
+        "status": latest.status,
+        "run_id": latest.run_id,
+        "new_signal_count": latest.new_signal_count,
+        "errors": latest.errors,
+    }
 
 
 @app.patch("/v1/projects/{project_id}/continuous-sensing", response_model=ProjectState)
