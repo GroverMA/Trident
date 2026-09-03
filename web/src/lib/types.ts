@@ -445,6 +445,7 @@ export interface ContinuousSensingArtifact {
     app_token: string;
     table_id: string;
     view_id?: string | null;
+    field_mapping: Record<string, string>;
     status: "ready" | "succeeded" | "failed";
     last_synced_at?: string | null;
     last_record_count: number;
