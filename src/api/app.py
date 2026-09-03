@@ -8,6 +8,7 @@ import os
 import secrets
 from typing import Annotated
 
+import requests
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
@@ -25,7 +26,7 @@ from src.models.analysis import AnalysisReviewStatus
 from src.models.future import ForecastReviewStatus
 from src.models.strategy import StrategyReviewStatus
 from src.models.feedback import ProposalReviewStatus
-from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, ImpactReviewTaskStatus, InternalKpiObservation, SensingCadence, SensingSourceDefinition, SignalReviewStatus
+from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, FeishuKpiConnector, ImpactReviewTaskStatus, InternalKpiObservation, SensingCadence, SensingSourceDefinition, SignalReviewStatus
 from src.persistence.factory import create_project_repository
 from src.providers.base import ProviderError
 from src.core.registry import ExtensionRegistry
@@ -46,7 +47,7 @@ from src.services.company_assessment import CompanyAssessmentError
 from src.services.action_planning import ActionPlanningError
 from src.services.scenario_interview import ScenarioInterviewError, ScenarioInterviewService
 from src.services.research_routing import ScenarioResearchRouter
-from src.services.continuous_sensing import configure_sensing_subscription, ingest_internal_kpi, ingest_internal_kpis, refresh_continuous_sensing
+from src.services.continuous_sensing import FeishuConnectorError, configure_sensing_subscription, ingest_internal_kpi, ingest_internal_kpis, refresh_continuous_sensing, sync_feishu_kpis
 from src.services.sensing_review import (
     review_sensing_asset_draft,
     review_sensing_impact_task,
@@ -167,6 +168,10 @@ class InternalKpiRequest(BaseModel):
 
 class InternalKpiBatchRequest(BaseModel):
     observations: list[InternalKpiObservation] = Field(min_length=1, max_length=500)
+
+
+class FeishuKpiSyncRequest(BaseModel):
+    connector: FeishuKpiConnector
 
 
 class SensingImpactTaskReviewRequest(BaseModel):
@@ -666,6 +671,21 @@ def create_project_internal_kpi_signals(
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="project not found") from exc
     except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/v1/projects/{project_id}/continuous-sensing/internal-kpi/feishu/sync", response_model=ProjectState)
+def sync_project_feishu_kpis(
+    project_id: str,
+    payload: FeishuKpiSyncRequest,
+    research: ResearchApp,
+) -> ProjectState:
+    try:
+        project = research.get_project(project_id)
+        return research.save_project(sync_feishu_kpis(project, payload.connector))
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except (FeishuConnectorError, requests.RequestException) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 

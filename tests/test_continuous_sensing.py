@@ -6,7 +6,7 @@ import pytest
 # Import the delivery boundary first, matching application startup order.  The
 # services package re-exports planning services during initialization.
 from src.api.app import app  # noqa: F401
-from src.services.continuous_sensing import configure_sensing_subscription, ingest_internal_kpi, ingest_internal_kpis, refresh_continuous_sensing
+from src.services.continuous_sensing import FeishuConnectorError, configure_sensing_subscription, ingest_internal_kpi, ingest_internal_kpis, refresh_continuous_sensing, sync_feishu_kpis
 from src.services.sensing_review import (
     review_sensing_asset_draft,
     review_sensing_impact_task,
@@ -14,7 +14,7 @@ from src.services.sensing_review import (
     review_sensing_signal,
     update_sensing_inbox,
 )
-from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, ImpactReviewTaskStatus, InternalKpiObservation, SensingSourceDefinition, SignalReviewStatus
+from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, FeishuKpiConnector, ImpactReviewTaskStatus, InternalKpiObservation, SensingSourceDefinition, SignalReviewStatus
 from src.state.project import ProjectState
 
 
@@ -343,6 +343,52 @@ def test_internal_kpi_batch_last_duplicate_row_wins() -> None:
 def test_internal_kpi_batch_rejects_empty_input() -> None:
     with pytest.raises(ValueError, match="至少提供一条"):
         ingest_internal_kpis(project(), [])
+
+
+class FeishuResponse:
+    def __init__(self, payload: dict) -> None:
+        self.payload = payload
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict:
+        return self.payload
+
+
+def test_feishu_connector_maps_bitable_rows_without_persisting_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FEISHU_APP_ID", "cli_app")
+    monkeypatch.setenv("FEISHU_APP_SECRET", "server-secret")
+    posted: dict = {}
+
+    def fake_post(url: str, **kwargs) -> FeishuResponse:
+        posted.update(kwargs["json"])
+        return FeishuResponse({"code": 0, "tenant_access_token": "tenant-token"})
+
+    def fake_get(url: str, **kwargs) -> FeishuResponse:
+        assert "/apps/app-token/tables/tbl-id/records" in url
+        assert kwargs["headers"]["Authorization"] == "Bearer tenant-token"
+        return FeishuResponse({"code": 0, "data": {"has_more": False, "items": [{"fields": {
+            "指标名称": "月度订单额", "本期数值": 86, "单位": "万元", "期间": "2026-08",
+            "判断方向": "越高越好", "上期值": 95, "目标值": 100, "经营说明": "客户延期",
+        }}]}})
+
+    updated = sync_feishu_kpis(
+        project(), FeishuKpiConnector(app_token="app-token", table_id="tbl-id"),
+        http_post=fake_post, http_get=fake_get,
+    )
+    artifact = updated.continuous_sensing_artifact
+    assert posted == {"app_id": "cli_app", "app_secret": "server-secret"}
+    assert artifact.signals[0].kpi_observation.metric_name == "月度订单额"
+    assert artifact.kpi_connectors[0].last_record_count == 1
+    assert "server-secret" not in artifact.model_dump_json()
+
+
+def test_feishu_connector_requires_server_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("FEISHU_APP_ID", raising=False)
+    monkeypatch.delenv("FEISHU_APP_SECRET", raising=False)
+    with pytest.raises(FeishuConnectorError, match="FEISHU_APP_ID"):
+        sync_feishu_kpis(project(), FeishuKpiConnector(app_token="app-token", table_id="tbl-id"))
 
 
 def test_impact_task_approval_authorizes_candidate_but_does_not_replace_assets() -> None:

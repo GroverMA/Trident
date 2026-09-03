@@ -105,6 +105,36 @@ class InternalKpiObservation(BaseModel):
     observed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class KpiConnectorStatus(StrEnum):
+    READY = "ready"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class KpiFieldMapping(BaseModel):
+    metric_name: str = "指标名称"
+    value: str = "本期数值"
+    unit: str = "单位"
+    period: str = "期间"
+    direction: str = "判断方向"
+    comparison_value: str = "上期值"
+    target_value: str = "目标值"
+    note: str = "经营说明"
+
+
+class FeishuKpiConnector(BaseModel):
+    connector_id: str = Field(default_factory=lambda: f"KCO-{uuid4().hex[:10]}")
+    name: str = "飞书经营 KPI"
+    app_token: str = Field(min_length=1)
+    table_id: str = Field(min_length=1)
+    view_id: str | None = None
+    field_mapping: KpiFieldMapping = Field(default_factory=KpiFieldMapping)
+    status: KpiConnectorStatus = KpiConnectorStatus.READY
+    last_synced_at: datetime | None = None
+    last_record_count: int = Field(default=0, ge=0)
+    last_error: str | None = None
+
+
 class SignalImpactAssessment(BaseModel):
     affected_assets: list[str] = Field(default_factory=list)
     affected_hypotheses: list[str] = Field(default_factory=list)
@@ -232,6 +262,7 @@ class ContinuousSensingArtifact(BaseModel):
     watch_terms: list[str]
     feed_urls: list[str] = Field(default_factory=list)
     sources: list[SensingSourceDefinition] = Field(default_factory=list)
+    kpi_connectors: list[FeishuKpiConnector] = Field(default_factory=list)
     signals: list[SensingSignal] = Field(default_factory=list)
     review_tasks: list[SensingImpactReviewTask] = Field(default_factory=list)
     subscription: SensingSubscription = Field(default_factory=SensingSubscription)
