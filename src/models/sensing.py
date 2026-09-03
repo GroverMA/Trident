@@ -61,6 +61,23 @@ class SensingRunStatus(StrEnum):
     FAILED = "failed"
 
 
+class SensingNotificationStatus(StrEnum):
+    PENDING = "pending"
+    ACKNOWLEDGED = "acknowledged"
+    CLOSED = "closed"
+
+
+class SensingNotificationSeverity(StrEnum):
+    CRITICAL = "critical"
+    WARNING = "warning"
+
+
+class SensingNotificationType(StrEnum):
+    HIGH_IMPACT_SIGNAL = "high_impact_signal"
+    SOURCE_FAILURE = "source_failure"
+    CONNECTOR_FAILURE = "connector_failure"
+
+
 class SensingSourceType(StrEnum):
     NEWS_AGGREGATOR = "news_aggregator"
     COMPANY_OFFICIAL = "company_official"
@@ -257,6 +274,21 @@ class SensingRunRecord(BaseModel):
     errors: list[str] = Field(default_factory=list)
 
 
+class SensingNotification(BaseModel):
+    notification_id: str
+    notification_type: SensingNotificationType
+    severity: SensingNotificationSeverity
+    title: str
+    message: str
+    target_ref: str
+    status: SensingNotificationStatus = SensingNotificationStatus.PENDING
+    delivery_channels: list[str] = Field(default_factory=lambda: ["in_app"])
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    acknowledged_at: datetime | None = None
+    acknowledged_by: str | None = None
+    resolution_note: str | None = None
+
+
 class SensingSourceDefinition(BaseModel):
     source_id: str = Field(default_factory=lambda: f"SSO-{uuid4().hex[:10]}")
     name: str
@@ -282,5 +314,6 @@ class ContinuousSensingArtifact(BaseModel):
     subscription: SensingSubscription = Field(default_factory=SensingSubscription)
     management_digest: SensingManagementDigest | None = None
     run_history: list[SensingRunRecord] = Field(default_factory=list)
+    notification_outbox: list[SensingNotification] = Field(default_factory=list)
     fetch_errors: list[str] = Field(default_factory=list)
     refreshed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

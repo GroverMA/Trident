@@ -27,6 +27,10 @@ from src.models.sensing import (
     SignalImpact,
     SensingCadence,
     SensingManagementDigest,
+    SensingNotification,
+    SensingNotificationSeverity,
+    SensingNotificationStatus,
+    SensingNotificationType,
     SensingRunRecord,
     SensingRunStatus,
     SensingSourceDefinition,
@@ -458,13 +462,87 @@ def run_continuous_sensing_cycle(
         connector_failure_count=sum(item.status == KpiConnectorStatus.FAILED for item in final_artifact.kpi_connectors),
         errors=list(final_artifact.fetch_errors),
     )
+    notifications = list(artifact.notification_outbox)
+    pending_keys = {
+        (item.notification_type, item.target_ref)
+        for item in notifications
+        if item.status != SensingNotificationStatus.CLOSED
+    }
+    for signal in final_artifact.signals:
+        key = (SensingNotificationType.HIGH_IMPACT_SIGNAL, signal.signal_id)
+        if signal.signal_id not in previous_ids and signal.impact == SignalImpact.HIGH and key not in pending_keys:
+            notifications.insert(0, SensingNotification(
+                notification_id=f"NTF-{sha256(f'{project.project_id}|high|{signal.signal_id}'.encode()).hexdigest()[:16]}",
+                notification_type=key[0],
+                severity=SensingNotificationSeverity.CRITICAL,
+                title="发现高影响决策信号",
+                message=f"{signal.title}：{signal.impact_reason}",
+                target_ref=signal.signal_id,
+            ))
+            pending_keys.add(key)
+    for source in final_artifact.sources:
+        key = (SensingNotificationType.SOURCE_FAILURE, source.source_id)
+        if source.status == SensingSourceStatus.FAILED and key not in pending_keys:
+            notifications.insert(0, SensingNotification(
+                notification_id=f"NTF-{sha256(f'{run_record.run_id}|source|{source.source_id}'.encode()).hexdigest()[:16]}",
+                notification_type=key[0], severity=SensingNotificationSeverity.WARNING,
+                title="公开来源抓取失败", message=f"{source.name} 本轮未能读取，请检查来源状态后重试。",
+                target_ref=source.source_id,
+            ))
+            pending_keys.add(key)
+    for connector in final_artifact.kpi_connectors:
+        key = (SensingNotificationType.CONNECTOR_FAILURE, connector.connector_id)
+        if connector.status == KpiConnectorStatus.FAILED and key not in pending_keys:
+            notifications.insert(0, SensingNotification(
+                notification_id=f"NTF-{sha256(f'{run_record.run_id}|connector|{connector.connector_id}'.encode()).hexdigest()[:16]}",
+                notification_type=key[0], severity=SensingNotificationSeverity.WARNING,
+                title="内部 KPI 连接器失败", message=f"{connector.name}：{connector.last_error or '连接失败'}",
+                target_ref=connector.connector_id,
+            ))
+            pending_keys.add(key)
     current = current.model_copy(update={
         "continuous_sensing_artifact": final_artifact.model_copy(update={
             "run_history": [run_record, *artifact.run_history][:100],
+            "notification_outbox": notifications[:200],
         }),
         "updated_at": completed_at,
     })
     return current
+
+
+def update_sensing_notification(
+    project: ProjectState,
+    *,
+    notification_id: str,
+    status: SensingNotificationStatus,
+    actor: str | None = None,
+    note: str | None = None,
+) -> ProjectState:
+    artifact = project.continuous_sensing_artifact
+    if not artifact:
+        raise ValueError("项目尚无持续感知记录")
+    if status == SensingNotificationStatus.PENDING:
+        raise ValueError("通知只能确认或关闭")
+    found = False
+    now = datetime.now(UTC)
+    outbox = []
+    for item in artifact.notification_outbox:
+        if item.notification_id != notification_id:
+            outbox.append(item)
+            continue
+        found = True
+        outbox.append(item.model_copy(update={
+            "status": status,
+            "acknowledged_at": now,
+            "acknowledged_by": actor.strip() if actor and actor.strip() else None,
+            "resolution_note": note.strip() if note and note.strip() else None,
+        }))
+    if not found:
+        raise ValueError("unknown sensing notification id")
+    return project.model_copy(update={
+        "continuous_sensing_artifact": artifact.model_copy(update={"notification_outbox": outbox}),
+        "updated_at": now,
+    })
 
 
 def _clean(value: str | None) -> str:
@@ -685,6 +763,7 @@ def refresh_continuous_sensing(
         subscription=subscription,
         management_digest=_digest(signals, previous_ids),
         run_history=list(previous.run_history) if previous else [],
+        notification_outbox=list(previous.notification_outbox) if previous else [],
         fetch_errors=errors,
     )
     if previous:

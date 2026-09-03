@@ -6,7 +6,7 @@ import pytest
 # Import the delivery boundary first, matching application startup order.  The
 # services package re-exports planning services during initialization.
 from src.api.app import app  # noqa: F401
-from src.services.continuous_sensing import FeishuConnectorError, configure_sensing_subscription, ingest_internal_kpi, ingest_internal_kpis, refresh_continuous_sensing, run_continuous_sensing_cycle, sync_feishu_kpis
+from src.services.continuous_sensing import FeishuConnectorError, configure_sensing_subscription, ingest_internal_kpi, ingest_internal_kpis, refresh_continuous_sensing, run_continuous_sensing_cycle, sync_feishu_kpis, update_sensing_notification
 from src.services.sensing_review import (
     review_sensing_asset_draft,
     review_sensing_impact_task,
@@ -14,7 +14,7 @@ from src.services.sensing_review import (
     review_sensing_signal,
     update_sensing_inbox,
 )
-from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, FeishuKpiConnector, ImpactReviewTaskStatus, InternalKpiObservation, SensingSourceDefinition, SignalReviewStatus
+from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, ContinuousSensingArtifact, FeishuKpiConnector, ImpactReviewTaskStatus, InternalKpiObservation, SensingNotificationStatus, SensingSourceDefinition, SignalReviewStatus
 from src.state.project import ProjectState
 
 
@@ -444,6 +444,70 @@ def test_scheduled_cycle_marks_connector_failure_as_partial(monkeypatch: pytest.
     assert "飞书经营 KPI" in artifact.subscription.last_run_error
     assert artifact.run_history[0].connector_failure_count == 1
     assert artifact.run_history[0].status == "partial"
+    assert artifact.notification_outbox[0].notification_type == "connector_failure"
+    assert artifact.notification_outbox[0].status == "pending"
+
+
+def test_scheduled_cycle_creates_and_deduplicates_high_impact_notification() -> None:
+    current = project()
+    current = current.model_copy(update={
+        "continuous_sensing_artifact": ContinuousSensingArtifact(
+            project_id=current.project_id,
+            watch_terms=["Acme Medical", "IVD diagnostics", "China"],
+        ),
+    })
+    first = run_continuous_sensing_cycle(
+        current,
+        news_http_get=lambda *args, **kwargs: FakeResponse(),
+    )
+    artifact = first.continuous_sensing_artifact
+    assert len(artifact.notification_outbox) == 1
+    notification = artifact.notification_outbox[0]
+    assert notification.notification_type == "high_impact_signal"
+    assert notification.severity == "critical"
+    assert notification.status == "pending"
+
+    second = run_continuous_sensing_cycle(
+        first,
+        news_http_get=lambda *args, **kwargs: FakeResponse(),
+    )
+    assert len(second.continuous_sensing_artifact.notification_outbox) == 1
+
+
+def test_sensing_notification_can_be_acknowledged_and_closed_without_changing_assets() -> None:
+    current = project()
+    current = current.model_copy(update={
+        "continuous_sensing_artifact": ContinuousSensingArtifact(
+            project_id=current.project_id,
+            watch_terms=["Acme Medical", "IVD diagnostics", "China"],
+        ),
+    })
+    updated = run_continuous_sensing_cycle(current, news_http_get=lambda *args, **kwargs: FakeResponse())
+    notification_id = updated.continuous_sensing_artifact.notification_outbox[0].notification_id
+    acknowledged = update_sensing_notification(
+        updated,
+        notification_id=notification_id,
+        status=SensingNotificationStatus.ACKNOWLEDGED,
+        actor="Research Ops",
+        note="已安排来源与业务影响复核",
+    )
+    notification = acknowledged.continuous_sensing_artifact.notification_outbox[0]
+    assert notification.status == "acknowledged"
+    assert notification.acknowledged_by == "Research Ops"
+    assert notification.resolution_note == "已安排来源与业务影响复核"
+    assert acknowledged.action_plan_artifact is updated.action_plan_artifact
+    assert acknowledged.enterprise_timeline_events == updated.enterprise_timeline_events
+
+    closed = update_sensing_notification(
+        acknowledged,
+        notification_id=notification_id,
+        status=SensingNotificationStatus.CLOSED,
+        actor="Research Ops",
+        note="处置完成",
+    )
+    assert closed.continuous_sensing_artifact.notification_outbox[0].status == "closed"
+    with pytest.raises(ValueError, match="只能确认或关闭"):
+        update_sensing_notification(closed, notification_id=notification_id, status=SensingNotificationStatus.PENDING)
 
 
 def test_impact_task_approval_authorizes_candidate_but_does_not_replace_assets() -> None:

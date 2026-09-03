@@ -33,6 +33,7 @@ interface OpsPayload {
     average_tokens_per_completed_report?: number | null;
     sensing_run_count: number;
     sensing_failed_or_partial_count: number;
+    pending_sensing_notification_count: number;
   };
   runs: OpsRun[];
   sensing_runs: Array<{
@@ -40,6 +41,12 @@ interface OpsPayload {
     status: "succeeded" | "partial" | "failed"; duration_ms: number; new_signal_count: number;
     source_success_count: number; source_failure_count: number;
     connector_success_count: number; connector_failure_count: number; errors: string[];
+  }>;
+  sensing_notifications: Array<{
+    notification_id: string; project_id: string; project_name: string; created_at: string;
+    notification_type: "high_impact_signal" | "source_failure" | "connector_failure";
+    severity: "critical" | "warning"; title: string; message: string; target_ref: string;
+    status: "pending" | "acknowledged" | "closed"; delivery_channels: string[];
   }>;
 }
 
@@ -126,6 +133,7 @@ export default async function OperationsPage() {
               ["步骤运行", number(data.summary.step_run_count), `${number(data.summary.model_call_count)} 次模型调用`],
               ["完成报告", number(data.summary.completed_report_count), `平均 ${number(data.summary.average_tokens_per_completed_report)} Token/份`],
               ["失败步骤", number(data.summary.failed_step_count), "可按下方明细定位重试"],
+              ["待处理通知", number(data.summary.pending_sensing_notification_count), "高影响信号与自动感知异常"],
             ].map(([label, value, note]) => (
               <article className="opsMetric" key={label}>
                 <span>{label}</span><strong>{value}</strong><small>{note}</small>
@@ -169,6 +177,19 @@ export default async function OperationsPage() {
                 </tr>
               ))}</tbody>
             </table></div>
+          </section>
+
+          <section className="opsPanel opsTablePanel">
+            <div className="opsPanelTitle"><div><span>Management Notifications</span><h2>管理层通知队列</h2></div><small>{number(data.summary.pending_sensing_notification_count)} 项待确认</small></div>
+            <div className="opsTableWrap"><table className="opsTable">
+              <thead><tr><th>创建时间</th><th>项目</th><th>级别</th><th>类型</th><th>事项</th><th>状态</th><th>通知通道</th></tr></thead>
+              <tbody>{data.sensing_notifications.slice(0, 100).map((item) => <tr key={`${item.project_id}-${item.notification_id}`}>
+                <td>{new Date(item.created_at).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</td><td>{item.project_name}</td>
+                <td><span className={`opsStatus ${item.severity === "critical" ? "failed" : ""}`}>{item.severity === "critical" ? "重要" : "异常"}</span></td>
+                <td>{item.notification_type === "high_impact_signal" ? "高影响信号" : item.notification_type === "source_failure" ? "公开来源失败" : "内部连接失败"}</td>
+                <td>{item.title}</td><td>{item.status === "pending" ? "待确认" : item.status === "acknowledged" ? "已知悉" : "已关闭"}</td><td>{item.delivery_channels.join("、")}</td>
+              </tr>)}</tbody>
+            </table>{!data.sensing_notifications.length ? <p className="opsEmpty">当前没有高影响信号或自动感知异常通知。</p> : null}</div>
           </section>
 
           <section className="opsPanel opsTablePanel">

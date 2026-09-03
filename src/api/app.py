@@ -26,7 +26,7 @@ from src.models.analysis import AnalysisReviewStatus
 from src.models.future import ForecastReviewStatus
 from src.models.strategy import StrategyReviewStatus
 from src.models.feedback import ProposalReviewStatus
-from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, FeishuKpiConnector, ImpactReviewTaskStatus, InternalKpiObservation, SensingCadence, SensingSourceDefinition, SignalReviewStatus
+from src.models.sensing import AssetDraftGateStatus, CandidateGateStatus, FeishuKpiConnector, ImpactReviewTaskStatus, InternalKpiObservation, SensingCadence, SensingNotificationStatus, SensingSourceDefinition, SignalReviewStatus
 from src.persistence.factory import create_project_repository
 from src.providers.base import ProviderError
 from src.core.registry import ExtensionRegistry
@@ -47,7 +47,7 @@ from src.services.company_assessment import CompanyAssessmentError
 from src.services.action_planning import ActionPlanningError
 from src.services.scenario_interview import ScenarioInterviewError, ScenarioInterviewService
 from src.services.research_routing import ScenarioResearchRouter
-from src.services.continuous_sensing import FeishuConnectorError, configure_sensing_subscription, ingest_internal_kpi, ingest_internal_kpis, refresh_continuous_sensing, run_continuous_sensing_cycle, sync_feishu_kpis
+from src.services.continuous_sensing import FeishuConnectorError, configure_sensing_subscription, ingest_internal_kpi, ingest_internal_kpis, refresh_continuous_sensing, run_continuous_sensing_cycle, sync_feishu_kpis, update_sensing_notification
 from src.services.sensing_review import (
     review_sensing_asset_draft,
     review_sensing_impact_task,
@@ -172,6 +172,13 @@ class InternalKpiBatchRequest(BaseModel):
 
 class FeishuKpiSyncRequest(BaseModel):
     connector: FeishuKpiConnector
+
+
+class SensingNotificationUpdateRequest(BaseModel):
+    notification_id: str = Field(min_length=1)
+    status: SensingNotificationStatus
+    actor: str | None = None
+    note: str | None = None
 
 
 class SensingImpactTaskReviewRequest(BaseModel):
@@ -400,6 +407,16 @@ def ops_telemetry(research: ResearchApp) -> dict:
         if project.continuous_sensing_artifact
         for run in project.continuous_sensing_artifact.run_history
     ]
+    sensing_notifications = [
+        {
+            **notification.model_dump(mode="json"),
+            "project_id": project.project_id,
+            "project_name": project.project_name,
+        }
+        for project in projects
+        if project.continuous_sensing_artifact
+        for notification in project.continuous_sensing_artifact.notification_outbox
+    ]
     return {
         "generated_at": datetime.now(UTC).isoformat(),
         "source": "ProjectState.telemetry_runs / provider-reported usage",
@@ -420,9 +437,13 @@ def ops_telemetry(research: ResearchApp) -> dict:
             "sensing_failed_or_partial_count": sum(
                 row["status"] in {"failed", "partial"} for row in sensing_runs
             ),
+            "pending_sensing_notification_count": sum(
+                row["status"] == "pending" for row in sensing_notifications
+            ),
         },
         "runs": sorted(rows, key=lambda row: row["started_at"], reverse=True),
         "sensing_runs": sorted(sensing_runs, key=lambda row: row["started_at"], reverse=True),
+        "sensing_notifications": sorted(sensing_notifications, key=lambda row: row["created_at"], reverse=True),
     }
 
 
@@ -722,6 +743,27 @@ def sync_project_feishu_kpis(
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="project not found") from exc
     except (FeishuConnectorError, requests.RequestException) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.patch("/v1/projects/{project_id}/continuous-sensing/notifications", response_model=ProjectState)
+def update_project_sensing_notification(
+    project_id: str,
+    payload: SensingNotificationUpdateRequest,
+    research: ResearchApp,
+) -> ProjectState:
+    try:
+        project = research.get_project(project_id)
+        return research.save_project(update_sensing_notification(
+            project,
+            notification_id=payload.notification_id,
+            status=payload.status,
+            actor=payload.actor,
+            note=payload.note,
+        ))
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
