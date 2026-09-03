@@ -439,6 +439,17 @@ export interface ContinuousSensingArtifact {
     last_checked_at?: string | null;
     last_error?: string | null;
   }>;
+  kpi_connectors: Array<{
+    connector_id: string;
+    name: string;
+    app_token: string;
+    table_id: string;
+    view_id?: string | null;
+    status: "ready" | "succeeded" | "failed";
+    last_synced_at?: string | null;
+    last_record_count: number;
+    last_error?: string | null;
+  }>;
   signals: SensingSignal[];
   review_tasks: Array<{
     task_id: string;

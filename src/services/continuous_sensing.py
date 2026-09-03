@@ -17,7 +17,9 @@ import requests
 
 from src.models.sensing import (
     ContinuousSensingArtifact,
+    FeishuKpiConnector,
     InternalKpiObservation,
+    KpiConnectorStatus,
     KpiDirection,
     SensingSignal,
     SignalCategory,
@@ -260,6 +262,128 @@ def ingest_internal_kpis(
 def ingest_internal_kpi(project: ProjectState, observation: InternalKpiObservation) -> ProjectState:
     """Create a governed operations signal from one structured internal KPI observation."""
     return ingest_internal_kpis(project, [observation])
+
+
+class FeishuConnectorError(ValueError):
+    """Raised when the configured Feishu Bitable source cannot be synchronized."""
+
+
+def _feishu_value(value: object) -> object:
+    if isinstance(value, list):
+        if not value:
+            return ""
+        first = value[0]
+        if isinstance(first, dict):
+            return first.get("text") or first.get("name") or first.get("value") or ""
+        return first
+    if isinstance(value, dict):
+        return value.get("text") or value.get("name") or value.get("value") or ""
+    return value
+
+
+def _optional_float(value: object) -> float | None:
+    cleaned = _feishu_value(value)
+    if cleaned is None or str(cleaned).strip() == "":
+        return None
+    try:
+        return float(cleaned)
+    except (TypeError, ValueError) as exc:
+        raise FeishuConnectorError(f"无法把飞书字段值 {cleaned!r} 转换为数字") from exc
+
+
+def sync_feishu_kpis(
+    project: ProjectState,
+    connector: FeishuKpiConnector,
+    *,
+    http_post=requests.post,
+    http_get=requests.get,
+) -> ProjectState:
+    """Read a Feishu Bitable with server-side credentials and route rows to KPI governance."""
+    current_artifact = project.continuous_sensing_artifact
+    existing_connector = next((item for item in (current_artifact.kpi_connectors if current_artifact else [])
+                               if item.app_token == connector.app_token and item.table_id == connector.table_id), None)
+    if existing_connector:
+        connector = connector.model_copy(update={"connector_id": existing_connector.connector_id})
+    app_id = os.getenv("FEISHU_APP_ID", "").strip()
+    app_secret = os.getenv("FEISHU_APP_SECRET", "").strip()
+    if not app_id or not app_secret:
+        raise FeishuConnectorError("服务端尚未配置 FEISHU_APP_ID 和 FEISHU_APP_SECRET")
+    token_response = http_post(
+        "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+        json={"app_id": app_id, "app_secret": app_secret},
+        timeout=15,
+    )
+    token_response.raise_for_status()
+    token_payload = token_response.json()
+    token = token_payload.get("tenant_access_token")
+    if token_payload.get("code") not in (None, 0) or not token:
+        raise FeishuConnectorError(token_payload.get("msg") or "飞书应用凭证验证失败")
+
+    records: list[dict] = []
+    page_token: str | None = None
+    while True:
+        params: dict[str, object] = {"page_size": 500}
+        if page_token:
+            params["page_token"] = page_token
+        if connector.view_id:
+            params["view_id"] = connector.view_id
+        response = http_get(
+            f"https://open.feishu.cn/open-apis/bitable/v1/apps/{connector.app_token}/tables/{connector.table_id}/records",
+            headers={"Authorization": f"Bearer {token}"},
+            params=params,
+            timeout=20,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("code") not in (None, 0):
+            raise FeishuConnectorError(payload.get("msg") or "飞书多维表格读取失败")
+        data = payload.get("data") or {}
+        records.extend(data.get("items") or [])
+        if not data.get("has_more"):
+            break
+        page_token = data.get("page_token")
+        if not page_token:
+            raise FeishuConnectorError("飞书返回了分页标记，但没有下一页 token")
+    if not records:
+        raise FeishuConnectorError("飞书多维表格中没有可同步的记录")
+
+    mapping = connector.field_mapping
+    observations: list[InternalKpiObservation] = []
+    for index, record in enumerate(records, start=1):
+        fields = record.get("fields") or {}
+        try:
+            metric = str(_feishu_value(fields.get(mapping.metric_name)) or "").strip()
+            unit = str(_feishu_value(fields.get(mapping.unit)) or "").strip()
+            period = str(_feishu_value(fields.get(mapping.period)) or "").strip()
+            value = _optional_float(fields.get(mapping.value))
+            if not metric or not unit or not period or value is None:
+                raise FeishuConnectorError("缺少指标名称、本期数值、单位或期间")
+            direction_value = str(_feishu_value(fields.get(mapping.direction)) or "").strip().lower()
+            direction = KpiDirection.LOWER_IS_BETTER if direction_value in {"lower_is_better", "lower", "越低越好"} else KpiDirection.HIGHER_IS_BETTER
+            observations.append(InternalKpiObservation(
+                metric_name=metric,
+                value=value,
+                unit=unit,
+                period=period,
+                direction=direction,
+                comparison_value=_optional_float(fields.get(mapping.comparison_value)),
+                target_value=_optional_float(fields.get(mapping.target_value)),
+                note=str(_feishu_value(fields.get(mapping.note)) or "").strip(),
+            ))
+        except (FeishuConnectorError, ValueError) as exc:
+            raise FeishuConnectorError(f"飞书第 {index} 条记录无效：{exc}") from exc
+
+    updated = ingest_internal_kpis(project, observations)
+    artifact = updated.continuous_sensing_artifact
+    synced = connector.model_copy(update={
+        "status": KpiConnectorStatus.SUCCEEDED, "last_synced_at": datetime.now(UTC),
+        "last_record_count": len(observations), "last_error": None,
+    })
+    connectors = [item for item in artifact.kpi_connectors if item.connector_id != connector.connector_id]
+    connectors.insert(0, synced)
+    return updated.model_copy(update={
+        "continuous_sensing_artifact": artifact.model_copy(update={"kpi_connectors": connectors}),
+    })
 
 
 def _clean(value: str | None) -> str:

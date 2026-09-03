@@ -305,6 +305,13 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
 .kpiBatchActions { display: flex; gap: 8px; }
 .fileButton { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
 .fileButton input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.feishuConnector > div { grid-template-columns: repeat(4,minmax(120px,1fr)); }
+.feishuConnector label span { display: block; margin-bottom: 6px; color: #657187; font-size: 9px; font-weight: 700; }
+.feishuConnector input { width: 100%; min-height: 39px; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px; }
+.feishuConnector p, .feishuConnector .connectorStatus { grid-column: 1 / -1; }
+.connectorStatus { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 8px; background: #edf6f4; color: #526076; font-size: 10px; }
+.connectorStatus strong { color: var(--teal); }
+.connectorStatus small { margin-left: auto; }
 .kpiSignalDetail { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .kpiSignalDetail span { padding: 6px 9px; border-radius: 6px; background: #eaf4f4; color: var(--accent); font-size: 9px; font-weight: 700; }
 .signalRow a { color: inherit; text-decoration: none; }
@@ -604,6 +611,7 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
   .internalKpiEntry { grid-template-columns: 1fr 1fr; }
   .internalKpiEntry > div, .internalKpiEntry .kpiNote { grid-column: 1 / -1; }
   .kpiBatchImport > div { grid-template-columns: 1fr; }
+  .feishuConnector > div { grid-template-columns: 1fr 1fr; }
   .diagnosticHeader { display: block; padding: 24px 21px; }
   .diagnosticStage { margin-top: 20px; }
   .goalMain, .profileWorkspace { padding: 22px 18px; }
