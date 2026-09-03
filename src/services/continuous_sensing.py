@@ -174,17 +174,13 @@ def _kpi_impact(observation: InternalKpiObservation) -> tuple[SignalImpact, str]
     return SignalImpact.MEDIUM, f"当前值达到或优于{reference_name}，需要复核其对既有假设和行动的影响"
 
 
-def ingest_internal_kpi(project: ProjectState, observation: InternalKpiObservation) -> ProjectState:
-    """Create a governed operations signal from a structured internal KPI observation."""
-    now = datetime.now(UTC)
-    previous = project.continuous_sensing_artifact
-    artifact = previous or ContinuousSensingArtifact(
-        project_id=project.project_id,
-        watch_terms=default_watch_terms(project),
-    )
+def _internal_kpi_signal(
+    project: ProjectState,
+    observation: InternalKpiObservation,
+    existing: SensingSignal | None = None,
+) -> SensingSignal:
     stable_key = f"{project.project_id}|{observation.metric_name.casefold()}|{observation.period.casefold()}"
     signal_id = f"KPI-{sha256(stable_key.encode()).hexdigest()[:20]}"
-    existing = next((item for item in artifact.signals if item.signal_id == signal_id), None)
     impact, reason = _kpi_impact(observation)
     references = []
     if observation.comparison_value is not None:
@@ -196,7 +192,7 @@ def ingest_internal_kpi(project: ProjectState, observation: InternalKpiObservati
         summary += "；" + "；".join(references)
     if observation.note.strip():
         summary += f"；说明：{observation.note.strip()}"
-    signal = SensingSignal(
+    return SensingSignal(
         signal_id=signal_id,
         title=f"{observation.metric_name} · {observation.period}",
         summary=summary,
@@ -221,15 +217,49 @@ def ingest_internal_kpi(project: ProjectState, observation: InternalKpiObservati
         assessment=existing.assessment if existing else None,
         kpi_observation=observation,
     )
-    signals = [item for item in artifact.signals if item.signal_id != signal_id]
-    signals.insert(0, signal)
+
+
+def ingest_internal_kpis(
+    project: ProjectState,
+    observations: list[InternalKpiObservation],
+) -> ProjectState:
+    """Atomically create or update governed signals from a batch of KPI observations."""
+    if not observations:
+        raise ValueError("请至少提供一条 KPI 观察")
+    if len(observations) > 500:
+        raise ValueError("单次最多导入 500 条 KPI 观察")
+
+    now = datetime.now(UTC)
+    artifact = project.continuous_sensing_artifact or ContinuousSensingArtifact(
+        project_id=project.project_id,
+        watch_terms=default_watch_terms(project),
+    )
     previous_ids = {item.signal_id for item in artifact.signals}
+    by_id = {item.signal_id: item for item in artifact.signals}
+    touched_ids: list[str] = []
+    for observation in observations:
+        signal = _internal_kpi_signal(project, observation)
+        existing = by_id.get(signal.signal_id)
+        signal = _internal_kpi_signal(project, observation, existing)
+        by_id[signal.signal_id] = signal
+        if signal.signal_id in touched_ids:
+            touched_ids.remove(signal.signal_id)
+        touched_ids.append(signal.signal_id)
+
+    signals = [by_id[signal_id] for signal_id in reversed(touched_ids)]
+    signals.extend(item for item in artifact.signals if item.signal_id not in touched_ids)
+    signals = signals[:200]
     updated_artifact = artifact.model_copy(update={
-        "signals": signals[:200],
-        "management_digest": _digest(signals[:200], previous_ids),
+        "signals": signals,
+        "management_digest": _digest(signals, previous_ids),
         "refreshed_at": now,
     })
     return project.model_copy(update={"continuous_sensing_artifact": updated_artifact, "updated_at": now})
+
+
+def ingest_internal_kpi(project: ProjectState, observation: InternalKpiObservation) -> ProjectState:
+    """Create a governed operations signal from one structured internal KPI observation."""
+    return ingest_internal_kpis(project, [observation])
 
 
 def _clean(value: str | None) -> str:

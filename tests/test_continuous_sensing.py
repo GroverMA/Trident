@@ -6,7 +6,7 @@ import pytest
 # Import the delivery boundary first, matching application startup order.  The
 # services package re-exports planning services during initialization.
 from src.api.app import app  # noqa: F401
-from src.services.continuous_sensing import configure_sensing_subscription, ingest_internal_kpi, refresh_continuous_sensing
+from src.services.continuous_sensing import configure_sensing_subscription, ingest_internal_kpi, ingest_internal_kpis, refresh_continuous_sensing
 from src.services.sensing_review import (
     review_sensing_asset_draft,
     review_sensing_impact_task,
@@ -318,6 +318,31 @@ def test_internal_kpi_same_metric_and_period_updates_without_duplicate() -> None
     ))
     assert len(second.continuous_sensing_artifact.signals) == 1
     assert second.continuous_sensing_artifact.signals[0].kpi_observation.value == 16
+
+
+def test_internal_kpi_batch_is_atomic_and_counts_all_new_signals() -> None:
+    updated = ingest_internal_kpis(project(), [
+        InternalKpiObservation(metric_name="订单额", value=86, unit="万元", period="2026-08", target_value=100),
+        InternalKpiObservation(metric_name="交付周期", value=18, unit="天", period="2026-W35", direction="lower_is_better", target_value=14),
+    ])
+    artifact = updated.continuous_sensing_artifact
+    assert len(artifact.signals) == 2
+    assert artifact.management_digest.new_signal_count == 2
+    assert all(signal.review_status == "needs_review" for signal in artifact.signals)
+
+
+def test_internal_kpi_batch_last_duplicate_row_wins() -> None:
+    updated = ingest_internal_kpis(project(), [
+        InternalKpiObservation(metric_name="订单额", value=80, unit="万元", period="2026-08"),
+        InternalKpiObservation(metric_name="订单额", value=90, unit="万元", period="2026-08"),
+    ])
+    assert len(updated.continuous_sensing_artifact.signals) == 1
+    assert updated.continuous_sensing_artifact.signals[0].kpi_observation.value == 90
+
+
+def test_internal_kpi_batch_rejects_empty_input() -> None:
+    with pytest.raises(ValueError, match="至少提供一条"):
+        ingest_internal_kpis(project(), [])
 
 
 def test_impact_task_approval_authorizes_candidate_but_does_not_replace_assets() -> None:
