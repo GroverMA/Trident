@@ -296,6 +296,15 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
 .internalKpiEntry label span { display: block; margin-bottom: 6px; color: #657187; font-size: 9px; font-weight: 700; }
 .internalKpiEntry input, .internalKpiEntry select { width: 100%; min-height: 39px; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px; background: #fff; color: var(--ink); }
 .internalKpiEntry .kpiNote { grid-column: 2 / span 3; }
+.kpiBatchImport { margin: -4px 0 18px; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+.kpiBatchImport summary { padding: 15px 20px; color: var(--teal); font-size: 12px; font-weight: 750; cursor: pointer; }
+.kpiBatchImport > div { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 0 20px 20px; }
+.kpiBatchImport p, .kpiBatchImport textarea { grid-column: 1 / -1; }
+.kpiBatchImport p { margin: 0; color: #6d788d; font-size: 10px; line-height: 1.6; }
+.kpiBatchImport textarea { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; font: inherit; resize: vertical; }
+.kpiBatchActions { display: flex; gap: 8px; }
+.fileButton { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
+.fileButton input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .kpiSignalDetail { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .kpiSignalDetail span { padding: 6px 9px; border-radius: 6px; background: #eaf4f4; color: var(--accent); font-size: 9px; font-weight: 700; }
 .signalRow a { color: inherit; text-decoration: none; }
@@ -594,6 +603,7 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
   .signalBatchBar { grid-template-columns: 1fr 1fr; }
   .internalKpiEntry { grid-template-columns: 1fr 1fr; }
   .internalKpiEntry > div, .internalKpiEntry .kpiNote { grid-column: 1 / -1; }
+  .kpiBatchImport > div { grid-template-columns: 1fr; }
   .diagnosticHeader { display: block; padding: 24px 21px; }
   .diagnosticStage { margin-top: 20px; }
   .goalMain, .profileWorkspace { padding: 22px 18px; }

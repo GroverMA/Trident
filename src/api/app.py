@@ -46,7 +46,7 @@ from src.services.company_assessment import CompanyAssessmentError
 from src.services.action_planning import ActionPlanningError
 from src.services.scenario_interview import ScenarioInterviewError, ScenarioInterviewService
 from src.services.research_routing import ScenarioResearchRouter
-from src.services.continuous_sensing import configure_sensing_subscription, ingest_internal_kpi, refresh_continuous_sensing
+from src.services.continuous_sensing import configure_sensing_subscription, ingest_internal_kpi, ingest_internal_kpis, refresh_continuous_sensing
 from src.services.sensing_review import (
     review_sensing_asset_draft,
     review_sensing_impact_task,
@@ -163,6 +163,10 @@ class SensingInboxUpdateRequest(BaseModel):
 
 class InternalKpiRequest(BaseModel):
     observation: InternalKpiObservation
+
+
+class InternalKpiBatchRequest(BaseModel):
+    observations: list[InternalKpiObservation] = Field(min_length=1, max_length=500)
 
 
 class SensingImpactTaskReviewRequest(BaseModel):
@@ -648,6 +652,21 @@ def create_project_internal_kpi_signal(
         return research.save_project(ingest_internal_kpi(project, payload.observation))
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=404, detail="project not found") from exc
+
+
+@app.post("/v1/projects/{project_id}/continuous-sensing/internal-kpi/batch", response_model=ProjectState)
+def create_project_internal_kpi_signals(
+    project_id: str,
+    payload: InternalKpiBatchRequest,
+    research: ResearchApp,
+) -> ProjectState:
+    try:
+        project = research.get_project(project_id)
+        return research.save_project(ingest_internal_kpis(project, payload.observations))
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.patch("/v1/projects/{project_id}/continuous-sensing/review-task", response_model=ProjectState)

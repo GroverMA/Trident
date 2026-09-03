@@ -17,6 +17,51 @@ const taskTargets: Record<string, string> = {
   research_scope: "研究范围", company_scorecard: "Company Scorecard", action_plan: "Action Plan",
 };
 
+type KpiObservationInput = {
+  metric_name: string; value: number; unit: string; period: string;
+  direction: "higher_is_better" | "lower_is_better";
+  comparison_value: number | null; target_value: number | null; note: string;
+};
+
+function splitDelimitedRow(line: string): string[] {
+  const delimiter = line.includes("\t") ? "\t" : ",";
+  const cells: string[] = []; let cell = ""; let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"' && quoted && line[index + 1] === '"') { cell += '"'; index += 1; }
+    else if (character === '"') quoted = !quoted;
+    else if (character === delimiter && !quoted) { cells.push(cell.trim()); cell = ""; }
+    else cell += character;
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+
+function parseKpiBatch(text: string): KpiObservationInput[] {
+  const lines = text.split(/\r?\n/).filter((line) => line.trim());
+  if (lines.length < 2) throw new Error("请保留表头，并至少填写一行 KPI 数据");
+  const aliases: Record<string, keyof KpiObservationInput> = {
+    metric_name: "metric_name", 指标名称: "metric_name", value: "value", 本期数值: "value",
+    unit: "unit", 单位: "unit", period: "period", 期间: "period", direction: "direction", 判断方向: "direction",
+    comparison_value: "comparison_value", 基准值: "comparison_value", 上期值: "comparison_value",
+    target_value: "target_value", 目标值: "target_value", note: "note", 经营说明: "note", 说明: "note",
+  };
+  const header = splitDelimitedRow(lines[0]).map((cell) => aliases[cell.trim().toLowerCase()] || aliases[cell.trim()]);
+  for (const required of ["metric_name", "value", "unit", "period"] as const) {
+    if (!header.includes(required)) throw new Error(`表头缺少必填列：${required}`);
+  }
+  return lines.slice(1).map((line, rowIndex) => {
+    const cells = splitDelimitedRow(line); const row: Record<string, string> = {};
+    header.forEach((key, index) => { if (key) row[key] = cells[index] || ""; });
+    const value = Number(row.value); const comparison = row.comparison_value ? Number(row.comparison_value) : null; const target = row.target_value ? Number(row.target_value) : null;
+    if (!row.metric_name || !row.unit || !row.period || !Number.isFinite(value) || (comparison !== null && !Number.isFinite(comparison)) || (target !== null && !Number.isFinite(target))) {
+      throw new Error(`第 ${rowIndex + 2} 行存在缺失字段或无效数字`);
+    }
+    const lower = ["lower_is_better", "lower", "越低越好"].includes(row.direction?.toLowerCase());
+    return { metric_name: row.metric_name, value, unit: row.unit, period: row.period, direction: lower ? "lower_is_better" : "higher_is_better", comparison_value: comparison, target_value: target, note: row.note || "" };
+  });
+}
+
 export function ContinuousSensingWorkspace() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [activeId, setActiveId] = useState("");
@@ -38,6 +83,7 @@ export function ContinuousSensingWorkspace() {
   const [kpiTarget, setKpiTarget] = useState("");
   const [kpiDirection, setKpiDirection] = useState<"higher_is_better" | "lower_is_better">("higher_is_better");
   const [kpiNote, setKpiNote] = useState("");
+  const [kpiBatchText, setKpiBatchText] = useState("");
   const active = projects.find((project) => project.project_id === activeId);
   const artifact = active?.continuous_sensing_artifact;
   const signals = artifact?.signals || [];
@@ -127,6 +173,27 @@ export function ContinuousSensingWorkspace() {
       setKpiMetric(""); setKpiValue(""); setKpiUnit(""); setKpiPeriod(""); setKpiComparison(""); setKpiTarget(""); setKpiNote("");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "经营指标录入失败"); }
     finally { setBusy(""); }
+  }
+
+  async function importInternalKpis() {
+    if (!active) return;
+    setBusy("internal-kpi-batch"); setError("");
+    try {
+      const observations = parseKpiBatch(kpiBatchText);
+      const response = await fetch(`/api/projects/${active.project_id}/continuous-sensing/internal-kpi/batch`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ observations }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || "批量导入失败");
+      replaceProject(payload); setKpiBatchText("");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "批量导入失败"); }
+    finally { setBusy(""); }
+  }
+
+  function downloadKpiTemplate() {
+    const content = "指标名称,本期数值,单位,期间,判断方向,上期值,目标值,经营说明\n月度订单额,86,万元,2026-08,越高越好,95,100,两个核心客户延期";
+    const url = URL.createObjectURL(new Blob(["\ufeff", content], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a"); anchor.href = url; anchor.download = "trident-kpi-template.csv"; anchor.click(); URL.revokeObjectURL(url);
   }
 
   async function review(signal: SensingSignal, status: "accepted" | "ignored") {
@@ -222,6 +289,7 @@ export function ContinuousSensingWorkspace() {
       <div className="linkedContext"><div><span>当前联动项目</span><strong>{active?.project_name || "尚未选择项目"}</strong><small>{active ? `${active.target_company || active.industry} · ${active.region}` : "先在项目管理中选择工作项目"}</small></div><select value={activeId} onChange={(event) => selectProject(event.target.value)}><option value="">选择项目</option>{projects.map((project) => <option key={project.project_id} value={project.project_id}>{project.project_name}</option>)}</select><nav><Link href="/knowledge">知识库</Link><Link href="/feedback">质量 Dashboard</Link>{active && <Link href={`/projects/${active.project_id}`}>研究工作台</Link>}</nav></div>
       <div className="sensingSubscription"><div><span className="eyebrow">WATCH TERMS</span><h2>公司、行业与一手来源</h2><p>关注词用于发现变化；可登记已获授权的公司官网、监管、交易所或专业媒体网页/RSS。一手来源优先进入审核队列。</p></div><label><span>关注词（逗号分隔）</span><input value={watchTerms} onChange={(event) => setDrafts((current) => ({ ...current, [activeId]: event.target.value }))} placeholder="公司、行业、竞争者、技术主题"/></label><label><span>自动感知频率</span><select value={artifact?.subscription?.enabled ? artifact.subscription.cadence : "manual"} disabled={!active || busy === "subscription"} onChange={(event) => void saveSubscription(event.target.value as "manual" | "daily" | "weekly")}><option value="manual">仅手动刷新</option><option value="daily">每日</option><option value="weekly">每周</option></select></label><label><span>新增来源类型</span><select value={sourceType} onChange={(event) => setSourceType(event.target.value as typeof sourceType)}><option value="company_official">公司官方</option><option value="regulator_government">政府/监管</option><option value="exchange_disclosure">交易所披露</option><option value="professional_media">专业媒体</option></select></label><label><span>来源格式</span><select value={sourceFormat} onChange={(event) => setSourceFormat(event.target.value as typeof sourceFormat)}><option value="auto">自动识别</option><option value="html">网页公告列表</option><option value="rss">RSS</option></select></label><label><span>来源地址（HTTPS）</span><input value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://example.com/news"/></label><button className="primaryButton" disabled={!active || busy === "refresh"} onClick={() => void refresh()}>{busy === "refresh" ? "正在抓取并去重…" : sourceUrl ? "保存来源并刷新" : "立即刷新新闻"}</button>{artifact?.subscription?.next_run_at && <p className="sensingSchedule">下次自动运行：{new Date(artifact.subscription.next_run_at).toLocaleString("zh-CN")}</p>}{artifact?.sources?.length ? <div className="sensingSources">{artifact.sources.map((source) => <span key={source.source_id} className={`source-${source.status}`}>{source.name} · {source.source_format.toUpperCase()} · Tier {source.tier} · {source.status === "succeeded" ? "连接成功" : source.status === "failed" ? "连接失败" : "待检查"}</span>)}</div> : null}{error && <p className="formError">{error}</p>}{artifact?.fetch_errors?.length ? <p className="sensingWarning">部分来源暂不可用：{artifact.fetch_errors.join("；")}。历史信号和其他来源不受影响。</p> : null}</div>
       <section className="internalKpiEntry"><div><span className="eyebrow">INTERNAL KPI</span><h2>录入企业经营变化</h2><p>先用结构化录入验证经营信号；后续 ERP、飞书或 Excel 同步将复用同一接口。</p></div><label><span>指标名称</span><input value={kpiMetric} onChange={(event) => setKpiMetric(event.target.value)} placeholder="例如：月度订单额"/></label><label><span>本期数值</span><input type="number" value={kpiValue} onChange={(event) => setKpiValue(event.target.value)} placeholder="860"/></label><label><span>单位</span><input value={kpiUnit} onChange={(event) => setKpiUnit(event.target.value)} placeholder="万元 / % / 天"/></label><label><span>期间</span><input value={kpiPeriod} onChange={(event) => setKpiPeriod(event.target.value)} placeholder="2026-08"/></label><label><span>判断方向</span><select value={kpiDirection} onChange={(event) => setKpiDirection(event.target.value as typeof kpiDirection)}><option value="higher_is_better">越高越好</option><option value="lower_is_better">越低越好</option></select></label><label><span>上期/基准值</span><input type="number" value={kpiComparison} onChange={(event) => setKpiComparison(event.target.value)} placeholder="可选"/></label><label><span>目标值</span><input type="number" value={kpiTarget} onChange={(event) => setKpiTarget(event.target.value)} placeholder="可选"/></label><label className="kpiNote"><span>经营说明</span><input value={kpiNote} onChange={(event) => setKpiNote(event.target.value)} placeholder="异常原因、客户反馈或负责人说明（可选）"/></label><button className="primaryButton" disabled={!active || !kpiMetric.trim() || !kpiValue.trim() || !kpiUnit.trim() || !kpiPeriod.trim() || busy === "internal-kpi"} onClick={() => void addInternalKpi()}>{busy === "internal-kpi" ? "正在形成经营信号…" : "加入待审核信号"}</button></section>
+      <details className="kpiBatchImport"><summary>批量导入 Excel / CSV 经营数据</summary><div><p>下载模板后可用 Excel 编辑，再粘贴或上传 CSV/TSV。整批数据通过校验后才会写入；同一项目、指标和期间只保留最新一行。</p><div className="kpiBatchActions"><button className="secondaryButton" onClick={downloadKpiTemplate}>下载 CSV 模板</button><label className="secondaryButton fileButton">选择文件<input type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={(event) => { const file = event.target.files?.[0]; if (file) void file.text().then(setKpiBatchText); }}/></label></div><textarea rows={6} value={kpiBatchText} onChange={(event) => setKpiBatchText(event.target.value)} placeholder="指标名称,本期数值,单位,期间,判断方向,上期值,目标值,经营说明"/><button className="primaryButton" disabled={!active || !kpiBatchText.trim() || busy === "internal-kpi-batch"} onClick={() => void importInternalKpis()}>{busy === "internal-kpi-batch" ? "正在校验并导入…" : "整批加入待审核信号"}</button></div></details>
       {artifact?.management_digest && <div className="sensingDigest"><div><span className="eyebrow">MANAGEMENT DIGEST</span><h2>{artifact.management_digest.headline}</h2></div><p>{artifact.management_digest.summary}</p><small>本轮新增 {artifact.management_digest.new_signal_count} · 高影响 {artifact.management_digest.high_impact_count} · 待复核 {artifact.management_digest.pending_review_count}</small></div>}
       <div className="sensingSummary"><article><span>{todayCount}</span><small>今日新增</small></article><article><span>{signals.length}</span><small>累计信号</small></article><article><span>{pendingCount}</span><small>待人工复核</small></article><article><span>{acceptedCount}</span><small>已接受并路由</small></article></div>
       <div className="sensingLayout"><section className="signalFeed"><div className="sectionTitle"><div><span className="eyebrow">SIGNAL INBOX</span><h2>新闻与变化信号</h2></div><small>{artifact ? `更新于 ${new Date(artifact.refreshed_at).toLocaleString("zh-CN")}` : "尚未刷新"}</small></div><div className="signalFilters">{["全部", "政策", "竞争", "客户", "技术", "经营 KPI", "其他"].map((item) => <button key={item} className={filter === item ? "selected" : ""} onClick={() => setFilter(item)}>{item}</button>)}</div>
