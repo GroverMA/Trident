@@ -10,6 +10,7 @@ from html.parser import HTMLParser
 import ipaddress
 import os
 import re
+from time import perf_counter
 from urllib.parse import quote_plus, urljoin, urlparse
 import xml.etree.ElementTree as ET
 
@@ -26,6 +27,7 @@ from src.models.sensing import (
     SignalImpact,
     SensingCadence,
     SensingManagementDigest,
+    SensingRunRecord,
     SensingRunStatus,
     SensingSourceDefinition,
     SensingSourceFormat,
@@ -394,6 +396,8 @@ def run_continuous_sensing_cycle(
     connector_http_get=requests.get,
 ) -> ProjectState:
     """Refresh public sources and every configured internal connector as one governed cycle."""
+    started_at = datetime.now(UTC)
+    started_clock = perf_counter()
     artifact = project.continuous_sensing_artifact
     if not artifact:
         raise ValueError("项目尚未配置持续感知")
@@ -439,6 +443,27 @@ def run_continuous_sensing_cycle(
                 "subscription": subscription,
             }),
         })
+    final_artifact = current.continuous_sensing_artifact
+    previous_ids = {item.signal_id for item in artifact.signals}
+    completed_at = datetime.now(UTC)
+    run_record = SensingRunRecord(
+        started_at=started_at,
+        completed_at=completed_at,
+        duration_ms=round((perf_counter() - started_clock) * 1000),
+        status=final_artifact.subscription.last_run_status or SensingRunStatus.SUCCEEDED,
+        new_signal_count=len({item.signal_id for item in final_artifact.signals} - previous_ids),
+        source_success_count=sum(item.status == SensingSourceStatus.SUCCEEDED for item in final_artifact.sources),
+        source_failure_count=sum(item.status == SensingSourceStatus.FAILED for item in final_artifact.sources),
+        connector_success_count=sum(item.status == KpiConnectorStatus.SUCCEEDED for item in final_artifact.kpi_connectors),
+        connector_failure_count=sum(item.status == KpiConnectorStatus.FAILED for item in final_artifact.kpi_connectors),
+        errors=list(final_artifact.fetch_errors),
+    )
+    current = current.model_copy(update={
+        "continuous_sensing_artifact": final_artifact.model_copy(update={
+            "run_history": [run_record, *artifact.run_history][:100],
+        }),
+        "updated_at": completed_at,
+    })
     return current
 
 
@@ -659,6 +684,7 @@ def refresh_continuous_sensing(
         review_tasks=list(previous.review_tasks) if previous else [],
         subscription=subscription,
         management_digest=_digest(signals, previous_ids),
+        run_history=list(previous.run_history) if previous else [],
         fetch_errors=errors,
     )
     if previous:

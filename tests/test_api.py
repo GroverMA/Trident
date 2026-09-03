@@ -658,6 +658,8 @@ def test_ops_telemetry_requires_key_and_returns_source_backed_runs(
         body = response.json()
         assert body["source"].startswith("ProjectState.telemetry_runs")
         assert body["summary"]["step_run_count"] == 1
+        assert body["summary"]["sensing_run_count"] == 0
+        assert body["sensing_runs"] == []
         assert body["runs"][0]["step"] == "research_brief"
         assert body["runs"][0]["project_name"] == "运营监测测试"
     finally:
