@@ -386,6 +386,62 @@ def sync_feishu_kpis(
     })
 
 
+def run_continuous_sensing_cycle(
+    project: ProjectState,
+    *,
+    news_http_get=requests.get,
+    connector_http_post=requests.post,
+    connector_http_get=requests.get,
+) -> ProjectState:
+    """Refresh public sources and every configured internal connector as one governed cycle."""
+    artifact = project.continuous_sensing_artifact
+    if not artifact:
+        raise ValueError("项目尚未配置持续感知")
+    refreshed = refresh_continuous_sensing(
+        project,
+        watch_terms=artifact.watch_terms,
+        feed_urls=artifact.feed_urls,
+        sources=artifact.sources,
+        http_get=news_http_get,
+    )
+    current = project.model_copy(update={"continuous_sensing_artifact": refreshed})
+    connector_errors: list[str] = []
+    for connector in artifact.kpi_connectors:
+        try:
+            current = sync_feishu_kpis(
+                current,
+                connector,
+                http_post=connector_http_post,
+                http_get=connector_http_get,
+            )
+        except (FeishuConnectorError, requests.RequestException) as exc:
+            connector_errors.append(f"{connector.name}: {type(exc).__name__}")
+            current_artifact = current.continuous_sensing_artifact
+            failed = connector.model_copy(update={
+                "status": KpiConnectorStatus.FAILED,
+                "last_error": str(exc)[:240],
+            })
+            connectors = [failed if item.connector_id == connector.connector_id else item
+                          for item in current_artifact.kpi_connectors]
+            current = current.model_copy(update={
+                "continuous_sensing_artifact": current_artifact.model_copy(update={"kpi_connectors": connectors}),
+            })
+    if connector_errors:
+        current_artifact = current.continuous_sensing_artifact
+        all_errors = [*current_artifact.fetch_errors, *connector_errors]
+        subscription = current_artifact.subscription.model_copy(update={
+            "last_run_status": SensingRunStatus.PARTIAL,
+            "last_run_error": "；".join(all_errors),
+        })
+        current = current.model_copy(update={
+            "continuous_sensing_artifact": current_artifact.model_copy(update={
+                "fetch_errors": all_errors,
+                "subscription": subscription,
+            }),
+        })
+    return current
+
+
 def _clean(value: str | None) -> str:
     return re.sub(r"\s+", " ", unescape(_TAG_RE.sub(" ", value or ""))).strip()
 
@@ -598,6 +654,7 @@ def refresh_continuous_sensing(
         watch_terms=terms,
         feed_urls=custom_urls,
         sources=list(source_results.values()),
+        kpi_connectors=list(previous.kpi_connectors) if previous else [],
         signals=signals,
         review_tasks=list(previous.review_tasks) if previous else [],
         subscription=subscription,

@@ -47,7 +47,7 @@ from src.services.company_assessment import CompanyAssessmentError
 from src.services.action_planning import ActionPlanningError
 from src.services.scenario_interview import ScenarioInterviewError, ScenarioInterviewService
 from src.services.research_routing import ScenarioResearchRouter
-from src.services.continuous_sensing import FeishuConnectorError, configure_sensing_subscription, ingest_internal_kpi, ingest_internal_kpis, refresh_continuous_sensing, sync_feishu_kpis
+from src.services.continuous_sensing import FeishuConnectorError, configure_sensing_subscription, ingest_internal_kpi, ingest_internal_kpis, refresh_continuous_sensing, run_continuous_sensing_cycle, sync_feishu_kpis
 from src.services.sensing_review import (
     review_sensing_asset_draft,
     review_sensing_impact_task,
@@ -583,14 +583,14 @@ def run_due_sensing_subscriptions(research: ResearchApp) -> dict:
     for project in due:
         artifact = project.continuous_sensing_artifact
         try:
-            refreshed = refresh_continuous_sensing(
-                project,
-                watch_terms=artifact.watch_terms,
-                feed_urls=artifact.feed_urls,
-                sources=artifact.sources,
-            )
-            research.save_project(project.model_copy(update={"continuous_sensing_artifact": refreshed}))
-            results.append({"project_id": project.project_id, "status": refreshed.subscription.last_run_status})
+            refreshed_project = run_continuous_sensing_cycle(project)
+            research.save_project(refreshed_project)
+            refreshed = refreshed_project.continuous_sensing_artifact
+            results.append({
+                "project_id": project.project_id,
+                "status": refreshed.subscription.last_run_status,
+                "connector_count": len(refreshed.kpi_connectors),
+            })
         except Exception as exc:
             failed = artifact.model_copy(update={
                 "subscription": artifact.subscription.model_copy(update={

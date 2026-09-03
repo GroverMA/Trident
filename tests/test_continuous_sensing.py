@@ -6,7 +6,7 @@ import pytest
 # Import the delivery boundary first, matching application startup order.  The
 # services package re-exports planning services during initialization.
 from src.api.app import app  # noqa: F401
-from src.services.continuous_sensing import FeishuConnectorError, configure_sensing_subscription, ingest_internal_kpi, ingest_internal_kpis, refresh_continuous_sensing, sync_feishu_kpis
+from src.services.continuous_sensing import FeishuConnectorError, configure_sensing_subscription, ingest_internal_kpi, ingest_internal_kpis, refresh_continuous_sensing, run_continuous_sensing_cycle, sync_feishu_kpis
 from src.services.sensing_review import (
     review_sensing_asset_draft,
     review_sensing_impact_task,
@@ -389,6 +389,57 @@ def test_feishu_connector_requires_server_credentials(monkeypatch: pytest.Monkey
     monkeypatch.delenv("FEISHU_APP_SECRET", raising=False)
     with pytest.raises(FeishuConnectorError, match="FEISHU_APP_ID"):
         sync_feishu_kpis(project(), FeishuKpiConnector(app_token="app-token", table_id="tbl-id"))
+
+
+def test_public_refresh_preserves_registered_kpi_connectors() -> None:
+    current = project()
+    first = refresh_continuous_sensing(current, http_get=lambda *args, **kwargs: FakeResponse())
+    connector = FeishuKpiConnector(app_token="app-token", table_id="tbl-id")
+    current = current.model_copy(update={
+        "continuous_sensing_artifact": first.model_copy(update={"kpi_connectors": [connector]}),
+    })
+    refreshed = refresh_continuous_sensing(current, http_get=lambda *args, **kwargs: FakeResponse())
+    assert refreshed.kpi_connectors == [connector]
+
+
+def test_scheduled_cycle_refreshes_news_and_feishu_kpis(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FEISHU_APP_ID", "cli_app")
+    monkeypatch.setenv("FEISHU_APP_SECRET", "server-secret")
+    current = project()
+    first = refresh_continuous_sensing(current, http_get=lambda *args, **kwargs: FakeResponse())
+    connector = FeishuKpiConnector(app_token="app-token", table_id="tbl-id")
+    current = current.model_copy(update={
+        "continuous_sensing_artifact": first.model_copy(update={"kpi_connectors": [connector]}),
+    })
+
+    updated = run_continuous_sensing_cycle(
+        current,
+        news_http_get=lambda *args, **kwargs: FakeResponse(),
+        connector_http_post=lambda *args, **kwargs: FeishuResponse({"code": 0, "tenant_access_token": "tenant-token"}),
+        connector_http_get=lambda *args, **kwargs: FeishuResponse({"code": 0, "data": {"has_more": False, "items": [{"fields": {
+            "指标名称": "订单额", "本期数值": 86, "单位": "万元", "期间": "2026-08",
+        }}]}}),
+    )
+    artifact = updated.continuous_sensing_artifact
+    assert artifact.kpi_connectors[0].status == "succeeded"
+    assert any(signal.source_type == "internal_kpi" for signal in artifact.signals)
+    assert artifact.subscription.last_run_status == "succeeded"
+
+
+def test_scheduled_cycle_marks_connector_failure_as_partial(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("FEISHU_APP_ID", raising=False)
+    monkeypatch.delenv("FEISHU_APP_SECRET", raising=False)
+    current = project()
+    first = refresh_continuous_sensing(current, http_get=lambda *args, **kwargs: FakeResponse())
+    connector = FeishuKpiConnector(app_token="app-token", table_id="tbl-id")
+    current = current.model_copy(update={
+        "continuous_sensing_artifact": first.model_copy(update={"kpi_connectors": [connector]}),
+    })
+    updated = run_continuous_sensing_cycle(current, news_http_get=lambda *args, **kwargs: FakeResponse())
+    artifact = updated.continuous_sensing_artifact
+    assert artifact.kpi_connectors[0].status == "failed"
+    assert artifact.subscription.last_run_status == "partial"
+    assert "飞书经营 KPI" in artifact.subscription.last_run_error
 
 
 def test_impact_task_approval_authorizes_candidate_but_does_not_replace_assets() -> None:
