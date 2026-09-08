@@ -88,8 +88,8 @@ class FakeResponse:
             raise requests.HTTPError("unavailable")
 
 
-def project() -> ProjectState:
-    return ProjectState(
+def project(**updates: object) -> ProjectState:
+    values = dict(
         project_name="Acme China IVD monitoring",
         industry="IVD diagnostics",
         region="China",
@@ -97,6 +97,8 @@ def project() -> ProjectState:
         research_objective="Monitor company and industry changes",
         time_horizon="2026-2030",
     )
+    values.update(updates)
+    return ProjectState(**values)
 
 
 def test_refresh_fetches_filters_classifies_and_deduplicates() -> None:
@@ -296,6 +298,48 @@ def test_human_acceptance_creates_assessment_and_timeline_without_replacing_plan
     repeated = review_sensing_signal(reviewed, signal_id=signal_id, status=SignalReviewStatus.ACCEPTED)
     assert len(repeated.enterprise_timeline_events) == 1
     assert len(repeated.continuous_sensing_artifact.review_tasks) == 1
+
+
+@pytest.mark.parametrize(
+    ("scenario_id", "expected_dimension", "unexpected_dimension"),
+    [
+        ("growth_strategy", "growth_opportunity", "investment_thesis"),
+        ("pe", "investment_thesis", "market_timing"),
+        ("vc", "market_timing", "cash_flow"),
+    ],
+)
+def test_policy_signal_uses_scenario_specific_impact_matrix(
+    scenario_id: str, expected_dimension: str, unexpected_dimension: str
+) -> None:
+    current = project(scenario_pack=scenario_id, scenario_pack_version="1.0.0")
+    source = SensingSourceDefinition(
+        name="监管政策",
+        source_type="regulator_government",
+        tier=1,
+        url="https://regulator.example.gov/feed",
+    )
+    artifact = refresh_continuous_sensing(
+        current,
+        sources=[source],
+        http_get=lambda *args, **kwargs: FakeResponse(POLICY_RSS_V2),
+    )
+    current = current.model_copy(update={"continuous_sensing_artifact": artifact})
+    reviewed = review_sensing_signal(
+        current,
+        signal_id=artifact.signals[0].signal_id,
+        status=SignalReviewStatus.ACCEPTED,
+    )
+    assessment = reviewed.continuous_sensing_artifact.signals[0].assessment
+    task = reviewed.continuous_sensing_artifact.review_tasks[0]
+
+    assert assessment is not None
+    assert assessment.scenario_id == scenario_id
+    assert assessment.policy_stage == "effective"
+    assert expected_dimension in assessment.impact_dimensions
+    assert unexpected_dimension not in assessment.impact_dimensions
+    assert task.impact_dimensions == assessment.impact_dimensions
+    assert task.decision_questions == assessment.decision_questions
+    assert reviewed.action_plan_artifact is current.action_plan_artifact
 
 
 def test_human_ignore_does_not_create_impact_or_timeline() -> None:

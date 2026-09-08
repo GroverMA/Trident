@@ -79,6 +79,8 @@ class ScenarioPack(Protocol):
 
     def data_scope_policy(self) -> Mapping[str, Any]: ...
 
+    def sensing_impact_policy(self) -> Mapping[str, Any]: ...
+
 
 @runtime_checkable
 class IndustryPack(Protocol):

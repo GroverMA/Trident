@@ -53,6 +53,7 @@ class BuiltinScenarioPack:
     decision_outputs: Mapping[str, Any] = field(default_factory=dict)
     routing: Mapping[str, Any] = field(default_factory=dict)
     data_scope: Mapping[str, Any] = field(default_factory=dict)
+    sensing_impact: Mapping[str, Any] = field(default_factory=dict)
     deprecated: bool = False
     replaces: tuple[str, ...] = ()
 
@@ -106,6 +107,9 @@ class BuiltinScenarioPack:
     def data_scope_policy(self) -> Mapping[str, Any]:
         return self.data_scope
 
+    def sensing_impact_policy(self) -> Mapping[str, Any]:
+        return self.sensing_impact
+
 
 def _pack(
     *,
@@ -128,6 +132,7 @@ def _pack(
     decision_output_policy: Mapping[str, Any] | None = None,
     route_policy: Mapping[str, Any] | None = None,
     data_scope_policy: Mapping[str, Any] | None = None,
+    sensing_impact_policy: Mapping[str, Any] | None = None,
     deprecated: bool = False,
     replaces: tuple[str, ...] = (),
 ) -> BuiltinScenarioPack:
@@ -192,6 +197,30 @@ def _pack(
             "private_memory_root": "project",
             "public_evidence_reusable": True,
             "private_artifacts_cross_workspace": False,
+        },
+        sensing_impact=sensing_impact_policy or {
+            "dimensions_by_category": {
+                "policy": ["market_scope", "market_access", "market_size", "growth_drivers", "future_scenarios"],
+                "competition": ["competitive_landscape", "market_share", "substitution_risk"],
+                "customer": ["customer_needs", "buyer_adoption", "demand_assumptions"],
+                "technology": ["technology_trajectory", "substitution_risk", "adoption_timing"],
+                "operations": ["operating_baseline", "execution_risk", "delivery_capacity"],
+                "other": ["research_scope", "key_assumptions"],
+            },
+            "target_priority": ["research_scope"],
+            "decision_questions": [
+                "该信号是否改变已确认的研究边界或关键假设？",
+                "现有结论是否需要补充新证据或重新计算？",
+            ],
+            "policy_stage_rules": {
+                "draft": "作为观察项并验证适用范围，不提前视为正式约束",
+                "issued": "复核正式文本、适用对象与执行窗口",
+                "effective": "立即评估对当前判断和行动的实际影响",
+                "amended": "比较新旧版本差异并定位受影响资产",
+                "repealed": "检查原有限制是否解除以及旧判断是否失效",
+                "unknown": "先核验政策状态、发布机关和生效时间",
+            },
+            "protected_invariants": ["evidence_traceability", "human_approval", "version_history", "no_silent_overwrite"],
         },
         deprecated=deprecated,
         replaces=replaces,
@@ -319,6 +348,31 @@ def builtin_scenario_packs() -> tuple[BuiltinScenarioPack, ...]:
             "public_evidence_reusable": True,
             "private_artifacts_cross_workspace": False,
         },
+        sensing_impact_policy={
+            "dimensions_by_category": {
+                "policy": ["growth_opportunity", "market_access", "compliance_cost", "route_to_market", "action_feasibility"],
+                "competition": ["opportunity_priority", "differentiation", "competitive_response", "action_feasibility"],
+                "customer": ["buyer_adoption", "customer_validation", "unit_economics", "action_priority"],
+                "technology": ["product_scenario_fit", "capability_gap", "technology_substitution", "resource_need"],
+                "operations": ["scorecard_baseline", "execution_quality", "leading_kpi", "stop_or_pivot_condition"],
+                "other": ["growth_hypothesis", "company_scorecard", "action_plan"],
+            },
+            "target_priority": ["action_plan", "company_scorecard", "research_scope"],
+            "decision_questions": [
+                "该变化会提高还是降低候选增长机会的优先级？",
+                "Company Scorecard 的哪项企业能力或市场阈值需要重估？",
+                "已批准 Action Plan 的行动、KPI 或停止条件是否受到影响？",
+            ],
+            "policy_stage_rules": {
+                "draft": "进入增长机会观察清单，不调整正式行动",
+                "issued": "复核市场准入、合规成本与客户采用门槛",
+                "effective": "形成 Scorecard 与 Action Plan 影响复核任务",
+                "amended": "对照旧版本重估机会优先级和执行条件",
+                "repealed": "评估被解除约束带来的新增机会与资源需求",
+                "unknown": "核验政策状态后再判断增长机会",
+            },
+            "protected_invariants": ["evidence_traceability", "human_approval", "version_history", "no_silent_overwrite"],
+        },
         replaces=("sme_growth@1.0.0",),
     )
     pe = _pack(
@@ -374,6 +428,31 @@ def builtin_scenario_packs() -> tuple[BuiltinScenarioPack, ...]:
             "private_memory_root": "fund_deal_workspace",
             "public_evidence_reusable": True,
             "private_artifacts_cross_workspace": False,
+        },
+        sensing_impact_policy={
+            "dimensions_by_category": {
+                "policy": ["investment_thesis", "regulatory_downside", "cash_flow", "value_creation", "exit_path"],
+                "competition": ["market_position", "pricing_power", "roll_up_logic", "downside_case"],
+                "customer": ["revenue_quality", "customer_concentration", "retention", "commercial_dd"],
+                "technology": ["capex_need", "technology_obsolescence", "value_creation", "exit_multiple"],
+                "operations": ["ebitda_quality", "cash_conversion", "covenant_headroom", "value_creation_plan"],
+                "other": ["investment_thesis", "downside_case", "value_creation_plan"],
+            },
+            "target_priority": ["action_plan", "research_scope"],
+            "decision_questions": [
+                "该变化是否破坏投资假设、下行情景或交易边界？",
+                "价值创造计划、现金流或退出路径是否需要重新验证？",
+                "是否需要提交投资委员会形成新的候选判断？",
+            ],
+            "policy_stage_rules": {
+                "draft": "纳入尽调观察清单并测试下行情景",
+                "issued": "复核交易边界、现金流和价值创造假设",
+                "effective": "形成投资假设或价值创造计划影响任务",
+                "amended": "比较新旧政策对持有期回报与退出的差异",
+                "repealed": "评估限制解除对价值创造和退出的贡献",
+                "unknown": "在 IC 判断前核验政策权威性与时点",
+            },
+            "protected_invariants": ["evidence_traceability", "human_approval", "version_history", "no_silent_overwrite"],
         },
         replaces=("pe_vc@1.0.0",),
     )
@@ -458,6 +537,31 @@ def builtin_scenario_packs() -> tuple[BuiltinScenarioPack, ...]:
             "private_memory_root": "fund_investment_workspace",
             "public_evidence_reusable": True,
             "private_artifacts_cross_workspace": False,
+        },
+        sensing_impact_policy={
+            "dimensions_by_category": {
+                "policy": ["market_timing", "regulatory_milestone", "runway", "follow_on_financing", "downside_risk"],
+                "competition": ["market_timing", "category_leadership", "moat", "follow_on_thesis"],
+                "customer": ["product_market_evidence", "adoption_velocity", "retention_signal", "next_milestone"],
+                "technology": ["technology_moat", "technical_validation", "milestone_risk", "capital_need"],
+                "operations": ["burn_multiple", "runway", "milestone_delivery", "founder_execution"],
+                "other": ["investment_hypothesis", "next_milestone", "follow_on_view"],
+            },
+            "target_priority": ["action_plan", "company_scorecard", "research_scope"],
+            "decision_questions": [
+                "该变化是否改变市场时点、技术护城河或下一里程碑判断？",
+                "当前 runway 是否足以跨过受影响的验证节点？",
+                "初始投资或后续跟投假设是否需要重新提交审核？",
+            ],
+            "policy_stage_rules": {
+                "draft": "作为里程碑风险观察项，不提前改写投资判断",
+                "issued": "复核市场时点、监管里程碑与资金需求",
+                "effective": "形成里程碑计划与跟投观点影响任务",
+                "amended": "比较新旧规则对技术验证和融资窗口的差异",
+                "repealed": "评估限制解除是否提前市场进入时点",
+                "unknown": "核验状态后再调整市场时点和里程碑判断",
+            },
+            "protected_invariants": ["evidence_traceability", "human_approval", "version_history", "no_silent_overwrite"],
         },
         replaces=("pe_vc@1.0.0",),
     )

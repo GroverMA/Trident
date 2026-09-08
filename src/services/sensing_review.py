@@ -17,11 +17,26 @@ from src.models.sensing import (
     SensingAssetVersionDraft,
     SignalCategory,
     SignalImpactAssessment,
+    SensingSignal,
     SignalReviewStatus,
 )
+from src.scenarios.builtin import builtin_scenario_packs
 from src.state.project import ProjectState
 from src.models.research import MarketDefinition, MethodologyTrace, ResearchBriefArtifact, ResearchIntent
 from src.models.strategy import ActionPlanArtifact, CompanyScorecardArtifact
+
+
+IMPACT_DIMENSION_LABELS = {
+    "market_scope": "市场边界", "market_access": "市场准入", "market_size": "市场规模",
+    "growth_drivers": "增长驱动", "future_scenarios": "未来情景", "growth_opportunity": "增长机会",
+    "compliance_cost": "合规成本", "route_to_market": "进入路径", "action_feasibility": "行动可行性",
+    "opportunity_priority": "机会优先级", "buyer_adoption": "买家采用", "customer_validation": "客户验证",
+    "unit_economics": "单位经济性", "product_scenario_fit": "产品场景适配", "capability_gap": "能力差距",
+    "scorecard_baseline": "评分基线", "execution_quality": "执行质量", "investment_thesis": "投资假设",
+    "regulatory_downside": "监管下行情景", "cash_flow": "现金流", "value_creation": "价值创造",
+    "exit_path": "退出路径", "market_timing": "市场时点", "regulatory_milestone": "监管里程碑",
+    "runway": "现金跑道", "follow_on_financing": "后续融资", "downside_risk": "下行风险",
+}
 
 
 def _methodology_trace(artifact_type: str) -> MethodologyTrace:
@@ -124,7 +139,38 @@ def _materialize_asset_draft(project: ProjectState, task: SensingImpactReviewTas
     )
 
 
-def _assess(project: ProjectState, category: SignalCategory) -> SignalImpactAssessment:
+def _scenario_impact_policy(project: ProjectState) -> dict[str, object]:
+    pack = next(
+        (
+            item for item in builtin_scenario_packs()
+            if item.descriptor.extension_id == project.scenario_pack
+            and item.descriptor.version == project.scenario_pack_version
+        ),
+        next(item for item in builtin_scenario_packs() if item.descriptor.extension_id == "general"),
+    )
+    return dict(pack.sensing_impact_policy())
+
+
+def _policy_stage(project: ProjectState, signal: SensingSignal) -> str | None:
+    artifact = project.continuous_sensing_artifact
+    if not artifact or not signal.policy_record_id:
+        return None
+    record = next((item for item in artifact.policy_records if item.policy_id == signal.policy_record_id), None)
+    return record.current_stage.value if record else None
+
+
+def _available_target(project: ProjectState, priorities: list[str]) -> ImpactReviewTarget:
+    available = {"research_scope"}
+    if project.company_scorecard_artifact:
+        available.add("company_scorecard")
+    if project.action_plan_artifact:
+        available.add("action_plan")
+    selected = next((item for item in priorities if item in available), "research_scope")
+    return ImpactReviewTarget(selected)
+
+
+def _assess(project: ProjectState, signal: SensingSignal) -> SignalImpactAssessment:
+    category = signal.category
     assets = ["research_scope"]
     recommendation = "复核研究范围、关键假设和证据时效性"
     if project.company_scorecard_artifact:
@@ -140,6 +186,22 @@ def _assess(project: ProjectState, category: SignalCategory) -> SignalImpactAsse
     elif category == SignalCategory.OPERATIONS:
         recommendation = "复核经营基线、执行偏差和 Action Plan 指标"
 
+    policy = _scenario_impact_policy(project)
+    dimensions = dict(policy.get("dimensions_by_category", {})).get(category.value, [])
+    questions = list(policy.get("decision_questions", []))
+    priorities = list(policy.get("target_priority", ["research_scope"]))
+    stage = _policy_stage(project, signal)
+    if category == SignalCategory.POLICY and stage:
+        stage_rule = dict(policy.get("policy_stage_rules", {})).get(stage)
+        if stage_rule:
+            recommendation = f"{recommendation}；{stage_rule}"
+            questions.append(f"政策处于 {stage} 阶段，本项目应观察、补充研究还是启动资产复核？")
+    if dimensions:
+        labels = [IMPACT_DIMENSION_LABELS.get(item, item.replace("_", " ")) for item in dimensions]
+        recommendation = f"{recommendation}；场景影响维度：{'、'.join(labels)}"
+    if questions:
+        recommendation = f"{recommendation}；本次必须回答：{' / '.join(questions)}"
+
     hypotheses = (
         project.research_brief_artifact.hypotheses[:5]
         if project.research_brief_artifact
@@ -150,21 +212,24 @@ def _assess(project: ProjectState, category: SignalCategory) -> SignalImpactAsse
         affected_hypotheses=hypotheses,
         recommended_review=recommendation,
         confidence=80 if category != SignalCategory.OTHER else 60,
+        scenario_id=project.scenario_pack,
+        impact_dimensions=dimensions,
+        decision_questions=questions,
+        policy_stage=stage,
+        recommended_target=_available_target(project, priorities),
     )
 
 
 def _review_task(project: ProjectState, signal_id: str, artifact_id: str, assessment: SignalImpactAssessment) -> SensingImpactReviewTask:
-    target = ImpactReviewTarget.RESEARCH_SCOPE
+    target = assessment.recommended_target
     base_artifact_id = None
     base_version = None
     proposed_version = 1
-    if project.action_plan_artifact:
-        target = ImpactReviewTarget.ACTION_PLAN
+    if target == ImpactReviewTarget.ACTION_PLAN and project.action_plan_artifact:
         base_artifact_id = project.action_plan_artifact.artifact_id
         base_version = project.action_plan_artifact.version
         proposed_version = base_version + 1
-    elif project.company_scorecard_artifact:
-        target = ImpactReviewTarget.COMPANY_SCORECARD
+    elif target == ImpactReviewTarget.COMPANY_SCORECARD and project.company_scorecard_artifact:
         base_artifact_id = project.company_scorecard_artifact.artifact_id
         base_version = 1
         proposed_version = 2
@@ -180,6 +245,10 @@ def _review_task(project: ProjectState, signal_id: str, artifact_id: str, assess
         affected_assets=assessment.affected_assets,
         affected_hypotheses=assessment.affected_hypotheses,
         recommended_review=assessment.recommended_review,
+        scenario_id=assessment.scenario_id,
+        impact_dimensions=assessment.impact_dimensions,
+        decision_questions=assessment.decision_questions,
+        policy_stage=assessment.policy_stage,
         base_artifact_id=base_artifact_id,
         base_version=base_version,
         proposed_version=proposed_version,
@@ -219,7 +288,11 @@ def _candidate_for(project: ProjectState, task: SensingImpactReviewTask) -> Sens
         proposed_version=task.proposed_version,
         title=f"{task.target.value} 候选 V{task.proposed_version}",
         rationale=task.recommended_review,
-        proposed_changes=change_map[task.target],
+        proposed_changes=[
+            *change_map[task.target],
+            *(f"场景影响维度：{item}" for item in task.impact_dimensions),
+            *(f"待审核问题：{item}" for item in task.decision_questions),
+        ],
         retained_constraints=[
             "候选内容不得自动覆盖已批准资产",
             "必须保留来源信号、基准版本与场景版本",
@@ -256,7 +329,7 @@ def review_sensing_signal(
             signals.append(signal)
             continue
         found = True
-        assessment = _assess(project, signal.category) if status == SignalReviewStatus.ACCEPTED else None
+        assessment = _assess(project, signal) if status == SignalReviewStatus.ACCEPTED else None
         updated = signal.model_copy(update={
             "is_read": True,
             "read_at": signal.read_at or now,
