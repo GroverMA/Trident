@@ -22,6 +22,9 @@ from src.models.sensing import (
     InternalKpiObservation,
     KpiConnectorStatus,
     KpiDirection,
+    PolicyLifecycleStage,
+    PolicyRecord,
+    PolicyVersion,
     SensingSignal,
     SignalCategory,
     SignalImpact,
@@ -566,6 +569,87 @@ def _classify(text: str) -> SignalCategory:
     return category if score else SignalCategory.OTHER
 
 
+def _policy_stage(text: str) -> PolicyLifecycleStage:
+    lowered = text.casefold()
+    if any(term in lowered for term in ("废止", "废除", "repeal", "revoked")):
+        return PolicyLifecycleStage.REPEALED
+    if any(term in lowered for term in ("修订", "修正", "amend", "revision")):
+        return PolicyLifecycleStage.AMENDED
+    if any(term in lowered for term in ("施行", "生效", "effective", "in force")):
+        return PolicyLifecycleStage.EFFECTIVE
+    if any(term in lowered for term in ("征求意见", "草案", "draft", "consultation")):
+        return PolicyLifecycleStage.DRAFT
+    if any(term in lowered for term in ("发布", "印发", "公告", "issued", "公布")):
+        return PolicyLifecycleStage.ISSUED
+    return PolicyLifecycleStage.UNKNOWN
+
+
+def _policy_effective_date(text: str) -> datetime | None:
+    match = re.search(r"(?:自|于)?\s*(20\d{2})[年/-](\d{1,2})[月/-](\d{1,2})日?\s*(?:起)?(?:施行|生效)", text)
+    if not match:
+        return None
+    try:
+        return datetime(int(match[1]), int(match[2]), int(match[3]), tzinfo=UTC)
+    except ValueError:
+        return None
+
+
+def _policy_document_number(text: str) -> str | None:
+    patterns = (
+        r"[（(]?20\d{2}[）)]?\s*第?\s*\d+\s*号",
+        r"(?:令|公告)\s*第?\s*\d+\s*号",
+        r"(?:No\.?|Notice)\s*\d+[A-Za-z0-9/-]*",
+    )
+    return next((match.group(0).strip() for pattern in patterns if (match := re.search(pattern, text, re.IGNORECASE))), None)
+
+
+def _policy_record(
+    project: ProjectState,
+    *,
+    title: str,
+    summary: str,
+    link: str,
+    publisher: str,
+    source_type: SensingSourceType,
+    published_at: datetime | None,
+    matched_terms: list[str],
+    existing: dict[str, PolicyRecord],
+) -> PolicyRecord:
+    text = f"{title} {summary}"
+    document_number = _policy_document_number(text)
+    canonical_url = str(link).split("?", 1)[0].rstrip("/")
+    stable_key = document_number.casefold() if document_number else canonical_url.casefold()
+    policy_id = f"POL-{sha256(stable_key.encode()).hexdigest()[:18]}"
+    stage = _policy_stage(text)
+    version_key = f"{canonical_url}|{title}|{summary}"
+    version = PolicyVersion(
+        version_id=f"PV-{sha256(version_key.encode()).hexdigest()[:18]}",
+        title=title,
+        summary=summary[:600],
+        source_url=link,
+        publication_date=published_at,
+        effective_date=_policy_effective_date(text),
+        lifecycle_stage=stage,
+    )
+    previous = existing.get(policy_id)
+    versions = list(previous.versions) if previous else []
+    if all(item.version_id != version.version_id for item in versions):
+        versions.insert(0, version)
+    applicability = list(dict.fromkeys([*matched_terms, project.industry, project.target_company]))
+    applicability = [item for item in applicability if item]
+    return PolicyRecord(
+        policy_id=policy_id,
+        canonical_title=title,
+        issuing_authority=publisher if source_type == SensingSourceType.REGULATOR_GOVERNMENT else f"待核验（发现来源：{publisher}）",
+        jurisdiction=project.region,
+        applicability=applicability,
+        document_number=document_number or (previous.document_number if previous else None),
+        current_stage=stage if stage != PolicyLifecycleStage.UNKNOWN else (previous.current_stage if previous else stage),
+        versions=versions[:20],
+        latest_version_id=versions[0].version_id,
+    )
+
+
 def _rank(
     text: str,
     watch_terms: list[str],
@@ -673,6 +757,7 @@ def refresh_continuous_sensing(
         if item.review_status == "accepted" or not item.published_at or item.published_at >= cutoff
     }
     title_ids = {re.sub(r"\W+", "", item.title).casefold(): item.signal_id for item in by_id.values()}
+    policy_records = {item.policy_id: item for item in (previous.policy_records if previous else [])}
     errors: list[str] = []
 
     source_results: dict[str, SensingSourceDefinition] = {source.source_id: source for source in custom_sources}
@@ -697,6 +782,14 @@ def refresh_continuous_sensing(
                 signal_id = title_ids.get(title_key) or sha256(title_key.encode("utf-8")).hexdigest()[:24]
                 title_ids[title_key] = signal_id
                 publisher = item_source or source.name
+                category = _classify(f"{title} {summary}")
+                is_policy = category == SignalCategory.POLICY or source.source_type == SensingSourceType.REGULATOR_GOVERNMENT
+                policy = _policy_record(
+                    project, title=title, summary=summary, link=link, publisher=publisher, source_type=source.source_type,
+                    published_at=published_at, matched_terms=matched, existing=policy_records,
+                ) if is_policy else None
+                if policy:
+                    policy_records[policy.policy_id] = policy
                 by_id[signal_id] = SensingSignal(
                     signal_id=signal_id,
                     title=title,
@@ -707,7 +800,7 @@ def refresh_continuous_sensing(
                     source_type=source.source_type,
                     source_tier=source.tier,
                     published_at=published_at,
-                    category=_classify(f"{title} {summary}"),
+                    category=SignalCategory.POLICY if is_policy else category,
                     impact=impact,
                     impact_reason=reason,
                     matched_terms=matched,
@@ -720,6 +813,7 @@ def refresh_continuous_sensing(
                     reviewer_note=by_id[signal_id].reviewer_note if signal_id in by_id else None,
                     reviewed_at=by_id[signal_id].reviewed_at if signal_id in by_id else None,
                     assessment=by_id[signal_id].assessment if signal_id in by_id else None,
+                    policy_record_id=policy.policy_id if policy else (by_id[signal_id].policy_record_id if signal_id in by_id else None),
                 )
             if source.source_id in source_results:
                 source_results[source.source_id] = source.model_copy(update={
@@ -759,6 +853,7 @@ def refresh_continuous_sensing(
         sources=list(source_results.values()),
         kpi_connectors=list(previous.kpi_connectors) if previous else [],
         signals=signals,
+        policy_records=sorted(policy_records.values(), key=lambda item: item.versions[0].captured_at, reverse=True)[:200],
         review_tasks=list(previous.review_tasks) if previous else [],
         subscription=subscription,
         management_digest=_digest(signals, previous_ids),

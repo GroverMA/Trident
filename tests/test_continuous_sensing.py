@@ -61,6 +61,22 @@ OFFICIAL_HTML = b"""<!doctype html><html><body>
 <a href="/about">About us</a>
 </body></html>"""
 
+POLICY_RSS_V1 = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><item>
+  <title>Acme Medical 医疗器械监督管理办法征求意见稿（2026）第12号</title>
+  <link>https://regulator.example.gov/policies/medical-device-12</link>
+  <description>面向 IVD diagnostics 企业征求意见，适用于 China 市场。</description>
+  <pubDate>Mon, 24 Aug 2026 08:00:00 GMT</pubDate>
+</item></channel></rss>""".encode()
+
+POLICY_RSS_V2 = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><item>
+  <title>Acme Medical 医疗器械监督管理办法正式发布（2026）第12号</title>
+  <link>https://regulator.example.gov/policies/medical-device-12</link>
+  <description>适用于 IVD diagnostics 企业，自2026年10月1日起施行。</description>
+  <pubDate>Tue, 01 Sep 2026 08:00:00 GMT</pubDate>
+</item></channel></rss>""".encode()
+
 
 class FakeResponse:
     def __init__(self, content: bytes = RSS, *, fails: bool = False) -> None:
@@ -219,6 +235,45 @@ def test_html_connector_extracts_matching_official_announcements() -> None:
     assert str(official.url) == "https://example.com/news/acme-approval"
     assert official.source_type == "company_official"
     assert official.source_tier == 1
+
+
+def test_regulator_source_creates_versioned_policy_record_without_accepting_evidence() -> None:
+    source = SensingSourceDefinition(
+        source_id="regulator-policy",
+        name="国家医疗器械监管机构",
+        source_type="regulator_government",
+        source_format="rss",
+        tier=1,
+        url="https://regulator.example.gov/feed.xml",
+    )
+    current = project()
+
+    def first_policy_or_empty(url: str, **kwargs: object) -> FakeResponse:
+        return FakeResponse(POLICY_RSS_V1 if url == str(source.url) else b"<rss><channel/></rss>")
+
+    first = refresh_continuous_sensing(current, sources=[source], http_get=first_policy_or_empty)
+    assert len(first.policy_records) == 1
+    policy = first.policy_records[0]
+    assert policy.issuing_authority == "国家医疗器械监管机构"
+    assert policy.jurisdiction == "China"
+    assert policy.current_stage == "draft"
+    assert policy.document_number is not None
+    assert policy.versions[0].lifecycle_stage == "draft"
+    assert first.signals[0].policy_record_id == policy.policy_id
+    assert first.signals[0].review_status == "needs_review"
+
+    current = current.model_copy(update={"continuous_sensing_artifact": first})
+
+    def second_policy_or_empty(url: str, **kwargs: object) -> FakeResponse:
+        return FakeResponse(POLICY_RSS_V2 if url == str(source.url) else b"<rss><channel/></rss>")
+
+    second = refresh_continuous_sensing(current, http_get=second_policy_or_empty)
+    updated_policy = second.policy_records[0]
+    assert updated_policy.policy_id == policy.policy_id
+    assert updated_policy.current_stage == "effective"
+    assert len(updated_policy.versions) == 2
+    assert updated_policy.versions[0].effective_date is not None
+    assert {item.lifecycle_stage for item in updated_policy.versions} == {"draft", "effective"}
 
 
 def test_human_acceptance_creates_assessment_and_timeline_without_replacing_plan() -> None:

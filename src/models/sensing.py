@@ -128,6 +128,15 @@ class KpiConnectorStatus(StrEnum):
     FAILED = "failed"
 
 
+class PolicyLifecycleStage(StrEnum):
+    DRAFT = "draft"
+    ISSUED = "issued"
+    EFFECTIVE = "effective"
+    AMENDED = "amended"
+    REPEALED = "repealed"
+    UNKNOWN = "unknown"
+
+
 class KpiFieldMapping(BaseModel):
     metric_name: str = "指标名称"
     value: str = "本期数值"
@@ -157,6 +166,29 @@ class SignalImpactAssessment(BaseModel):
     affected_hypotheses: list[str] = Field(default_factory=list)
     recommended_review: str
     confidence: int = Field(ge=0, le=100)
+
+
+class PolicyVersion(BaseModel):
+    version_id: str
+    title: str
+    summary: str = ""
+    source_url: HttpUrl
+    publication_date: datetime | None = None
+    effective_date: datetime | None = None
+    lifecycle_stage: PolicyLifecycleStage = PolicyLifecycleStage.UNKNOWN
+    captured_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class PolicyRecord(BaseModel):
+    policy_id: str
+    canonical_title: str
+    issuing_authority: str
+    jurisdiction: str
+    applicability: list[str] = Field(default_factory=list)
+    document_number: str | None = None
+    current_stage: PolicyLifecycleStage = PolicyLifecycleStage.UNKNOWN
+    versions: list[PolicyVersion] = Field(min_length=1)
+    latest_version_id: str
 
 
 class SensingAssetVersionDraft(BaseModel):
@@ -220,6 +252,7 @@ class SensingSignal(BaseModel):
     reviewed_at: datetime | None = None
     assessment: SignalImpactAssessment | None = None
     kpi_observation: InternalKpiObservation | None = None
+    policy_record_id: str | None = None
 
 
 class SensingImpactReviewTask(BaseModel):
@@ -310,6 +343,7 @@ class ContinuousSensingArtifact(BaseModel):
     sources: list[SensingSourceDefinition] = Field(default_factory=list)
     kpi_connectors: list[FeishuKpiConnector] = Field(default_factory=list)
     signals: list[SensingSignal] = Field(default_factory=list)
+    policy_records: list[PolicyRecord] = Field(default_factory=list)
     review_tasks: list[SensingImpactReviewTask] = Field(default_factory=list)
     subscription: SensingSubscription = Field(default_factory=SensingSubscription)
     management_digest: SensingManagementDigest | None = None
