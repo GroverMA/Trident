@@ -420,6 +420,7 @@ export interface SensingSignal {
     note: string;
     observed_at: string;
   } | null;
+  policy_record_id?: string | null;
 }
 
 export interface ContinuousSensingArtifact {
@@ -452,6 +453,26 @@ export interface ContinuousSensingArtifact {
     last_error?: string | null;
   }>;
   signals: SensingSignal[];
+  policy_records: Array<{
+    policy_id: string;
+    canonical_title: string;
+    issuing_authority: string;
+    jurisdiction: string;
+    applicability: string[];
+    document_number?: string | null;
+    current_stage: "draft" | "issued" | "effective" | "amended" | "repealed" | "unknown";
+    latest_version_id: string;
+    versions: Array<{
+      version_id: string;
+      title: string;
+      summary: string;
+      source_url: string;
+      publication_date?: string | null;
+      effective_date?: string | null;
+      lifecycle_stage: "draft" | "issued" | "effective" | "amended" | "repealed" | "unknown";
+      captured_at: string;
+    }>;
+  }>;
   review_tasks: Array<{
     task_id: string;
     signal_id: string;

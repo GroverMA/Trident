@@ -335,6 +335,26 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
 .connectorStatus.failed { background: #fff1f0; color: #a84b49; }
 .kpiSignalDetail { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .kpiSignalDetail span { padding: 6px 9px; border-radius: 6px; background: #eaf4f4; color: var(--accent); font-size: 9px; font-weight: 700; }
+.policyRegistry { margin: 0 0 18px; border: 1px solid #bfd2dc; border-radius: 12px; background: #f8fbfc; }
+.policyRegistry > summary { padding: 16px 20px; color: var(--teal); font-size: 12px; font-weight: 800; cursor: pointer; }
+.policyRegistryGrid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; padding: 0 20px 14px; }
+.policyRegistryGrid > article { padding: 16px; border: 1px solid #d6e1e7; border-radius: 9px; background: #fff; }
+.policyRegistryGrid article > header, .policyRegistryGrid article > footer { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.policyRegistryGrid article > header span { padding: 5px 8px; border-radius: 999px; background: #e7f1f4; color: #326f7b; font-size: 8px; font-weight: 800; }
+.policyRegistryGrid small { color: #8792a2; font-size: 8px; }
+.policyRegistryGrid h3 { margin: 11px 0; font-size: 13px; line-height: 1.45; }
+.policyRegistryGrid dl { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin: 0 0 10px; }
+.policyRegistryGrid dl div { padding: 8px; border-radius: 6px; background: #f4f7f8; }
+.policyRegistryGrid dt { color: #8792a2; font-size: 7px; }
+.policyRegistryGrid dd { margin: 3px 0 0; color: #536174; font-size: 9px; }
+.policyRegistryGrid p, .policyNotice { color: #687589; font-size: 9px; line-height: 1.55; }
+.policyRegistryGrid footer a, .policyRegistryGrid details a { color: var(--accent); font-size: 9px; }
+.policyRegistryGrid details { margin-top: 12px; font-size: 9px; }
+.policyRegistryGrid li { display: grid; gap: 3px; margin-top: 7px; }
+.policyNotice { margin: 0; padding: 0 20px 16px; }
+.policySignalMeta { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0; }
+.policySignalMeta span { padding: 6px 8px; border-radius: 6px; background: #edf4f7; color: #496b78; font-size: 8px; font-weight: 700; }
+@media (max-width: 760px) { .policyRegistryGrid { grid-template-columns: 1fr; } }
 .signalRow a { color: inherit; text-decoration: none; }
 .signalRow a:hover h3 { color: var(--accent); }
 .signalRow div > small { display: block; margin-top: 7px; color: #8390a3; font-size: 9px; }
