@@ -520,6 +520,7 @@ def capabilities() -> dict:
                 "decision_output_policy": pack.decision_output_policy(),
                 "research_route_policy": pack.research_route_policy(),
                 "data_scope_policy": pack.data_scope_policy(),
+                "sensing_impact_policy": pack.sensing_impact_policy(),
             }
             for descriptor in SCENARIO_PACKS.descriptors()
             for pack in [

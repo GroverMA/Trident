@@ -407,7 +407,12 @@ export interface SensingSignal {
     affected_assets: string[];
     affected_hypotheses: string[];
     recommended_review: string;
+    scenario_id: string;
+    impact_dimensions: string[];
+    decision_questions: string[];
+    policy_stage?: "draft" | "issued" | "effective" | "amended" | "repealed" | "unknown" | null;
     confidence: number;
+    recommended_target: "research_scope" | "company_scorecard" | "action_plan";
   } | null;
   kpi_observation?: {
     metric_name: string;
@@ -481,6 +486,10 @@ export interface ContinuousSensingArtifact {
     affected_assets: string[];
     affected_hypotheses: string[];
     recommended_review: string;
+    scenario_id: string;
+    impact_dimensions: string[];
+    decision_questions: string[];
+    policy_stage?: "draft" | "issued" | "effective" | "amended" | "repealed" | "unknown" | null;
     base_artifact_id?: string | null;
     base_version?: number | null;
     proposed_version: number;
@@ -705,4 +714,5 @@ export interface ScenarioPackContract {
   decision_output_policy: Record<string, unknown>;
   research_route_policy: Record<string, unknown>;
   data_scope_policy: Record<string, unknown>;
+  sensing_impact_policy: Record<string, unknown>;
 }

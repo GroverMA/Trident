@@ -62,6 +62,10 @@ def test_pe_and_vc_are_distinct_executable_scenario_contracts() -> None:
     assert pe.feedback_policy()["approval_role"] != vc.feedback_policy()["approval_role"]
     assert pe.decision_output_policy()["scorecard"]["enabled"] is False
     assert vc.decision_output_policy()["scorecard"]["opportunity_unit"] == "investment_hypothesis"
+    assert "cash_flow" in pe.sensing_impact_policy()["dimensions_by_category"]["policy"]
+    assert "market_timing" in vc.sensing_impact_policy()["dimensions_by_category"]["policy"]
+    assert pe.sensing_impact_policy()["decision_questions"] != vc.sensing_impact_policy()["decision_questions"]
+    assert "no_silent_overwrite" in pe.sensing_impact_policy()["protected_invariants"]
 
 
 def test_growth_scorecard_and_action_plan_are_scenario_bound_and_skill_extensible() -> None:
@@ -172,6 +176,7 @@ def test_capability_catalog_is_available_without_initializing_model_providers() 
     }
 
     assert visible == {"general", "growth_strategy", "pe", "vc"}
+    assert all("sensing_impact_policy" in item for item in payload["scenario_contracts"])
 
 
 def test_planning_resolves_selected_scenario_context() -> None:

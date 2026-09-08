@@ -166,6 +166,11 @@ class SignalImpactAssessment(BaseModel):
     affected_hypotheses: list[str] = Field(default_factory=list)
     recommended_review: str
     confidence: int = Field(ge=0, le=100)
+    scenario_id: str = "general"
+    impact_dimensions: list[str] = Field(default_factory=list)
+    decision_questions: list[str] = Field(default_factory=list)
+    policy_stage: PolicyLifecycleStage | None = None
+    recommended_target: ImpactReviewTarget = ImpactReviewTarget.RESEARCH_SCOPE
 
 
 class PolicyVersion(BaseModel):
@@ -264,6 +269,10 @@ class SensingImpactReviewTask(BaseModel):
     affected_assets: list[str] = Field(min_length=1)
     affected_hypotheses: list[str] = Field(default_factory=list)
     recommended_review: str
+    scenario_id: str = "general"
+    impact_dimensions: list[str] = Field(default_factory=list)
+    decision_questions: list[str] = Field(default_factory=list)
+    policy_stage: PolicyLifecycleStage | None = None
     base_artifact_id: str | None = None
     base_version: int | None = Field(default=None, ge=1)
     proposed_version: int = Field(default=1, ge=1)
