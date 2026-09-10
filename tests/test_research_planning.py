@@ -201,6 +201,25 @@ def test_active_sop_still_rejects_an_empty_research_plan() -> None:
         service.generate_plan(project(), brief)
 
 
+def test_empty_standard_plan_escalates_to_reasoning_model() -> None:
+    invalid = plan_payload()
+    invalid["tasks"] = []
+    standard = FakeStructuredModel([brief_payload(), invalid])
+    reasoning = FakeStructuredModel([plan_payload()])
+    service = ResearchPlanningService(
+        standard,
+        load_active_sop(),
+        reasoning_model=reasoning,
+    )
+
+    brief = service.generate_brief(project()).model_copy(update={"human_confirmed": True})
+    plan = service.generate_plan(project(), brief)
+
+    assert len(plan.tasks) == 6
+    assert len(reasoning.messages) == 1
+    assert "tasks绝对不能为空" in reasoning.messages[0][-1].content
+
+
 def test_complex_brief_escalates_from_standard_draft_to_reasoning_model() -> None:
     draft = brief_payload()
     draft["interpreted_intent"]["ambiguities"] = ["边界冲突一", "边界冲突二"]

@@ -282,7 +282,8 @@ class ResearchPlanningService:
                 content=(
                     "为以下研究项目生成Research Plan。每项任务必须主动寻找反证，并明确"
                     "证据标准与校验关卡。搜索词应可直接用于后续网页搜索。tasks中定义的"
-                    "每个字段都必须存在且非空，depends_on可以为空数组。所有研究模式都必须"
+                    "每个字段都必须存在且非空，tasks本身绝对不能为空，depends_on可以为空数组。"
+                    "所有研究模式都必须"
                     "完整覆盖当前SOP；sop_coverage必须把每个必需研究模块映射到一个或多个真实"
                     "task_id，不能因为用户选择快速模式而省略。prompt_question_coverage必须使用"
                     "Q1、Q2等编号，把Research Brief中的每一个must_answer_question映射到至少一个"
@@ -304,7 +305,12 @@ class ResearchPlanningService:
             ),
         ]
         for attempt in range(2):
-            payload, response = self.model.complete_json(messages, enable_thinking=True)
+            active_model = (
+                self.reasoning_model
+                if attempt == 1 and self.reasoning_model is not None
+                else self.model
+            )
+            payload, response = active_model.complete_json(messages, enable_thinking=True)
             payload = self._unwrap(payload, "research_plan")
             try:
                 self._validate_plan_payload(payload, brief)
@@ -484,7 +490,8 @@ class ResearchPlanningService:
                 content=(
                     "上一次输出未通过锁定SOP和结构校验，不能降低标准。"
                     f"违规原因：{error}。请修复全部问题并重新输出完整JSON对象；"
-                    "不要解释、不要省略任何字段。"
+                    "如果违规原因涉及研究任务，请根据必答问题和SOP必需模块生成真实、"
+                    "可执行的tasks，tasks绝对不能为空；不要解释、不要省略任何字段。"
                 ),
             ),
         ]

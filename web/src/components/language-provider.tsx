@@ -226,7 +226,18 @@ const translations: Record<string, string> = {
   "成熟企业标的": "Mature-company target",
   "创业企业标的": "Venture target",
   "当前项目": "Current project",
-  "仅引用本项目及已授权的长期记忆资产": "Uses only this project and authorized long-term memory assets"
+  "仅引用本项目及已授权的长期记忆资产": "Uses only this project and authorized long-term memory assets",
+  "AI 正在理解研究目标与市场边界": "AI is interpreting the research objective and market scope",
+  "AI 正在拆解研究任务与证据要求": "AI is structuring research tasks and evidence requirements",
+  "正在检索网页并核验证据": "Searching the web and validating evidence",
+  "AI 正在形成行业分析": "AI is building the industry analysis",
+  "AI 正在构建趋势、情景与反证条件": "AI is building trends, scenarios and counter-evidence conditions",
+  "AI 正在生成场景化 Company Scorecard": "AI is generating the scenario-specific Company Scorecard",
+  "AI 正在生成 Action Plan": "AI is generating the Action Plan",
+  "AI 正在组织完整研究报告": "AI is composing the complete research report",
+  "AI 正在生成完整报告与审阅底稿": "AI is generating the full report and review draft",
+  "请保持页面开启；完成后结果会自动保存并显示。": "Keep this page open. Results will be saved and displayed automatically.",
+  "正在启动…": "Starting…",
 };
 
 const attributeNames = ["placeholder", "aria-label", "title"] as const;
@@ -235,6 +246,11 @@ const originalAttributes = new WeakMap<Element, Map<string, string>>();
 
 function translateDynamic(value: string): string {
   return value
+    .replace(/预计耗时：约 (\d+)–(\d+) 秒 · 已等待 (\d+) 秒/g, "Estimated time: $1–$2 sec · Elapsed: $3 sec")
+    .replace(/预计耗时：约 (\d+) 秒–(\d+) 分钟 · 已等待 (\d+) 秒/g, "Estimated time: $1 sec–$2 min · Elapsed: $3 sec")
+    .replace(/预计耗时：约 (\d+)–(\d+) 分钟 · 已等待 (\d+) 秒/g, "Estimated time: $1–$2 min · Elapsed: $3 sec")
+    .replace(/预计耗时：每项任务约 (\d+)–(\d+) 秒 · 已等待 (\d+) 秒/g, "Estimated time: $1–$2 sec per task · Elapsed: $3 sec")
+    .replace(/预计耗时：通常少于 (\d+) 秒 · 已等待 (\d+) 秒/g, "Estimated time: usually under $1 sec · Elapsed: $2 sec")
     .replace(/主动访谈\s+(\d+)\/(\d+|-)/g, "Adaptive interview $1/$2")
     .replace(/动态问题\s+(\d+)/g, "Adaptive question $1")
     .replace(/当前显示\s+(.+?)\s+的关联资产。后续会按时间串联访谈、研究、决策、行动和结果反馈。/g, "Showing linked assets for $1. Interviews, research, decisions, actions and outcomes will be connected over time.")
