@@ -41,7 +41,7 @@ class ModelProvider(ABC):
         messages: list[ChatMessage],
         *,
         enable_thinking: bool = False,
-        reasoning_effort: str = "high",
+        reasoning_effort: str | None = None,
     ) -> ModelResponse:
         raise NotImplementedError
 
@@ -50,4 +50,3 @@ class SearchProvider(ABC):
     @abstractmethod
     def search(self, query: str) -> SearchResult:
         raise NotImplementedError
-

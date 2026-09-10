@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 from src.config import Settings
 from src.providers.base import ChatMessage
@@ -140,6 +141,51 @@ def test_thinking_parameters_are_only_added_when_enabled() -> None:
     assert body["reasoning_effort"] == "max"
     assert body["include_reasoning"] is True
     assert body["chat_template_kwargs"] == {"enable_thinking": True}
+
+
+def test_deepseek_explicitly_disables_default_thinking_for_fast_tasks() -> None:
+    session = FakeSession()
+    provider = HKGAIModelProvider(
+        replace(
+            settings().for_model_profile("fast"),
+            model_base_url="https://api.deepseek.com",
+        ),
+        session=session,
+    )
+
+    provider.complete([ChatMessage(role="user", content="Extract")])
+
+    body = session.last_request["json"]
+    assert body["thinking"] == {"type": "disabled"}
+    assert "reasoning_effort" not in body
+    assert body["max_tokens"] == 2000
+
+
+def test_deepseek_standard_profile_uses_flash_low_and_deep_uses_pro_high() -> None:
+    base = replace(
+        settings(),
+        model_base_url="https://api.deepseek.com",
+        fast_model_name="deepseek-v4-flash",
+        reasoning_model_name="deepseek-v4-pro",
+    )
+    standard_session = FakeSession()
+    deep_session = FakeSession()
+    standard = HKGAIModelProvider(
+        base.for_model_profile("standard"), session=standard_session
+    )
+    deep = HKGAIModelProvider(base.for_model_profile("deep"), session=deep_session)
+
+    standard.complete(
+        [ChatMessage(role="user", content="Scope")], enable_thinking=True
+    )
+    deep.complete(
+        [ChatMessage(role="user", content="Decide")], enable_thinking=True
+    )
+
+    assert standard_session.last_request["json"]["model"] == "deepseek-v4-flash"
+    assert standard_session.last_request["json"]["reasoning_effort"] == "low"
+    assert deep_session.last_request["json"]["model"] == "deepseek-v4-pro"
+    assert deep_session.last_request["json"]["reasoning_effort"] == "high"
 
 
 def test_model_usage_is_recorded_inside_a_research_step() -> None:

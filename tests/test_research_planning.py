@@ -160,6 +160,41 @@ def test_service_generates_traceable_brief_and_plan() -> None:
     assert "当前研究方法包处于锁定状态" in fake.messages[0][0].content
 
 
+def test_complex_brief_escalates_from_standard_draft_to_reasoning_model() -> None:
+    draft = brief_payload()
+    draft["interpreted_intent"]["ambiguities"] = ["边界冲突一", "边界冲突二"]
+    draft["market_definition"]["ambiguities"] = ["口径冲突一", "口径冲突二"]
+    refined = brief_payload()
+    standard = FakeStructuredModel([draft])
+    reasoning = FakeStructuredModel([refined])
+    service = ResearchPlanningService(
+        standard,
+        load_active_sop(),
+        reasoning_model=reasoning,
+    )
+
+    brief = service.generate_brief(project())
+
+    assert brief.decision_statement == refined["decision_statement"]
+    assert len(standard.messages) == 1
+    assert len(reasoning.messages) == 1
+    assert "Flash 初步诊断" in reasoning.messages[0][1].content
+
+
+def test_simple_brief_does_not_pay_for_reasoning_escalation() -> None:
+    standard = FakeStructuredModel([brief_payload()])
+    reasoning = FakeStructuredModel([])
+    service = ResearchPlanningService(
+        standard,
+        load_active_sop(),
+        reasoning_model=reasoning,
+    )
+
+    service.generate_brief(project())
+
+    assert reasoning.messages == []
+
+
 def test_service_rejects_plan_without_counter_evidence() -> None:
     invalid = plan_payload()
     invalid["tasks"][0]["counter_evidence_required"] = False

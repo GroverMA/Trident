@@ -36,3 +36,16 @@ def test_capabilities_publish_integration_contract() -> None:
     )
     assert research["execution"] == "asynchronous_job"
     assert research["requires_human_confirmation"] is True
+
+
+def test_capabilities_publish_task_level_model_routing() -> None:
+    payload = capabilities()
+    routing = payload["model_routing"]
+
+    assert routing["tasks"]["scenario_interview"] == "fast"
+    assert routing["tasks"]["research_brief"] == "standard"
+    assert routing["tasks"]["industry_analysis"] == "deep"
+    assert routing["tasks"]["report_generation"] == "synthesis"
+    assert routing["profiles"]["standard"]["thinking"] == "enabled"
+    assert routing["profiles"]["standard"]["reasoning_effort"] == "low"
+    assert routing["brief_escalation"] == "standard_to_deep_on_boundary_risk"
