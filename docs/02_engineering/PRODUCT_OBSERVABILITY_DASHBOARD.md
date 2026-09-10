@@ -94,3 +94,28 @@ model_call
 - 当前 Demo 将最多 500 条步骤运行随项目 JSON 持久化，保证 SQLite、PostgreSQL 和 MySQL 适配器均可使用。
 - 当前已采集 Prompt Analysis、Research Planning、逐任务 Web Research、Industry Analysis、Future Intelligence 和 General Report。
 - Dashboard 只展示聚合和运行元数据，不展示 Prompt、网页正文、模型回答或任何凭证。
+
+## 9. 2026-09-10 Dashboard V2 与当前汇总口径
+
+运营页形成四级只读视图：
+
+1. **全局总览**：完成流程数、流程完成率、全量模型 Token、单报告 Token 中位数/P75/P95、单报告墙钟耗时中位数、失败步骤与待处理通知。
+2. **模型视图**：按供应商实际返回的模型名统计调用次数、总 Token、平均 Token 与平均耗时，用于验证 Flash/Pro 任务路由是否真正生效。
+3. **步骤视图**：逐步骤展示开始与完成时间、实际模型、Prompt/Completion/Reasoning/Cached/Total Token、模型调用数、任务 ID、状态与耗时。
+4. **项目/场景流程视图**：逐项目展示场景包、研究通路、模型组合、步骤数、调用数、四类 Token、总 Token 与墙钟耗时。
+
+### 当前 Demo 的流程汇总边界
+
+- 当前一个项目对应一个主要报告或场景流程。
+- 已完成项目只汇总至当前正式报告的生成时间，报告生成后的 Action Feedback、持续感知和计划修订不计入该报告成本。
+- 未完成项目显示从项目开始至今的累计消耗，并明确标记为“进行中”。
+- 同一项目未来支持多次正式研究重跑时，必须引入独立的 `research_run_id`，不能继续用项目生命周期近似一次报告。
+- 历史上没有 Usage 的调用不推算 Token；Dashboard 单独显示 `usage_missing_call_count`。
+- Reasoning Token 若由供应商作为 Completion 明细返回，则只用于解释思考开销，不再次加到 Total Token；总数以供应商 `total_tokens` 为准。
+
+### Demo 访问配置
+
+- Web Project 配置 `TRIDENT_OPS_KEY`、`TRIDENT_OPS_USERNAME`、`TRIDENT_OPS_PASSWORD`。
+- API Project 配置相同的 `TRIDENT_OPS_KEY`。
+- KEY 是 Web 服务端访问私有指标 API 的内部凭证；用户名和密码是浏览器访问 `/ops` 的临时管理入口。三者均由部署方自行生成，不是模型供应商密钥。
+- 配置修改后两个 Project 都必须重新部署；普通研究页面不应获得或向浏览器发送 `TRIDENT_OPS_KEY`。

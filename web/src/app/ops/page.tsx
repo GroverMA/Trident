@@ -11,7 +11,17 @@ interface OpsRun {
   status: string;
   started_at: string;
   duration_ms: number;
-  model_calls: unknown[];
+  completed_at: string;
+  model_calls: Array<{
+    call_id: string;
+    model: string;
+    duration_ms: number;
+    prompt_tokens: number;
+    completion_tokens: number;
+    reasoning_tokens: number;
+    cached_tokens: number;
+    total_tokens: number;
+  }>;
   prompt_tokens: number;
   completion_tokens: number;
   reasoning_tokens: number;
@@ -26,15 +36,54 @@ interface OpsPayload {
   summary: {
     project_count: number;
     completed_report_count: number;
+    started_workflow_count: number;
+    report_completion_rate?: number | null;
     step_run_count: number;
     failed_step_count: number;
     model_call_count: number;
     total_tokens: number;
     average_tokens_per_completed_report?: number | null;
+    median_tokens_per_completed_report?: number | null;
+    p75_tokens_per_completed_report?: number | null;
+    p95_tokens_per_completed_report?: number | null;
+    median_report_duration_ms?: number | null;
     sensing_run_count: number;
     sensing_failed_or_partial_count: number;
     pending_sensing_notification_count: number;
   };
+  data_quality: {
+    last_event_at?: string | null;
+    usage_missing_call_count: number;
+    aggregation_scope: string;
+  };
+  models: Array<{
+    model: string;
+    calls: number;
+    tokens: number;
+    duration_ms: number;
+    average_tokens: number;
+    average_duration_ms: number;
+  }>;
+  projects: Array<{
+    project_id: string;
+    project_name: string;
+    scenario_pack: string;
+    research_path: string;
+    status: "completed" | "in_progress";
+    started_at?: string | null;
+    completed_at?: string | null;
+    wall_duration_ms: number;
+    step_run_count: number;
+    failed_step_count: number;
+    model_call_count: number;
+    models: string[];
+    prompt_tokens: number;
+    completion_tokens: number;
+    reasoning_tokens: number;
+    cached_tokens: number;
+    total_tokens: number;
+    aggregation_scope: "current_report" | "project_to_date";
+  }>;
   runs: OpsRun[];
   sensing_runs: Array<{
     run_id: string; project_id: string; project_name: string; started_at: string;
@@ -67,10 +116,19 @@ function number(value: number | null | undefined) {
   return value == null ? "—" : new Intl.NumberFormat("zh-CN").format(value);
 }
 
-function duration(milliseconds: number) {
+function duration(milliseconds: number | null | undefined) {
+  if (milliseconds == null) return "—";
   if (milliseconds < 1000) return `${milliseconds} ms`;
   if (milliseconds < 60_000) return `${(milliseconds / 1000).toFixed(1)} s`;
   return `${(milliseconds / 60_000).toFixed(1)} min`;
+}
+
+function percentage(value: number | null | undefined) {
+  return value == null ? "—" : `${(value * 100).toFixed(1)}%`;
+}
+
+function modelNames(run: OpsRun) {
+  return [...new Set(run.model_calls.map((call) => call.model))].join("、") || "—";
 }
 
 async function loadTelemetry(): Promise<{ data?: OpsPayload; error?: string }> {
@@ -128,11 +186,11 @@ export default async function OperationsPage() {
         <>
           <section className="opsMetricGrid">
             {[
-              ["项目总数", number(data.summary.project_count), "已进入系统的研究项目"],
-              ["模型 Token", number(data.summary.total_tokens), "供应商返回的真实 usage"],
-              ["步骤运行", number(data.summary.step_run_count), `${number(data.summary.model_call_count)} 次模型调用`],
-              ["完成报告", number(data.summary.completed_report_count), `平均 ${number(data.summary.average_tokens_per_completed_report)} Token/份`],
-              ["失败步骤", number(data.summary.failed_step_count), "可按下方明细定位重试"],
+              ["完成流程", number(data.summary.completed_report_count), `完成率 ${percentage(data.summary.report_completion_rate)}`],
+              ["模型 Token", number(data.summary.total_tokens), `${number(data.summary.model_call_count)} 次真实模型调用`],
+              ["单报告 Token", number(data.summary.median_tokens_per_completed_report), `P75 ${number(data.summary.p75_tokens_per_completed_report)} · P95 ${number(data.summary.p95_tokens_per_completed_report)}`],
+              ["单报告耗时", duration(data.summary.median_report_duration_ms), "已完成流程墙钟耗时中位数"],
+              ["失败步骤", number(data.summary.failed_step_count), `${number(data.summary.step_run_count)} 次步骤运行`],
               ["待处理通知", number(data.summary.pending_sensing_notification_count), "高影响信号与自动感知异常"],
             ].map(([label, value, note]) => (
               <article className="opsMetric" key={label}>
@@ -154,26 +212,46 @@ export default async function OperationsPage() {
             </article>
 
             <article className="opsPanel">
-              <div className="opsPanelTitle"><div><span>Latency</span><h2>步骤平均耗时</h2></div></div>
+              <div className="opsPanelTitle"><div><span>Model Mix</span><h2>模型调用分布</h2></div><small>实际返回模型</small></div>
               <div className="opsLatencyList">
-                {byStep.map(([step, item]) => (
-                  <div key={step}><span>{stepLabels[step] ?? step}</span><strong>{duration(item.duration / item.runs)}</strong></div>
+                {data.models.map((item) => (
+                  <div key={item.model} className="opsModelRow">
+                    <span><b>{item.model}</b><small>{item.calls} 次调用 · 平均 {duration(item.average_duration_ms)}</small></span>
+                    <strong>{number(item.tokens)} Token</strong>
+                  </div>
                 ))}
-                {!byStep.length ? <p className="opsEmpty">暂无新埋点数据。</p> : null}
+                {!data.models.length ? <p className="opsEmpty">暂无模型调用数据。</p> : null}
               </div>
             </article>
           </section>
 
           <section className="opsPanel opsTablePanel">
+            <div className="opsPanelTitle"><div><span>Workflow Cost</span><h2>报告与场景流程总消耗</h2></div><small>完成后按当前报告截止；未完成按项目至今</small></div>
+            <div className="opsTableWrap"><table className="opsTable">
+              <thead><tr><th>项目 / 场景</th><th>状态</th><th>模型</th><th>步骤 / 调用</th><th>Prompt</th><th>Completion</th><th>Reasoning</th><th>Cached</th><th>总 Token</th><th>墙钟耗时</th></tr></thead>
+              <tbody>{data.projects.map((project) => (
+                <tr key={project.project_id}>
+                  <td><strong>{project.project_name}</strong><small className="opsCellMeta">{project.scenario_pack} · {project.research_path}</small></td>
+                  <td><span className={`opsStatus ${project.status === "completed" ? "" : "pending"}`}>{project.status === "completed" ? "已完成" : "进行中"}</span></td>
+                  <td>{project.models.join("、") || "—"}</td><td>{project.step_run_count} / {project.model_call_count}</td>
+                  <td>{number(project.prompt_tokens)}</td><td>{number(project.completion_tokens)}</td><td>{number(project.reasoning_tokens)}</td><td>{number(project.cached_tokens)}</td>
+                  <td><strong>{number(project.total_tokens)}</strong></td><td>{duration(project.wall_duration_ms)}</td>
+                </tr>
+              ))}</tbody>
+            </table>{!data.projects.length ? <p className="opsEmpty">创建并执行研究项目后，这里会显示完整流程总消耗。</p> : null}</div>
+          </section>
+
+          <section className="opsPanel opsTablePanel">
             <div className="opsPanelTitle"><div><span>Run Log</span><h2>最近步骤运行</h2></div><small>最多显示最近 100 条</small></div>
             <div className="opsTableWrap"><table className="opsTable">
-              <thead><tr><th>开始时间</th><th>项目</th><th>步骤</th><th>状态</th><th>模型调用</th><th>Token</th><th>耗时</th></tr></thead>
+              <thead><tr><th>开始 / 完成</th><th>项目</th><th>步骤</th><th>状态</th><th>实际模型</th><th>Prompt</th><th>Completion</th><th>Reasoning</th><th>Cached</th><th>总 Token</th><th>耗时</th></tr></thead>
               <tbody>{runs.slice(0, 100).map((run) => (
                 <tr key={run.run_id}>
-                  <td>{new Date(run.started_at).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</td>
+                  <td>{new Date(run.started_at).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}<small className="opsCellMeta">{new Date(run.completed_at).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</small></td>
                   <td>{run.project_name}</td><td>{stepLabels[run.step] ?? run.step}{run.task_id ? ` · ${run.task_id}` : ""}</td>
                   <td><span className={`opsStatus ${run.status === "failed" ? "failed" : ""}`}>{run.status === "failed" ? "失败" : "完成"}</span></td>
-                  <td>{run.model_calls.length}</td><td>{number(run.total_tokens)}</td><td>{duration(run.duration_ms)}</td>
+                  <td>{modelNames(run)}<small className="opsCellMeta">{run.model_calls.length} 次调用</small></td>
+                  <td>{number(run.prompt_tokens)}</td><td>{number(run.completion_tokens)}</td><td>{number(run.reasoning_tokens)}</td><td>{number(run.cached_tokens)}</td><td><strong>{number(run.total_tokens)}</strong></td><td>{duration(run.duration_ms)}</td>
                 </tr>
               ))}</tbody>
             </table></div>
@@ -204,7 +282,7 @@ export default async function OperationsPage() {
             </table>{!data.sensing_runs.length ? <p className="opsEmpty">自动感知调度运行后，这里会显示真实来源与连接器健康记录。</p> : null}</div>
           </section>
 
-          <footer className="opsSource">数据源：{data.source}。覆盖从本次埋点上线后的新模型调用开始，历史调用不作推算回填。</footer>
+          <footer className="opsSource">数据源：{data.source}。最后事件：{data.data_quality.last_event_at ? new Date(data.data_quality.last_event_at).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" }) : "暂无"}；Usage 缺失调用：{number(data.data_quality.usage_missing_call_count)}。Reasoning Token 是 Completion 的明细项时不重复计入总数；总 Token 始终采用供应商返回值。覆盖从埋点上线后的新模型调用开始，历史调用不作推算回填。</footer>
         </>
       ) : null}
     </main>

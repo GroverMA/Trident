@@ -69,6 +69,9 @@ a { color: inherit; text-decoration: none; }
 .opsLatencyList > div { display: flex; justify-content: space-between; gap: 16px; padding: 15px 0; border-bottom: 1px solid var(--border); }
 .opsLatencyList span { color: var(--muted); font-size: 13px; }
 .opsLatencyList strong { font-size: 13px; }
+.opsModelRow span { display: grid; gap: 4px; }
+.opsModelRow span b { color: var(--text); font-size: 12px; }
+.opsModelRow span small { color: #8d97a6; font-size: 10px; }
 .opsEmpty { color: #8d97a6; line-height: 1.7; }
 .opsTablePanel { margin-bottom: 18px; }
 .opsTableWrap { overflow-x: auto; }
@@ -77,6 +80,8 @@ a { color: inherit; text-decoration: none; }
 .opsTable th, .opsTable td { padding: 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .opsStatus { display: inline-flex; padding: 3px 8px; color: #2f6553; background: #edf7f1; border-radius: 999px; font-weight: 700; }
 .opsStatus.failed { color: var(--danger); background: #fff1f1; }
+.opsStatus.pending { color: #82651d; background: #fff8df; }
+.opsCellMeta { display: block; margin-top: 4px; color: #8d97a6; font-size: 10px; font-weight: 400; }
 .opsSource { color: #8d97a6; font-size: 11px; line-height: 1.65; }
 @media (max-width: 980px) { .opsMetricGrid { grid-template-columns: repeat(2, 1fr); } .opsGrid { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .opsPage { width: min(100% - 28px, 1480px); padding-top: 28px; } .opsHeader { display: block; } .opsFreshness { margin-top: 20px; } .opsMetricGrid { grid-template-columns: 1fr; } .opsBarRow { grid-template-columns: 125px minmax(80px,1fr) 62px; gap: 8px; } }
