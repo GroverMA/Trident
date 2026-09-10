@@ -22,7 +22,7 @@ export async function proxyJson(
       },
     });
     const body = await upstream.text();
-    return new Response(body, {
+    return new Response(upstream.status === 204 ? null : body, {
       status: upstream.status,
       headers: { "Content-Type": upstream.headers.get("content-type") || "application/json" },
     });

@@ -569,6 +569,7 @@ export interface ContinuousSensingArtifact {
 export interface ProjectSummary {
   project_id: string;
   project_name: string;
+  project_category?: string | null;
   industry: string;
   region: string;
   research_objective: string;

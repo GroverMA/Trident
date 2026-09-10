@@ -14,7 +14,17 @@ function useLinkedProjects() {
   useEffect(() => { fetch("/api/projects", { cache: "no-store" }).then((r) => r.ok ? r.json() : []).then((rows: ProjectSummary[]) => { setProjects(rows); const requested = new URLSearchParams(window.location.search).get("project"); const saved = window.localStorage.getItem(ACTIVE_PROJECT_KEY); const preferred = requested || saved; setActiveIdState(preferred && rows.some((row) => row.project_id === preferred) ? preferred : (rows[0]?.project_id || "")); }).catch(() => setProjects([])); }, []);
   function setActiveId(id: string) { setActiveIdState(id); window.localStorage.setItem(ACTIVE_PROJECT_KEY, id); }
   function replaceProject(project: ProjectSummary) { setProjects((rows) => rows.map((row) => row.project_id === project.project_id ? project : row)); }
-  return { projects, activeId, activeProject: projects.find((project) => project.project_id === activeId), setActiveId, replaceProject };
+  function removeProject(projectId: string) {
+    const remaining = projects.filter((project) => project.project_id !== projectId);
+    setProjects(remaining);
+    if (activeId === projectId) {
+      const nextId = remaining[0]?.project_id || "";
+      setActiveIdState(nextId);
+      if (nextId) window.localStorage.setItem(ACTIVE_PROJECT_KEY, nextId);
+      else window.localStorage.removeItem(ACTIVE_PROJECT_KEY);
+    }
+  }
+  return { projects, activeId, activeProject: projects.find((project) => project.project_id === activeId), setActiveId, replaceProject, removeProject };
 }
 
 function LinkedContextBar({ projects, activeId, onChange }: { projects: ProjectSummary[]; activeId: string; onChange: (id: string) => void }) {
@@ -27,9 +37,57 @@ export function WorkspaceHeader({ eyebrow, title, description }: { eyebrow: stri
 }
 
 export function ProjectManagementWorkspace() {
-  const { projects, activeId, setActiveId } = useLinkedProjects(); const [query, setQuery] = useState(""); const [filter, setFilter] = useState("all");
-  const rows = useMemo(() => projects.filter((p) => `${p.project_name} ${p.industry} ${p.region}`.toLowerCase().includes(query.toLowerCase())).filter((p) => filter === "all" || (filter === "active" ? p.workflow_status.decision_report !== "completed" : p.workflow_status.decision_report === "completed")), [projects, query, filter]);
-  return <main><WorkspaceHeader eyebrow="PROJECT PORTFOLIO" title="项目管理与场景切换" description="所有场景的工作独立保存，并在同一项目空间恢复、查找和继续。切换场景不会覆盖原项目。"/><section className="platformPage"><LinkedContextBar projects={projects} activeId={activeId} onChange={setActiveId}/><div className="projectToolbar"><div><button className={filter === "all" ? "selected" : ""} onClick={() => setFilter("all")}>全部项目</button><button className={filter === "active" ? "selected" : ""} onClick={() => setFilter("active")}>进行中</button><button className={filter === "done" ? "selected" : ""} onClick={() => setFilter("done")}>已完成</button></div><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索项目、行业或地区"/><Link className="primaryButton" href="/">新建场景项目</Link></div><div className="projectPortfolioGrid">{rows.map((project) => <article className={project.project_id === activeId ? "activeProject" : ""} key={project.project_id}><div className="projectMeta"><span>{project.scenario_pack || "general"}</span><small>{new Date(project.updated_at).toLocaleDateString("zh-CN")}</small></div><h2>{project.project_name}</h2><p>{project.industry} · {project.region}</p><div className="projectProgress"><span style={{width:`${progress(project)}%`}}/></div><footer><div><strong>{progress(project)}%</strong><small>{stageLabels[project.current_step] || project.current_step}</small></div><div className="projectActions"><button type="button" onClick={() => setActiveId(project.project_id)}>{project.project_id === activeId ? "当前联动项目" : "设为联动项目"}</button><Link href={`/projects/${project.project_id}`}>继续工作 →</Link></div></footer></article>)}{!rows.length && <div className="platformEmpty"><h2>没有符合条件的项目</h2><p>进入场景选择，建立第一个可持续恢复的决策项目。</p></div>}</div></section></main>;
+  const { projects, activeId, setActiveId, replaceProject, removeProject } = useLinkedProjects();
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [categoryDrafts, setCategoryDrafts] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const categories = useMemo(
+    () => [...new Set(projects.map((project) => project.project_category).filter((value): value is string => Boolean(value)))].sort(),
+    [projects],
+  );
+  const rows = useMemo(
+    () => projects
+      .filter((project) => `${project.project_name} ${project.industry} ${project.region} ${project.project_category || ""}`.toLowerCase().includes(query.toLowerCase()))
+      .filter((project) => filter === "all" || (filter === "active" ? project.workflow_status.decision_report !== "completed" : project.workflow_status.decision_report === "completed"))
+      .filter((project) => categoryFilter === "all" || project.project_category === categoryFilter),
+    [projects, query, filter, categoryFilter],
+  );
+
+  async function saveCategory(project: ProjectSummary) {
+    setBusyId(project.project_id); setMessage(""); setError("");
+    try {
+      const response = await fetch(`/api/projects/${project.project_id}/metadata`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ project_category: categoryDrafts[project.project_id] ?? project.project_category ?? "" }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || "项目分类保存失败");
+      replaceProject(payload); setMessage(`“${project.project_name}”的分类已保存。`);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "项目分类保存失败"); }
+    finally { setBusyId(""); }
+  }
+
+  async function deleteManagedProject(project: ProjectSummary) {
+    const confirmed = window.confirm(`永久删除“${project.project_name}”？\n\n该项目的研究输入、证据、报告、Token 记录、持续感知、行动计划和知识时间线都会一起删除，无法恢复。`);
+    if (!confirmed) return;
+    setBusyId(project.project_id); setMessage(""); setError("");
+    try {
+      const response = await fetch(`/api/projects/${project.project_id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.detail || "项目删除失败");
+      }
+      removeProject(project.project_id); setMessage(`“${project.project_name}”及其项目数据已永久删除。`);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "项目删除失败"); }
+    finally { setBusyId(""); }
+  }
+
+  return <main><WorkspaceHeader eyebrow="PROJECT PORTFOLIO" title="项目管理与场景切换" description="所有场景的工作独立保存，并在同一项目空间恢复、分类、查找和继续。切换场景不会覆盖原项目。"/><section className="platformPage"><LinkedContextBar projects={projects} activeId={activeId} onChange={setActiveId}/>{message && <p className="projectNotice success">{message}</p>}{error && <p className="projectNotice error">{error}</p>}<div className="projectToolbar"><div><button className={filter === "all" ? "selected" : ""} onClick={() => setFilter("all")}>全部项目</button><button className={filter === "active" ? "selected" : ""} onClick={() => setFilter("active")}>进行中</button><button className={filter === "done" ? "selected" : ""} onClick={() => setFilter("done")}>已完成</button></div><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} aria-label="按项目分类筛选"><option value="all">全部分类</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目、分类、行业或地区"/><Link className="primaryButton" href="/">新建场景项目</Link></div><div className="projectPortfolioGrid">{rows.map((project) => <article className={project.project_id === activeId ? "activeProject" : ""} key={project.project_id}><div className="projectMeta"><span>{project.scenario_pack || "general"}</span><small>{new Date(project.updated_at).toLocaleDateString("zh-CN")}</small></div><h2>{project.project_name}</h2><p>{project.industry} · {project.region}</p><div className="projectCategory"><label><span>项目分类</span><input value={categoryDrafts[project.project_id] ?? project.project_category ?? ""} onChange={(event) => setCategoryDrafts((current) => ({ ...current, [project.project_id]: event.target.value }))} placeholder="例如：医疗投资 / 重点客户" maxLength={80}/></label><button type="button" disabled={busyId === project.project_id} onClick={() => void saveCategory(project)}>保存</button></div><div className="projectProgress"><span style={{width:`${progress(project)}%`}}/></div><footer><div><strong>{progress(project)}%</strong><small>{stageLabels[project.current_step] || project.current_step}</small></div><div className="projectActions"><button type="button" onClick={() => setActiveId(project.project_id)}>{project.project_id === activeId ? "当前联动项目" : "设为联动项目"}</button><Link href={`/projects/${project.project_id}`}>继续工作 →</Link><button className="danger" type="button" disabled={busyId === project.project_id} onClick={() => void deleteManagedProject(project)}>删除项目</button></div></footer></article>)}{!rows.length && <div className="platformEmpty"><h2>没有符合条件的项目</h2><p>调整筛选条件，或进入场景选择建立新的决策项目。</p></div>}</div></section></main>;
 }
 
 export function SensingWorkspace() {

@@ -220,6 +220,13 @@ def test_project_crud_is_available_without_loading_ai_runtime(
             assert fetched.json()["project_name"] == payload["project_name"]
             assert fetched.json()["research_path"] == research_path
 
+            categorized = client.patch(
+                f"/v1/projects/{project['project_id']}/metadata",
+                json={"project_category": " 医疗投资 "},
+            )
+            assert categorized.status_code == 200
+            assert categorized.json()["project_category"] == "医疗投资"
+
             scope = client.patch(
                 f"/v1/projects/{project['project_id']}/scope",
                 json={
@@ -243,7 +250,27 @@ def test_project_crud_is_available_without_loading_ai_runtime(
             persisted = client.get(f"/v1/projects/{project['project_id']}").json()
             assert persisted["research_objective"].endswith("主要玩家的竞争位置")
             assert persisted["market_scope_confirmed_at"] is not None
+            assert persisted["project_category"] == "医疗投资"
 
+            running_project = research.get_project(project["project_id"])
+            running_statuses = dict(running_project.workflow_status)
+            running_statuses["decision_report"] = WorkflowStatus.IN_PROGRESS
+            research.save_project(
+                running_project.model_copy(
+                    update={"workflow_status": running_statuses}
+                )
+            )
+            blocked_delete = client.delete(
+                f"/v1/projects/{project['project_id']}"
+            )
+            assert blocked_delete.status_code == 409
+
+            running_statuses["decision_report"] = WorkflowStatus.READY
+            research.save_project(
+                research.get_project(project["project_id"]).model_copy(
+                    update={"workflow_status": running_statuses}
+                )
+            )
             deleted = client.delete(f"/v1/projects/{project['project_id']}")
             assert deleted.status_code == 204
             assert client.get(f"/v1/projects/{project['project_id']}").status_code == 404

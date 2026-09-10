@@ -60,6 +60,7 @@ from src.state.project import (
     ProjectState,
     ResearchMode,
     ResearchPath,
+    WorkflowStatus,
     WorkspaceMode,
     rewind_to_previous_review_gate,
 )
@@ -67,6 +68,7 @@ from src.state.project import (
 
 class ProjectCreate(BaseModel):
     project_name: str
+    project_category: str | None = None
     industry: str
     region: str
     research_objective: str
@@ -82,6 +84,18 @@ class ProjectCreate(BaseModel):
     industry_pack: str | None = None
     scenario_pack: str = "general"
     scenario_pack_version: str = "1.0.0"
+
+
+class ProjectMetadataUpdate(BaseModel):
+    project_category: str | None = Field(default=None, max_length=80)
+
+    @field_validator("project_category")
+    @classmethod
+    def clean_category(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
 
 SCENARIO_PACKS = ExtensionRegistry(builtin_scenario_packs())
@@ -720,6 +734,23 @@ def get_project(project_id: str, research: ResearchApp) -> ProjectState:
         raise HTTPException(status_code=404, detail="project not found") from exc
 
 
+@app.patch("/v1/projects/{project_id}/metadata", response_model=ProjectState)
+def update_project_metadata(
+    project_id: str,
+    payload: ProjectMetadataUpdate,
+    research: ResearchApp,
+) -> ProjectState:
+    try:
+        project = research.get_project(project_id)
+        return research.save_project(
+            project.model_copy(
+                update={"project_category": payload.project_category}
+            )
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+
+
 @app.post("/v1/projects/{project_id}/continuous-sensing", response_model=ProjectState)
 def refresh_project_continuous_sensing(
     project_id: str,
@@ -1092,6 +1123,18 @@ def replace_project(
 
 @app.delete("/v1/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(project_id: str, research: ResearchApp) -> None:
+    try:
+        project = research.get_project(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    if any(
+        item == WorkflowStatus.IN_PROGRESS
+        for item in project.workflow_status.values()
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="项目仍有后台研究步骤正在执行，请等待本次步骤完成后再永久删除。",
+        )
     if not research.delete_project(project_id):
         raise HTTPException(status_code=404, detail="project not found")
 

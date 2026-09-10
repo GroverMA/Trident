@@ -88,6 +88,7 @@ def default_workflow() -> dict[str, WorkflowStatus]:
 class ProjectState(BaseModel):
     project_id: str = Field(default_factory=lambda: uuid4().hex)
     project_name: str
+    project_category: str | None = None
     industry: str
     region: str
     target_company: str | None = None
@@ -151,6 +152,7 @@ class ProjectState(BaseModel):
 
     @field_validator(
         "target_company",
+        "project_category",
         "company_strategy_objective",
         "decision_context",
         "industry_pack",

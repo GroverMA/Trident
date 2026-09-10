@@ -19,3 +19,13 @@ export async function PATCH(
     body,
   });
 }
+
+export async function DELETE(
+  _request: Request,
+  context: RouteContext<"/api/projects/[projectId]">,
+) {
+  const { projectId } = await context.params;
+  return proxyJson(`/v1/projects/${encodeURIComponent(projectId)}`, {
+    method: "DELETE",
+  });
+}
