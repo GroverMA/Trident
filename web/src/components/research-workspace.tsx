@@ -134,7 +134,6 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
   const router = useRouter();
   const [project, setProject] = useState(initialProject);
   const [action, setAction] = useState<ActionState | null>(null);
-  const [actionStartedAt, setActionStartedAt] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [editingScope, setEditingScope] = useState(!initialProject.research_brief_artifact);
   const [message, setMessage] = useState("");
@@ -186,18 +185,19 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
   const reviewFirst = project.research_path === "report_review_first";
 
   useEffect(() => {
-    if (!action) {
-      setActionStartedAt(null);
-      setElapsedSeconds(0);
-      return;
-    }
+    if (!action) return;
     const startedAt = Date.now();
-    setActionStartedAt(startedAt);
-    setElapsedSeconds(0);
-    const timer = window.setInterval(() => {
+    const updateElapsed = () => {
       setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    };
+    const initialTimer = window.setTimeout(updateElapsed, 0);
+    const timer = window.setInterval(() => {
+      updateElapsed();
     }, 1000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(timer);
+    };
   }, [action]);
 
   function acceptProject(result: ProjectSummary, success: string) {
@@ -824,7 +824,7 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
             <strong>{ACTION_WAIT[action].label}</strong>
             <span>预计耗时：{ACTION_WAIT[action].estimate} · 已等待 {elapsedSeconds} 秒</span>
           </div>
-          <small>{actionStartedAt ? "请保持页面开启；完成后结果会自动保存并显示。" : "正在启动…"}</small>
+          <small>请保持页面开启；完成后结果会自动保存并显示。</small>
         </section>
       )}
 
