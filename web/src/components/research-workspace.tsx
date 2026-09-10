@@ -665,8 +665,10 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
   async function generateReviewFirstReport() {
     setAction("report-first-generate"); setMessage(""); setError("");
     try {
+      const recentlyUpdated = Date.now() - Date.parse(project.updated_at) < 5 * 60 * 1000;
       const alreadyRunning = project.workflow_status.decision_report === "in_progress"
-        && !project.last_pipeline_error;
+        && !project.last_pipeline_error
+        && recentlyUpdated;
       const result = alreadyRunning
         ? project
         : await requestProject(

@@ -943,7 +943,9 @@ class ResearchApplication:
     ) -> ProjectState:
         project = self.get_project(project_id)
         result = await self.services.reviewer_orchestration.run(
-            project, enterprise=enterprise
+            project,
+            enterprise=enterprise,
+            on_checkpoint=self.projects.save,
         )
         return self.projects.save(result.project)
 
@@ -958,7 +960,10 @@ class ResearchApplication:
         if plan is None or not plan.human_confirmed:
             raise ResearchWorkflowError("Research Plan必须先经过人工确认")
         report_status = project.workflow_status.get("decision_report")
-        stale_cutoff = datetime.now(UTC) - timedelta(hours=1)
+        # Every search task/model stage checkpoints in under the provider's
+        # two-minute timeout. Five minutes without a write therefore indicates
+        # a terminated serverless/background invocation rather than useful work.
+        stale_cutoff = datetime.now(UTC) - timedelta(minutes=5)
         actively_running = (
             report_status == WorkflowStatus.IN_PROGRESS
             and project.last_pipeline_error is None
