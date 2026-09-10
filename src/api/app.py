@@ -380,6 +380,19 @@ def _require_ops_access(
         raise HTTPException(status_code=401, detail="运营后台访问凭证无效")
 
 
+def _percentile(values: list[int], percentile: float) -> int | None:
+    """Return a linearly interpolated percentile without an analytics dependency."""
+
+    if not values:
+        return None
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * percentile
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    fraction = position - lower
+    return round(ordered[lower] + (ordered[upper] - ordered[lower]) * fraction)
+
+
 @app.get("/v1/ops/telemetry", dependencies=[Depends(_require_ops_access)])
 def ops_telemetry(research: ResearchApp) -> dict:
     """Return privacy-safe, source-backed telemetry for the internal dashboard."""
@@ -397,9 +410,105 @@ def ops_telemetry(research: ResearchApp) -> dict:
         for run in project.telemetry_runs
     ]
     total_tokens = sum(int(row["total_tokens"]) for row in rows)
-    completed_reports = sum(
-        project.general_report_artifact is not None for project in projects
-    )
+    project_summaries = []
+    report_token_totals: list[int] = []
+    report_duration_totals: list[int] = []
+    for project in projects:
+        project_runs = project.telemetry_runs
+        completed_artifact = (
+            project.enterprise_decision_report_artifact
+            or project.general_report_artifact
+        )
+        completed_at = (
+            completed_artifact.generated_at if completed_artifact else None
+        )
+        report_runs = [
+            run
+            for run in project_runs
+            if completed_at is not None and run.completed_at <= completed_at
+        ]
+        scoped_runs = report_runs if completed_at is not None else project_runs
+        started_at = min(
+            (run.started_at for run in scoped_runs), default=None
+        )
+        finished_at = max(
+            (run.completed_at for run in scoped_runs), default=None
+        )
+        wall_duration_ms = (
+            round((finished_at - started_at).total_seconds() * 1000)
+            if started_at and finished_at
+            else 0
+        )
+        report_tokens = sum(run.total_tokens for run in report_runs)
+        if completed_at is not None:
+            report_token_totals.append(report_tokens)
+            report_duration_totals.append(wall_duration_ms)
+        models = sorted(
+            {
+                call.model
+                for run in scoped_runs
+                for call in run.model_calls
+            }
+        )
+        project_summaries.append(
+            {
+                "project_id": project.project_id,
+                "project_name": project.project_name,
+                "scenario_pack": project.scenario_pack,
+                "research_path": project.research_path.value,
+                "status": "completed" if completed_at else "in_progress",
+                "created_at": project.created_at,
+                "started_at": started_at,
+                "completed_at": completed_at,
+                "wall_duration_ms": wall_duration_ms,
+                "step_run_count": len(scoped_runs),
+                "failed_step_count": sum(
+                    run.status == "failed" for run in scoped_runs
+                ),
+                "model_call_count": sum(
+                    len(run.model_calls) for run in scoped_runs
+                ),
+                "models": models,
+                "prompt_tokens": sum(run.prompt_tokens for run in scoped_runs),
+                "completion_tokens": sum(
+                    run.completion_tokens for run in scoped_runs
+                ),
+                "reasoning_tokens": sum(
+                    run.reasoning_tokens for run in scoped_runs
+                ),
+                "cached_tokens": sum(run.cached_tokens for run in scoped_runs),
+                "total_tokens": sum(run.total_tokens for run in scoped_runs),
+                "aggregation_scope": (
+                    "current_report" if completed_at else "project_to_date"
+                ),
+            }
+        )
+    completed_reports = len(report_token_totals)
+    started_projects = sum(bool(project.telemetry_runs) for project in projects)
+    model_summary: dict[str, dict[str, int]] = {}
+    for project in projects:
+        for run in project.telemetry_runs:
+            for call in run.model_calls:
+                current = model_summary.setdefault(
+                    call.model,
+                    {"calls": 0, "tokens": 0, "duration_ms": 0},
+                )
+                current["calls"] += 1
+                current["tokens"] += call.total_tokens
+                current["duration_ms"] += call.duration_ms
+    model_summaries = [
+        {
+            "model": model,
+            **values,
+            "average_tokens": round(values["tokens"] / values["calls"]),
+            "average_duration_ms": round(
+                values["duration_ms"] / values["calls"]
+            ),
+        }
+        for model, values in sorted(
+            model_summary.items(), key=lambda item: item[1]["tokens"], reverse=True
+        )
+    ]
     sensing_runs = [
         {
             **run.model_dump(mode="json"),
@@ -429,12 +538,32 @@ def ops_telemetry(research: ResearchApp) -> dict:
         "summary": {
             "project_count": len(projects),
             "completed_report_count": completed_reports,
+            "started_workflow_count": started_projects,
+            "report_completion_rate": (
+                round(completed_reports / started_projects, 4)
+                if started_projects
+                else None
+            ),
             "step_run_count": len(rows),
             "failed_step_count": sum(row["status"] == "failed" for row in rows),
             "model_call_count": sum(len(row["model_calls"]) for row in rows),
             "total_tokens": total_tokens,
             "average_tokens_per_completed_report": (
-                round(total_tokens / completed_reports) if completed_reports else None
+                round(sum(report_token_totals) / completed_reports)
+                if completed_reports
+                else None
+            ),
+            "median_tokens_per_completed_report": _percentile(
+                report_token_totals, 0.5
+            ),
+            "p75_tokens_per_completed_report": _percentile(
+                report_token_totals, 0.75
+            ),
+            "p95_tokens_per_completed_report": _percentile(
+                report_token_totals, 0.95
+            ),
+            "median_report_duration_ms": _percentile(
+                report_duration_totals, 0.5
             ),
             "sensing_run_count": len(sensing_runs),
             "sensing_failed_or_partial_count": sum(
@@ -444,6 +573,26 @@ def ops_telemetry(research: ResearchApp) -> dict:
                 row["status"] == "pending" for row in sensing_notifications
             ),
         },
+        "data_quality": {
+            "last_event_at": max(
+                (row["completed_at"] for row in rows), default=None
+            ),
+            "usage_missing_call_count": sum(
+                int(call["total_tokens"]) == 0
+                for row in rows
+                for call in row["model_calls"]
+            ),
+            "aggregation_scope": (
+                "One project represents one primary report or scenario workflow "
+                "in the current Demo. Formal reruns require research_run_id."
+            ),
+        },
+        "models": model_summaries,
+        "projects": sorted(
+            project_summaries,
+            key=lambda row: row["started_at"] or row["created_at"],
+            reverse=True,
+        ),
         "runs": sorted(rows, key=lambda row: row["started_at"], reverse=True),
         "sensing_runs": sorted(sensing_runs, key=lambda row: row["started_at"], reverse=True),
         "sensing_notifications": sorted(sensing_notifications, key=lambda row: row["created_at"], reverse=True),

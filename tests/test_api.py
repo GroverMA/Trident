@@ -660,6 +660,14 @@ def test_ops_telemetry_requires_key_and_returns_source_backed_runs(
         assert body["summary"]["step_run_count"] == 1
         assert body["summary"]["sensing_run_count"] == 0
         assert body["summary"]["pending_sensing_notification_count"] == 0
+        assert body["summary"]["started_workflow_count"] == 1
+        assert body["summary"]["report_completion_rate"] == 0
+        assert body["summary"]["median_tokens_per_completed_report"] is None
+        assert body["projects"][0]["project_id"] == project.project_id
+        assert body["projects"][0]["status"] == "in_progress"
+        assert body["projects"][0]["aggregation_scope"] == "project_to_date"
+        assert body["data_quality"]["usage_missing_call_count"] == 0
+        assert body["models"] == []
         assert body["sensing_runs"] == []
         assert body["sensing_notifications"] == []
         assert body["runs"][0]["step"] == "research_brief"
