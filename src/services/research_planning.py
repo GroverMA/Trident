@@ -106,10 +106,68 @@ class ResearchPlanningService:
         model: StructuredModel,
         sop: ResearchSOPPack,
         scenario_packs: ExtensionRegistry | None = None,
+        reasoning_model: StructuredModel | None = None,
     ) -> None:
         self.model = model
+        self.reasoning_model = reasoning_model
         self.sop = sop
         self.scenario_packs = scenario_packs or ExtensionRegistry()
+
+    @staticmethod
+    def _brief_requires_escalation(
+        project: ProjectState, payload: dict[str, Any]
+    ) -> bool:
+        """Escalate only decisions whose boundary risk justifies Pro reasoning."""
+
+        intent = payload.get("interpreted_intent", {})
+        market = payload.get("market_definition", {})
+        ambiguities = [
+            *intent.get("ambiguities", []),
+            *market.get("ambiguities", []),
+        ]
+        clarification_count = len(payload.get("clarification_questions", []))
+        unresolved_scope = str(market.get("market_sizing_basis", "")).lower() in {
+            "",
+            "unresolved",
+            "unknown",
+            "未决",
+        }
+        decision_scenario = project.scenario_pack in {"growth_strategy", "pe", "vc"}
+        return (
+            decision_scenario
+            or len(ambiguities) >= 4
+            or clarification_count >= 6
+            or (unresolved_scope and len(ambiguities) >= 2)
+        )
+
+    def _refine_complex_brief(
+        self, project: ProjectState, draft: dict[str, Any]
+    ) -> tuple[dict[str, Any], ModelResponse]:
+        if self.reasoning_model is None:
+            raise SOPComplianceError("复杂 Research Brief 缺少深度推理模型")
+        return self.reasoning_model.complete_json(
+            [
+                ChatMessage(
+                    role="system",
+                    content=(
+                        "你是 Research Brief 边界裁决专家。Flash 已完成第一轮结构化诊断。"
+                        "仅解决高风险歧义、输入冲突和市场口径，不扩大用户目标，不把假设写成事实。"
+                        "保留所有仍未解决的信息缺口，并输出完全符合给定合同的 JSON。\n\n"
+                        + self.sop.prompt_context("brief")
+                    ),
+                ),
+                ChatMessage(
+                    role="user",
+                    content=(
+                        f"项目输入：\n{json.dumps(self._project_payload(project), ensure_ascii=False)}\n\n"
+                        f"Flash 初步诊断：\n{json.dumps(draft, ensure_ascii=False)}\n\n"
+                        f"场景包约束：\n{json.dumps(self._scenario_context(project), ensure_ascii=False)}\n\n"
+                        f"严格输出结构：\n{json.dumps(BRIEF_OUTPUT_CONTRACT, ensure_ascii=False)}"
+                    ),
+                ),
+            ],
+            enable_thinking=True,
+        )
 
     def _scenario_context(self, project: ProjectState) -> dict[str, Any]:
         if not self.scenario_packs.descriptors():
@@ -172,9 +230,18 @@ class ResearchPlanningService:
                 ),
             ),
         ]
+        escalated = False
         for attempt in range(2):
             payload, response = self.model.complete_json(messages, enable_thinking=True)
             payload = self._unwrap(payload, "research_brief")
+            if (
+                not escalated
+                and self.reasoning_model is not None
+                and self._brief_requires_escalation(project, payload)
+            ):
+                payload, response = self._refine_complex_brief(project, payload)
+                payload = self._unwrap(payload, "research_brief")
+                escalated = True
             try:
                 self._validate_brief_payload(payload)
                 payload["original_prompt"] = project.research_objective

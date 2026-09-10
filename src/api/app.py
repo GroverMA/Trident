@@ -31,6 +31,7 @@ from src.persistence.factory import create_project_repository
 from src.providers.base import ProviderError
 from src.core.registry import ExtensionRegistry
 from src.integrations import builtin_integration_surfaces
+from src.model_routing import MODEL_PROFILE_POLICY, TASK_MODEL_PROFILES
 from src.scenarios import (
     ScenarioContractError,
     ScenarioInputError,
@@ -87,7 +88,9 @@ SCENARIO_PACKS = ExtensionRegistry(builtin_scenario_packs())
 SCENARIO_WORKFLOW = ScenarioWorkflowRunner(SCENARIO_PACKS)
 SCENARIO_INTERVIEWS = ScenarioInterviewService(
     SCENARIO_PACKS,
-    model_factory=lambda: ServiceContainer.from_runtime()._model(),
+    model_factory=lambda: ServiceContainer.from_runtime()._model(
+        TASK_MODEL_PROFILES["scenario_interview"].value
+    ),
 )
 SCENARIO_ROUTER = ScenarioResearchRouter(SCENARIO_PACKS)
 
@@ -458,6 +461,14 @@ def capabilities() -> dict:
     return {
         "delivery_channels": ["streamlit-compatibility", "fastapi", "external-integration-contract"],
         "research_paths": ["research-build-first", "report-review-first"],
+        "model_routing": {
+            "tasks": {key: value.value for key, value in TASK_MODEL_PROFILES.items()},
+            "profiles": {
+                profile.value: policy
+                for profile, policy in MODEL_PROFILE_POLICY.items()
+            },
+            "brief_escalation": "standard_to_deep_on_boundary_risk",
+        },
         "services": [
             "research-planning",
             "evidence-collection",

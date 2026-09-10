@@ -7,10 +7,11 @@ Streamlit Secrets or environment variables and are never logged.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from dotenv import load_dotenv
+from src.model_routing import MODEL_PROFILE_POLICY, ModelProfile
 
 
 DEFAULT_MODEL_BASE_URL = "https://test-new-api.hkchat.app"
@@ -68,10 +69,36 @@ class Settings:
     search_mcp_url: str
     app_name: str
     app_key: str
+    fast_model_name: str | None = None
+    reasoning_model_name: str | None = None
+    model_reasoning_effort: str = "high"
+    model_max_tokens: int = 8000
     search_base_url: str = DEFAULT_SEARCH_BASE_URL
     search_transport: str = "auto"
     model_timeout_seconds: int = 120
     search_timeout_seconds: int = 300
+
+    def for_model_profile(self, profile: str) -> "Settings":
+        """Return a task-scoped model configuration without changing business services."""
+
+        try:
+            model_profile = ModelProfile(profile)
+        except ValueError as exc:
+            raise ConfigurationError(f"Unknown model profile: {profile}")
+        policy = MODEL_PROFILE_POLICY[model_profile]
+        fast_name = self.fast_model_name or self.model_name
+        reasoning_name = self.reasoning_model_name or self.model_name
+        model_name = (
+            reasoning_name
+            if policy["model_role"] == "reasoning"
+            else fast_name
+        )
+        return replace(
+            self,
+            model_name=model_name,
+            model_reasoning_effort=str(policy["reasoning_effort"] or "low"),
+            model_max_tokens=int(policy["max_tokens"]),
+        )
 
     @classmethod
     def load(cls) -> "Settings":
@@ -82,6 +109,8 @@ class Settings:
                 "HKGAI_MODEL_BASE_URL", DEFAULT_MODEL_BASE_URL
             ),
             "model_name": _get_setting("HKGAI_MODEL_NAME", DEFAULT_MODEL_NAME),
+            "fast_model_name": _get_setting("HKGAI_MODEL_FAST_NAME"),
+            "reasoning_model_name": _get_setting("HKGAI_MODEL_REASONING_NAME"),
             "agenthub_endpoint": _get_setting(
                 "HKGAI_AGENTHUB_ENDPOINT", DEFAULT_AGENTHUB_ENDPOINT
             ),
@@ -95,7 +124,12 @@ class Settings:
             ),
             "search_transport": _get_setting("HKGAI_SEARCH_TRANSPORT", "auto"),
         }
-        missing = [name for name, value in values.items() if not value]
+        optional = {"fast_model_name", "reasoning_model_name"}
+        missing = [
+            name
+            for name, value in values.items()
+            if not value and name not in optional
+        ]
         if missing:
             env_names = {
                 "model_api_key": "HKGAI_MODEL_API_KEY",
@@ -122,6 +156,16 @@ class Settings:
             model_api_key=str(values["model_api_key"]),
             model_base_url=str(values["model_base_url"]).rstrip("/"),
             model_name=str(values["model_name"]),
+            fast_model_name=(
+                str(values["fast_model_name"])
+                if values["fast_model_name"]
+                else None
+            ),
+            reasoning_model_name=(
+                str(values["reasoning_model_name"])
+                if values["reasoning_model_name"]
+                else None
+            ),
             agenthub_endpoint=str(values["agenthub_endpoint"]),
             search_mcp_url=str(values["search_mcp_url"]),
             app_name=str(values["app_name"]),

@@ -10,6 +10,7 @@ from src.config import Settings
 from src.core.contracts import EventSink, NullEventSink
 from src.core.registry import ExtensionRegistry
 from src.knowledge.sop import ResearchSOPPack, load_active_sop
+from src.model_routing import TASK_MODEL_PROFILES
 from src.providers.base import ModelProvider
 from src.providers.hkgai_mcp import HKGAIMCPProvider
 from src.providers.hkgai_model import HKGAIModelProvider
@@ -68,13 +69,18 @@ class ServiceContainer:
     def from_runtime(cls) -> "ServiceContainer":
         return cls(settings=Settings.load(), sop=load_active_sop())
 
-    def _model(self) -> ModelProvider:
-        return self.model_factory(self.settings)
+    def _model(self, profile: str = "standard") -> ModelProvider:
+        return self.model_factory(self.settings.for_model_profile(profile))
 
     @cached_property
     def research_planning(self) -> ResearchPlanningService:
         return ResearchPlanningService(
-            model=self._model(), sop=self.sop, scenario_packs=self.scenario_packs
+            model=self._model(TASK_MODEL_PROFILES["research_brief"].value),
+            reasoning_model=self._model(
+                TASK_MODEL_PROFILES["industry_analysis"].value
+            ),
+            sop=self.sop,
+            scenario_packs=self.scenario_packs,
         )
 
     @cached_property
@@ -84,40 +90,57 @@ class ServiceContainer:
     @cached_property
     def evidence_collection(self) -> EvidenceCollectionService:
         return EvidenceCollectionService(
-            model=self._model(), search=self.search_factory(self.settings)
+            model=self._model(TASK_MODEL_PROFILES["evidence_collection"].value),
+            search=self.search_factory(self.settings),
         )
 
     @cached_property
     def industry_analysis(self) -> IndustryAnalysisService:
-        return IndustryAnalysisService(model=self._model(), sop=self.sop)
+        return IndustryAnalysisService(
+            model=self._model(TASK_MODEL_PROFILES["industry_analysis"].value),
+            sop=self.sop,
+        )
 
     @cached_property
     def future_intelligence(self) -> FutureIntelligenceService:
-        return FutureIntelligenceService(model=self._model(), sop=self.sop)
+        return FutureIntelligenceService(
+            model=self._model(TASK_MODEL_PROFILES["future_intelligence"].value),
+            sop=self.sop,
+        )
 
     @cached_property
     def report_generation(self) -> ReportGenerationService:
-        return ReportGenerationService(model=self._model())
+        return ReportGenerationService(
+            model=self._model(TASK_MODEL_PROFILES["report_generation"].value)
+        )
 
     @cached_property
     def company_assessment(self) -> CompanyAssessmentService:
         return CompanyAssessmentService(
-            model=self._model(), sop=self.sop, scenario_packs=self.scenario_packs
+            model=self._model(TASK_MODEL_PROFILES["company_scorecard"].value),
+            sop=self.sop,
+            scenario_packs=self.scenario_packs,
         )
 
     @cached_property
     def action_planning(self) -> ActionPlanningService:
         return ActionPlanningService(
-            model=self._model(), sop=self.sop, scenario_packs=self.scenario_packs
+            model=self._model(TASK_MODEL_PROFILES["action_plan"].value),
+            sop=self.sop,
+            scenario_packs=self.scenario_packs,
         )
 
     @cached_property
     def adaptive_planning(self) -> AdaptivePlanningService:
-        return AdaptivePlanningService(model=self._model())
+        return AdaptivePlanningService(
+            model=self._model(TASK_MODEL_PROFILES["adaptive_plan"].value)
+        )
 
     @cached_property
     def reviewer_revision(self) -> ReviewerRevisionService:
-        return ReviewerRevisionService(model=self._model())
+        return ReviewerRevisionService(
+            model=self._model(TASK_MODEL_PROFILES["reviewer_revision"].value)
+        )
 
     @cached_property
     def reviewer_orchestration(self) -> ReviewerOrchestrationService:

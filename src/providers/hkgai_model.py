@@ -49,7 +49,7 @@ class HKGAIModelProvider(ModelProvider):
         messages: list[ChatMessage],
         *,
         enable_thinking: bool = False,
-        reasoning_effort: str = "high",
+        reasoning_effort: str | None = None,
     ) -> ModelResponse:
         body: dict[str, Any] = {
             "model": self.settings.model_name,
@@ -58,11 +58,22 @@ class HKGAIModelProvider(ModelProvider):
                 for message in messages
             ],
             "stream": False,
+            "max_tokens": self.settings.model_max_tokens,
         }
-        if enable_thinking:
+        if "api.deepseek.com" in self.settings.model_base_url:
+            body["thinking"] = {
+                "type": "enabled" if enable_thinking else "disabled"
+            }
+            if enable_thinking:
+                body["reasoning_effort"] = (
+                    reasoning_effort or self.settings.model_reasoning_effort
+                )
+        elif enable_thinking:
             body.update(
                 {
-                    "reasoning_effort": reasoning_effort,
+                    "reasoning_effort": (
+                        reasoning_effort or self.settings.model_reasoning_effort
+                    ),
                     "include_reasoning": True,
                     "chat_template_kwargs": {"enable_thinking": True},
                 }
@@ -86,8 +97,9 @@ class HKGAIModelProvider(ModelProvider):
         result = ModelResponse(
             content=str(content or ""),
             reasoning=(
-                str(message["reasoning"])
+                str(message.get("reasoning") or message.get("reasoning_content"))
                 if message.get("reasoning") is not None
+                or message.get("reasoning_content") is not None
                 else None
             ),
             model=str(payload.get("model") or self.settings.model_name),
