@@ -122,7 +122,7 @@ def test_active_sop_is_locked_and_fingerprinted(monkeypatch) -> None:
     assert sop.locked is True
     assert sop.content_hash
     assert sop.sop_id == "trident_industry_research"
-    assert sop.version == "2.0.0"
+    assert sop.version == "2.1.0"
     assert "SUL-DEFINE-001" in sop.rule_ids
     assert "SUL-SIZE-003" in sop.rule_ids
 
@@ -138,7 +138,7 @@ def test_active_sop_falls_back_when_deployment_override_is_stale(
     sop = load_active_sop()
 
     assert sop.sop_id == "trident_industry_research"
-    assert sop.version == "2.0.0"
+    assert sop.version == "2.1.0"
     assert sop.content_hash
 
 
@@ -158,6 +158,47 @@ def test_service_generates_traceable_brief_and_plan() -> None:
     assert set(plan.sop_coverage) == set(load_active_sop().constraints.required_research_modules)
     assert plan.methodology.sop_id == brief.methodology.sop_id
     assert "当前研究方法包处于锁定状态" in fake.messages[0][0].content
+
+
+def test_active_sop_allows_task_count_to_follow_research_complexity() -> None:
+    adaptive_plan = plan_payload()
+    for index in range(7, 12):
+        adaptive_plan["tasks"].append(
+            {
+                "task_id": f"T{index:02d}",
+                "title": f"Task {index}",
+                "objective": "Build an independent evidence chain for a complex question",
+                "questions": ["What additional evidence must be established?"],
+                "hypotheses": ["An additional testable hypothesis"],
+                "information_needs": ["Primary data"],
+                "preferred_sources": ["Regulator", "Company filing"],
+                "search_queries": ["industrial robotics additional evidence"],
+                "deliverables": ["Evidence table"],
+                "evidence_standard": "Two independent sources",
+                "counter_evidence_required": True,
+                "validation_gate": "Human verifies evidence coverage",
+                "depends_on": [f"T{index - 1:02d}"],
+                "prompt_question_ids": ["Q5"],
+            }
+        )
+    fake = FakeStructuredModel([brief_payload(), adaptive_plan])
+    service = ResearchPlanningService(fake, load_active_sop())
+
+    brief = service.generate_brief(project()).model_copy(update={"human_confirmed": True})
+    plan = service.generate_plan(project(), brief)
+
+    assert len(plan.tasks) == 11
+
+
+def test_active_sop_still_rejects_an_empty_research_plan() -> None:
+    invalid = plan_payload()
+    invalid["tasks"] = []
+    fake = FakeStructuredModel([brief_payload(), invalid, invalid])
+    service = ResearchPlanningService(fake, load_active_sop())
+
+    with pytest.raises(SOPComplianceError, match="至少一项"):
+        brief = service.generate_brief(project()).model_copy(update={"human_confirmed": True})
+        service.generate_plan(project(), brief)
 
 
 def test_complex_brief_escalates_from_standard_draft_to_reasoning_model() -> None:
