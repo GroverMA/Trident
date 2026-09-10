@@ -50,6 +50,25 @@ class FakeSession:
         )
 
 
+class SequentialSession(FakeSession):
+    def __init__(self, contents: list[str]) -> None:
+        super().__init__()
+        self.contents = iter(contents)
+        self.requests: list[dict] = []
+
+    def request(self, method: str, url: str, **kwargs) -> FakeResponse:
+        request = {"method": method, "url": url, **kwargs}
+        self.last_request = request
+        self.requests.append(request)
+        return FakeResponse(
+            {
+                "model": "deepseek-v4-flash",
+                "choices": [{"message": {"content": next(self.contents)}}],
+                "usage": {"total_tokens": 20},
+            }
+        )
+
+
 def settings() -> Settings:
     return Settings(
         model_api_key="test-secret",
@@ -124,6 +143,34 @@ def test_complete_json_falls_back_to_reasoning_field() -> None:
     )
 
     assert parsed == {"industry": "工业机器人"}
+
+
+def test_deepseek_complete_json_enforces_json_mode_and_retries_invalid_output() -> None:
+    session = SequentialSession(
+        ["这里是研究计划，但不是 JSON", '{"plan_summary": "可追溯底稿"}']
+    )
+    provider = HKGAIModelProvider(
+        replace(
+            settings().for_model_profile("standard"),
+            model_base_url="https://api.deepseek.com",
+            model_name="deepseek-v4-flash",
+        ),
+        session=session,
+    )
+
+    parsed, _ = provider.complete_json(
+        [ChatMessage(role="user", content="Return JSON")],
+        enable_thinking=True,
+    )
+
+    assert parsed == {"plan_summary": "可追溯底稿"}
+    assert len(session.requests) == 2
+    for request in session.requests:
+        assert request["json"]["response_format"] == {"type": "json_object"}
+        assert request["json"]["max_tokens"] == 8000
+    assert "上一次输出不是完整合法的 JSON" in session.requests[1]["json"][
+        "messages"
+    ][-1]["content"]
 
 
 def test_thinking_parameters_are_only_added_when_enabled() -> None:
