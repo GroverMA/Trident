@@ -33,8 +33,8 @@ class SOPConstraints(BaseModel):
     min_key_questions: int = 5
     max_key_questions: int = 12
     min_hypotheses: int = 3
-    min_tasks: int = 5
-    max_tasks: int = 10
+    min_tasks: int | None = None
+    max_tasks: int | None = None
     min_human_review_gates: int = 2
     require_inclusions_and_exclusions: bool = True
     require_counter_evidence: bool = True

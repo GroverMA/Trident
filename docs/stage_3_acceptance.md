@@ -68,7 +68,8 @@ The baseline currently enforces:
 - 5–12 key questions;
 - at least 3 hypotheses;
 - explicit inclusions and exclusions;
-- 5–10 research tasks;
+- a non-empty set of executable research tasks whose count follows problem complexity;
+- complete mapping from required SOP modules and user questions to real task IDs;
 - at least 2 human-review gates;
 - unique task IDs;
 - non-empty source, search, evidence, and validation fields;

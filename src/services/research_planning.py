@@ -288,7 +288,9 @@ class ResearchPlanningService:
                     "Q1、Q2等编号，把Research Brief中的每一个must_answer_question映射到至少一个"
                     "真实task_id；每个task还必须在prompt_question_ids中声明它实际承担的Q编号，"
                     "且该task的questions与search_queries必须围绕这些问题展开。每个用户必答问题"
-                    "至少需要一条直接检索式，任何用户必答问题都不能遗漏。\n\n"
+                    "至少需要一条直接检索式，任何用户必答问题都不能遗漏。任务数量应由研究问题"
+                    "的复杂度、可独立执行性和证据边界决定：相关问题可以合并，需要独立证据链的"
+                    "问题应拆分；不得为凑固定数量制造重复任务，也不得因减少任务而遗漏模块。\n\n"
                     "研究任务及交付必须能汇入固定的五章报告：行业定义；行业赛道与产业链；"
                     "市场或行业规模测算；竞争格局；市场驱动因素及Future Outlook。"
                     "市场规模任务必须设计主测算法和独立验证法；驱动与趋势任务必须覆盖需求、供给、"
@@ -309,7 +311,7 @@ class ResearchPlanningService:
                 payload["methodology"] = self._trace(
                     "plan",
                     [
-                        "研究任务数量符合SOP",
+                        "研究任务按问题复杂度拆分并完整覆盖SOP模块",
                         "全部任务包含证据标准与反证要求",
                         "原始Prompt中的每个必答问题均映射到执行任务",
                         "人工审核关卡数量符合SOP",
@@ -372,10 +374,12 @@ class ResearchPlanningService:
         constraints = self.sop.constraints
         tasks = payload.get("tasks")
         gates = payload.get("human_review_gates")
-        if not isinstance(tasks, list) or not (
-            constraints.min_tasks <= len(tasks) <= constraints.max_tasks
-        ):
-            raise SOPComplianceError("研究任务数量不符合当前SOP")
+        if not isinstance(tasks, list) or not tasks:
+            raise SOPComplianceError("研究计划必须包含至少一项可执行研究任务")
+        if constraints.min_tasks is not None and len(tasks) < constraints.min_tasks:
+            raise SOPComplianceError("研究任务少于当前方法包的最低要求")
+        if constraints.max_tasks is not None and len(tasks) > constraints.max_tasks:
+            raise SOPComplianceError("研究任务超过当前方法包的最高要求")
         if not isinstance(gates, list) or len(gates) < constraints.min_human_review_gates:
             raise SOPComplianceError("人工审核关卡数量不符合当前SOP")
         task_ids = [task.get("task_id") for task in tasks if isinstance(task, dict)]

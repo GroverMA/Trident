@@ -1,7 +1,7 @@
 {
   "sop_id": "trident_industry_research",
   "display_name": "Trident 专业行业研究 SOP",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "pack_type": "methodology",
   "locked": true,
   "description": "全局行业研究方法底座。所有通用报告、案例展示及高级分析师工作台共同使用；既有版本保留用于项目追溯。",
@@ -149,8 +149,6 @@
     "min_key_questions": 5,
     "max_key_questions": 12,
     "min_hypotheses": 3,
-    "min_tasks": 6,
-    "max_tasks": 10,
     "min_human_review_gates": 3,
     "require_inclusions_and_exclusions": true,
     "require_counter_evidence": true,
