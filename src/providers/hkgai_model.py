@@ -50,7 +50,9 @@ class HKGAIModelProvider(ModelProvider):
         *,
         enable_thinking: bool = False,
         reasoning_effort: str | None = None,
+        json_mode: bool = False,
     ) -> ModelResponse:
+        structured_budget = 8000 if json_mode else 0
         body: dict[str, Any] = {
             "model": self.settings.model_name,
             "messages": [
@@ -58,9 +60,15 @@ class HKGAIModelProvider(ModelProvider):
                 for message in messages
             ],
             "stream": False,
-            "max_tokens": self.settings.model_max_tokens,
+            "max_tokens": max(self.settings.model_max_tokens, structured_budget),
         }
-        if "api.deepseek.com" in self.settings.model_base_url:
+        is_deepseek = (
+            "api.deepseek.com" in self.settings.model_base_url
+            or self.settings.model_name.lower().startswith("deepseek-")
+        )
+        if json_mode and is_deepseek:
+            body["response_format"] = {"type": "json_object"}
+        if is_deepseek:
             body["thinking"] = {
                 "type": "enabled" if enable_thinking else "disabled"
             }
@@ -119,19 +127,41 @@ class HKGAIModelProvider(ModelProvider):
         *,
         enable_thinking: bool = False,
     ) -> tuple[dict[str, Any], ModelResponse]:
-        response = self.complete(messages, enable_thinking=enable_thinking)
-        candidates = [response.content]
-        # Some OpenAI-compatible gateways place the final answer in the
-        # reasoning field when thinking mode is enabled. Prefer content, but
-        # accept reasoning as a compatibility fallback when it contains the
-        # requested JSON object.
-        if response.reasoning:
-            candidates.append(response.reasoning)
+        attempt_messages = list(messages)
+        for attempt in range(2):
+            response = self.complete(
+                attempt_messages,
+                enable_thinking=enable_thinking,
+                json_mode=True,
+            )
+            candidates = [response.content]
+            # Some OpenAI-compatible gateways place the final answer in the
+            # reasoning field when thinking mode is enabled. Prefer content,
+            # but accept reasoning as a compatibility fallback when it
+            # contains the requested JSON object.
+            if response.reasoning:
+                candidates.append(response.reasoning)
 
-        for candidate in candidates:
-            parsed = self._extract_json_object(candidate)
-            if parsed is not None:
-                return parsed, response
+            for candidate in candidates:
+                parsed = self._extract_json_object(candidate)
+                if parsed is not None:
+                    return parsed, response
+            if attempt == 0:
+                attempt_messages.extend(
+                    [
+                        ChatMessage(
+                            role="assistant",
+                            content=(response.content or response.reasoning or "")[-4000:],
+                        ),
+                        ChatMessage(
+                            role="user",
+                            content=(
+                                "上一次输出不是完整合法的 JSON 对象。请立即重新输出完整 JSON；"
+                                "不要解释、不要使用 Markdown 代码围栏、不要省略结尾括号。"
+                            ),
+                        ),
+                    ]
+                )
         raise ProviderError("Modelhub did not return valid JSON")
 
     @staticmethod
