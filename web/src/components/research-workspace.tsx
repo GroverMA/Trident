@@ -665,13 +665,19 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
   async function generateReviewFirstReport() {
     setAction("report-first-generate"); setMessage(""); setError("");
     try {
-      const result = await requestProject(
-        `/api/projects/${project.project_id}/report-first`,
-        "POST",
-        { enterprise: project.company_strategy_enabled, background: true },
-      );
+      const alreadyRunning = project.workflow_status.decision_report === "in_progress"
+        && !project.last_pipeline_error;
+      const result = alreadyRunning
+        ? project
+        : await requestProject(
+          `/api/projects/${project.project_id}/report-first`,
+          "POST",
+          { enterprise: project.company_strategy_enabled, background: true },
+        );
       setProject(result);
-      setMessage("报告初稿已进入后台执行。关闭或刷新页面不会取消研究，页面将自动检查进度。");
+      setMessage(alreadyRunning
+        ? "已重新连接正在运行的后台研究，页面将继续检查进度。"
+        : "报告初稿已进入后台执行。关闭或刷新页面不会取消研究，页面将自动检查进度。");
       for (let attempt = 0; attempt < 180; attempt += 1) {
         await new Promise((resolve) => window.setTimeout(resolve, 5000));
         const latest = await fetchProject();
@@ -1032,7 +1038,17 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
           {!plan.human_confirmed ? (
             <button className="primaryButton artifactPrimary" type="button" disabled={action !== null} onClick={() => void confirmPlan()}>{action === "plan-confirm" ? "正在确认…" : reviewFirst ? "确认底稿并进入报告初稿" : "确认计划并进入网页研究"}</button>
           ) : (
-            <div className="nextStageNotice"><strong>{reviewFirst ? "报告初稿节点已经就绪" : "网页证据研究节点已经就绪"}</strong><span>{reviewFirst ? "下一阶段将接入完整报告编排、引用追溯与内容修订工作台。" : "下一阶段将接入搜索、抓取、证据结构化与批量人工审核。"}</span></div>
+            <div className="nextStageNotice"><strong>{reviewFirst
+              ? project.last_pipeline_error
+                ? "上次后台研究未完成，可以安全重试"
+                : project.workflow_status.decision_report === "in_progress"
+                  ? "报告初稿正在后台生成"
+                  : "报告初稿节点已经就绪"
+              : "网页证据研究节点已经就绪"}</strong><span>{reviewFirst
+                ? project.last_pipeline_error
+                  ? "已完成的节点和失败详情均已保留；重试会从未取得证据的任务继续，不会重复已完成研究。"
+                  : "下一阶段将接入完整报告编排、引用追溯与内容修订工作台。"
+                : "下一阶段将接入搜索、抓取、证据结构化与批量人工审核。"}</span></div>
           )}
         </section>
       )}

@@ -21,7 +21,7 @@ DEFAULT_AGENTHUB_ENDPOINT = (
 )
 DEFAULT_SEARCH_MCP_URL = "https://search-agent-mcp.prod.hkchat.app/mcp"
 DEFAULT_SEARCH_BASE_URL = "https://search-agent.prod.hkchat.app/v1"
-VALID_SEARCH_TRANSPORTS = {"auto", "mcp", "rest"}
+VALID_SEARCH_TRANSPORTS = {"auto", "mcp", "rest", "public"}
 
 
 class ConfigurationError(RuntimeError):

@@ -16,6 +16,7 @@ from src.providers.hkgai_mcp import HKGAIMCPProvider
 from src.providers.hkgai_model import HKGAIModelProvider
 from src.providers.hkgai_structured_rest import HKGAIStructuredRestProvider
 from src.providers.search_router import SearchRouter
+from src.providers.public_web import PublicWebProvider
 from src.scenarios import ScenarioWorkflowRunner, builtin_scenario_packs
 from src.services.action_planning import ActionPlanningService
 from src.services.adaptive_planning import AdaptivePlanningService
@@ -42,6 +43,7 @@ def _default_search_factory(settings: Settings) -> SearchRouter:
         HKGAIMCPProvider(settings),
         HKGAIStructuredRestProvider(settings),
         mode=settings.search_transport,
+        public=PublicWebProvider(timeout_seconds=settings.search_timeout_seconds),
     )
 
 
