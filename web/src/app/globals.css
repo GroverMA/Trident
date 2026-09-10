@@ -884,6 +884,13 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
 .strategyContext strong { margin-top: 6px; }
 .strategyContext p { margin: 5px 0 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .formSuccess { margin-bottom: 16px; padding: 12px 14px; color: #2f6553; background: #f0f8f3; border: 1px solid #d4e8da; border-radius: 9px; font-size: 13px; line-height: 1.6; }
+.actionWaitStatus { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; margin: -6px 0 24px; padding: 15px 18px; color: #274e59; background: #eef7f8; border: 1px solid #c7e0e4; border-radius: 11px; box-shadow: 0 8px 24px rgba(24, 66, 77, .06); }
+.actionWaitStatus strong, .actionWaitStatus span { display: block; }
+.actionWaitStatus strong { font-size: 14px; }
+.actionWaitStatus span { margin-top: 4px; color: #57717a; font-size: 12px; }
+.actionWaitStatus small { color: #6c7f86; font-size: 11px; text-align: right; }
+.actionWaitSpinner { width: 18px; height: 18px; border: 2px solid #b8d8dd; border-top-color: var(--accent); border-radius: 50%; animation: trident-spin .8s linear infinite; }
+@keyframes trident-spin { to { transform: rotate(360deg); } }
 .scopeActions { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(260px, 1.3fr); gap: 14px; }
 .scopeActions button { width: 100%; }
 .scopeActions.singleAction { display: block; }
@@ -1105,6 +1112,8 @@ button.consultingScenarioCard { width: 100%; font: inherit; }
   .cloudState, .scopePathNote { width: 100%; min-width: 0; flex-basis: auto; }
   .workflowSection { padding-inline: 20px; }
   .workflowSummary { align-items: flex-start; flex-direction: column; }
+  .actionWaitStatus { grid-template-columns: auto minmax(0, 1fr); }
+  .actionWaitStatus small { grid-column: 2; text-align: left; }
   .scopeActions { grid-template-columns: 1fr; }
   .confirmedScopeBar, .artifactHeading, .nextStageNotice { align-items: flex-start; flex-direction: column; }
   .artifactPanel { padding: 26px 22px; }

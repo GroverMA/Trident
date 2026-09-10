@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type {
@@ -34,6 +34,32 @@ type ActionState =
   | "report-generate"
   | "report-first-generate"
   | "rewind";
+
+const ACTION_WAIT: Record<ActionState, { label: string; estimate: string }> = {
+  "brief-generate": { label: "AI 正在理解研究目标与市场边界", estimate: "约 20–60 秒" },
+  "brief-save": { label: "正在保存研究简报", estimate: "通常少于 5 秒" },
+  "brief-confirm": { label: "正在确认研究范围", estimate: "通常少于 5 秒" },
+  "plan-generate": { label: "AI 正在拆解研究任务与证据要求", estimate: "约 30–90 秒" },
+  "plan-confirm": { label: "正在确认研究计划", estimate: "通常少于 5 秒" },
+  "evidence-collect": { label: "正在检索网页并核验证据", estimate: "每项任务约 20–90 秒" },
+  "evidence-save": { label: "正在保存证据审核", estimate: "通常少于 5 秒" },
+  "evidence-confirm": { label: "正在确认证据关卡", estimate: "通常少于 5 秒" },
+  "analysis-generate": { label: "AI 正在形成行业分析", estimate: "约 1–4 分钟" },
+  "analysis-save": { label: "正在保存分析审核", estimate: "通常少于 5 秒" },
+  "analysis-confirm": { label: "正在确认行业分析", estimate: "通常少于 5 秒" },
+  "future-generate": { label: "AI 正在构建趋势、情景与反证条件", estimate: "约 1–3 分钟" },
+  "future-save": { label: "正在保存未来判断审核", estimate: "通常少于 5 秒" },
+  "future-confirm": { label: "正在确认未来判断", estimate: "通常少于 5 秒" },
+  "scorecard-generate": { label: "AI 正在生成场景化 Company Scorecard", estimate: "约 40 秒–2 分钟" },
+  "scorecard-save": { label: "正在保存 Scorecard 审核", estimate: "通常少于 5 秒" },
+  "scorecard-confirm": { label: "正在确认 Company Scorecard", estimate: "通常少于 5 秒" },
+  "action-plan-generate": { label: "AI 正在生成 Action Plan", estimate: "约 1–3 分钟" },
+  "action-plan-save": { label: "正在保存 Action Plan 审核", estimate: "通常少于 5 秒" },
+  "action-plan-confirm": { label: "正在确认 Action Plan", estimate: "通常少于 5 秒" },
+  "report-generate": { label: "AI 正在组织完整研究报告", estimate: "约 2–6 分钟" },
+  "report-first-generate": { label: "AI 正在生成完整报告与审阅底稿", estimate: "约 3–8 分钟" },
+  "rewind": { label: "正在恢复上一审核节点", estimate: "通常少于 10 秒" },
+};
 
 const BUILD_STEPS: WorkflowStep[] = [
   { key: "prompt_analysis", label: "Prompt Analysis", description: "AI 理解原始研究需求" },
@@ -108,6 +134,7 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
   const router = useRouter();
   const [project, setProject] = useState(initialProject);
   const [action, setAction] = useState<ActionState | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [editingScope, setEditingScope] = useState(!initialProject.research_brief_artifact);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -156,6 +183,22 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
   });
   const steps = useMemo(() => stepsFor(project), [project]);
   const reviewFirst = project.research_path === "report_review_first";
+
+  useEffect(() => {
+    if (!action) return;
+    const startedAt = Date.now();
+    const updateElapsed = () => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    };
+    const initialTimer = window.setTimeout(updateElapsed, 0);
+    const timer = window.setInterval(() => {
+      updateElapsed();
+    }, 1000);
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(timer);
+    };
+  }, [action]);
 
   function acceptProject(result: ProjectSummary, success: string) {
     setProject(result);
@@ -773,6 +816,17 @@ export function ResearchWorkspace({ initialProject }: { initialProject: ProjectS
           })}
         </div>
       </section>
+
+      {action && (
+        <section className="actionWaitStatus" role="status" aria-live="polite">
+          <div className="actionWaitSpinner" aria-hidden="true" />
+          <div>
+            <strong>{ACTION_WAIT[action].label}</strong>
+            <span>预计耗时：{ACTION_WAIT[action].estimate} · 已等待 {elapsedSeconds} 秒</span>
+          </div>
+          <small>请保持页面开启；完成后结果会自动保存并显示。</small>
+        </section>
+      )}
 
       {canRewind && !reviewFirst && (
         <section className="rewindPanel">
