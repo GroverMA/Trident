@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from datetime import UTC, datetime
@@ -163,10 +164,16 @@ class EvidenceCollectionService:
         errors: list[str] = []
         seen_urls: set[str] = set()
 
-        for query in queries:
+        async def search_one(query: str):
             try:
-                routed = await self.search.search_web(query)
+                return query, await self.search.search_web(query), None
             except ProviderError as exc:
+                return query, None, exc
+
+        search_results = await asyncio.gather(*(search_one(query) for query in queries))
+        for query, routed, search_error in search_results:
+            if search_error is not None or routed is None:
+                exc = search_error or ProviderError("unknown search failure")
                 errors.append(f"搜索失败 · {query} · {exc}")
                 continue
             for hit in routed.result.results[:MAX_RESULTS_PER_QUERY]:
@@ -193,10 +200,16 @@ class EvidenceCollectionService:
 
         selected = self._select_sources(sources)
         page_text: dict[str, str] = {}
-        for source in selected:
+        async def crawl_one(source: EvidenceSource):
             try:
-                routed_crawl = await self._crawl(source.url)
+                return source, await self._crawl(source.url), None
             except ProviderError as exc:
+                return source, None, exc
+
+        crawl_results = await asyncio.gather(*(crawl_one(source) for source in selected))
+        for source, routed_crawl, crawl_error in crawl_results:
+            if crawl_error is not None or routed_crawl is None:
+                exc = crawl_error or ProviderError("unknown crawl failure")
                 errors.append(f"抓取失败 · {source.url} · {exc}")
                 continue
             page = next(

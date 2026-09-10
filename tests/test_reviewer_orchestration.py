@@ -277,6 +277,23 @@ def test_reviewer_retry_replaces_a_previous_empty_search_run() -> None:
     assert result.project.evidence_collection_artifact.task_runs[0].evidence
 
 
+def test_reviewer_pipeline_checkpoints_partial_work_for_serverless_resume() -> None:
+    calls: list[str] = []
+    checkpoints: list[ProjectState] = []
+
+    result = asyncio.run(
+        _service(calls, enterprise=False).run(
+            _project(),
+            on_checkpoint=checkpoints.append,
+        )
+    )
+
+    assert result.project.general_report_artifact is not None
+    assert len(checkpoints) >= 5
+    assert checkpoints[0].evidence_collection_artifact.task_runs[0].evidence
+    assert checkpoints[-1].general_report_artifact is not None
+
+
 def test_enterprise_reviewer_orchestration_generates_scorecard_action_and_report() -> None:
     calls: list[str] = []
 

@@ -79,6 +79,7 @@ class ActionService(Protocol):
 
 
 ProgressCallback = Callable[[str, int, int], None]
+CheckpointCallback = Callable[[ProjectState], None]
 EnterpriseReportBuilder = Callable[[ProjectState], EnterpriseDecisionReportArtifact]
 
 
@@ -155,6 +156,7 @@ class ReviewerOrchestrationService:
         *,
         enterprise: bool | None = None,
         on_progress: ProgressCallback | None = None,
+        on_checkpoint: CheckpointCallback | None = None,
     ) -> ReviewerPipelineResult:
         enterprise = project.company_strategy_enabled if enterprise is None else enterprise
         self._validate_preconditions(project, enterprise)
@@ -173,6 +175,12 @@ class ReviewerOrchestrationService:
             generated.append(stage)
             if on_progress is not None:
                 on_progress(stage, len(generated), 8 if enterprise else 5)
+
+        def checkpoint() -> None:
+            nonlocal active
+            active = active.model_copy(update={"updated_at": datetime.now(UTC)})
+            if on_checkpoint is not None:
+                on_checkpoint(active)
 
         try:
             plan = active.research_plan_artifact
@@ -199,6 +207,7 @@ class ReviewerOrchestrationService:
                     warnings.append(f"{task.task_id}首次检索结果有限，已列入Content Revision重点审阅。")
                 evidence = upsert_task_run(evidence, plan.artifact_id, run)
                 active = active.model_copy(update={"evidence_collection_artifact": evidence})
+                checkpoint()
             if evidence is None:
                 raise ValueError("未建立Reference Matrix")
             # Coverage advice is explanatory metadata, never a generation
@@ -217,6 +226,7 @@ class ReviewerOrchestrationService:
             pipeline_evidence = _pipeline_evidence(evidence)
             active = active.model_copy(update={"evidence_collection_artifact": evidence})
             progress("reference_collection")
+            checkpoint()
 
             analysis = active.industry_analysis_artifact
             if (
@@ -231,6 +241,7 @@ class ReviewerOrchestrationService:
                 active = active.model_copy(update={"industry_analysis_artifact": analysis})
             pipeline_analysis = _pipeline_analysis(analysis)
             progress("industry_analysis")
+            checkpoint()
 
             future = active.future_intelligence_artifact
             if (
@@ -247,6 +258,7 @@ class ReviewerOrchestrationService:
                 active = active.model_copy(update={"future_intelligence_artifact": future})
             pipeline_future = _pipeline_future(future)
             progress("future_intelligence")
+            checkpoint()
 
             pipeline_project = active.model_copy(
                 update={
@@ -268,6 +280,7 @@ class ReviewerOrchestrationService:
                     }
                 )
             progress("general_report")
+            checkpoint()
 
             if enterprise:
                 assert self.company is not None and self.action is not None
@@ -281,6 +294,7 @@ class ReviewerOrchestrationService:
                     active = active.model_copy(update={"company_scorecard_artifact": scorecard})
                 pipeline_scorecard = _pipeline_scorecard(scorecard)
                 progress("company_scorecard")
+                checkpoint()
 
                 action_plan = active.action_plan_artifact
                 if action_plan is None or action_plan.scorecard_id != scorecard.artifact_id:
@@ -295,6 +309,7 @@ class ReviewerOrchestrationService:
                     active = active.model_copy(update={"action_plan_artifact": action_plan})
                 pipeline_action = _pipeline_action_plan(action_plan)
                 progress("action_plan")
+                checkpoint()
 
                 enterprise_report = active.enterprise_decision_report_artifact
                 if enterprise_report is None or _report_requires_regeneration(
@@ -313,6 +328,7 @@ class ReviewerOrchestrationService:
                         update={"enterprise_decision_report_artifact": enterprise_report}
                     )
                 progress("enterprise_report")
+                checkpoint()
 
             active = _set_generated_workflow_statuses(active, enterprise)
             return ReviewerPipelineResult(
