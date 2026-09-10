@@ -32,6 +32,7 @@ from src.providers.base import ProviderError
 from src.core.registry import ExtensionRegistry
 from src.integrations import builtin_integration_surfaces
 from src.model_routing import MODEL_PROFILE_POLICY, TASK_MODEL_PROFILES
+from src.observability.telemetry import StepRunTelemetry
 from src.scenarios import (
     ScenarioContractError,
     ScenarioInputError,
@@ -407,6 +408,33 @@ def _percentile(values: list[int], percentile: float) -> int | None:
     return round(ordered[lower] + (ordered[upper] - ordered[lower]) * fraction)
 
 
+_MAX_HUMAN_WAIT_MS = 10 * 60 * 1000
+
+
+def _effective_workflow_duration(
+    runs: list[StepRunTelemetry],
+) -> tuple[int, int, int]:
+    """Return active, credited human-wait, and excluded idle milliseconds.
+
+    Telemetry spans cover system work.  A positive gap between consecutive
+    spans represents review/input time, but only its first ten minutes counts.
+    This prevents an abandoned browser session from inflating report duration.
+    """
+
+    ordered = sorted(runs, key=lambda run: run.started_at)
+    active_ms = sum(max(0, run.duration_ms) for run in ordered)
+    credited_wait_ms = 0
+    excluded_idle_ms = 0
+    for previous, current in zip(ordered, ordered[1:]):
+        gap_ms = max(
+            0,
+            round((current.started_at - previous.completed_at).total_seconds() * 1000),
+        )
+        credited_wait_ms += min(gap_ms, _MAX_HUMAN_WAIT_MS)
+        excluded_idle_ms += max(0, gap_ms - _MAX_HUMAN_WAIT_MS)
+    return active_ms, credited_wait_ms, excluded_idle_ms
+
+
 @app.get("/v1/ops/telemetry", dependencies=[Depends(_require_ops_access)])
 def ops_telemetry(research: ResearchApp) -> dict:
     """Return privacy-safe, source-backed telemetry for the internal dashboard."""
@@ -445,14 +473,10 @@ def ops_telemetry(research: ResearchApp) -> dict:
         started_at = min(
             (run.started_at for run in scoped_runs), default=None
         )
-        finished_at = max(
-            (run.completed_at for run in scoped_runs), default=None
+        active_duration_ms, review_input_duration_ms, excluded_idle_duration_ms = (
+            _effective_workflow_duration(scoped_runs)
         )
-        wall_duration_ms = (
-            round((finished_at - started_at).total_seconds() * 1000)
-            if started_at and finished_at
-            else 0
-        )
+        wall_duration_ms = active_duration_ms + review_input_duration_ms
         report_tokens = sum(run.total_tokens for run in report_runs)
         if completed_at is not None:
             report_token_totals.append(report_tokens)
@@ -475,6 +499,10 @@ def ops_telemetry(research: ResearchApp) -> dict:
                 "started_at": started_at,
                 "completed_at": completed_at,
                 "wall_duration_ms": wall_duration_ms,
+                "active_duration_ms": active_duration_ms,
+                "review_input_duration_ms": review_input_duration_ms,
+                "excluded_idle_duration_ms": excluded_idle_duration_ms,
+                "duration_policy": "active_steps_plus_inter_step_gaps_capped_at_10m",
                 "step_run_count": len(scoped_runs),
                 "failed_step_count": sum(
                     run.status == "failed" for run in scoped_runs
