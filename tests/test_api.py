@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 from types import SimpleNamespace
 
-from src.api.app import app, build_application, get_research_application
+from src.api.app import (
+    _effective_workflow_duration,
+    app,
+    build_application,
+    get_research_application,
+)
+from src.observability.telemetry import StepRunTelemetry
 from src.application.research import ResearchApplication
 from src.persistence.sqlite_projects import SQLiteProjectRepository
 from src.state.project import ProjectState, WorkflowStatus
@@ -693,6 +701,9 @@ def test_ops_telemetry_requires_key_and_returns_source_backed_runs(
         assert body["projects"][0]["project_id"] == project.project_id
         assert body["projects"][0]["status"] == "in_progress"
         assert body["projects"][0]["aggregation_scope"] == "project_to_date"
+        assert body["projects"][0]["duration_policy"] == (
+            "active_steps_plus_inter_step_gaps_capped_at_10m"
+        )
         assert body["data_quality"]["usage_missing_call_count"] == 0
         assert body["models"] == []
         assert body["sensing_runs"] == []
@@ -701,3 +712,41 @@ def test_ops_telemetry_requires_key_and_returns_source_backed_runs(
         assert body["runs"][0]["project_name"] == "运营监测测试"
     finally:
         app.dependency_overrides.clear()
+
+
+def test_effective_workflow_duration_caps_each_human_wait_at_ten_minutes() -> None:
+    started = datetime(2026, 9, 10, 8, 0, tzinfo=UTC)
+    first = StepRunTelemetry(
+        project_id="project-1",
+        step="research_brief",
+        status="completed",
+        started_at=started,
+        completed_at=started + timedelta(minutes=2),
+        duration_ms=120_000,
+    )
+    second_start = first.completed_at + timedelta(hours=3)
+    second = StepRunTelemetry(
+        project_id="project-1",
+        step="research_planning",
+        status="completed",
+        started_at=second_start,
+        completed_at=second_start + timedelta(minutes=4),
+        duration_ms=240_000,
+    )
+    third_start = second.completed_at + timedelta(minutes=6)
+    third = StepRunTelemetry(
+        project_id="project-1",
+        step="evidence_collection",
+        status="completed",
+        started_at=third_start,
+        completed_at=third_start + timedelta(minutes=1),
+        duration_ms=60_000,
+    )
+
+    active, review_input, excluded = _effective_workflow_duration(
+        [third, first, second]
+    )
+
+    assert active == 7 * 60_000
+    assert review_input == 16 * 60_000
+    assert excluded == 170 * 60_000

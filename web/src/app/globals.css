@@ -82,9 +82,22 @@ a { color: inherit; text-decoration: none; }
 .opsStatus.failed { color: var(--danger); background: #fff1f1; }
 .opsStatus.pending { color: #82651d; background: #fff8df; }
 .opsCellMeta { display: block; margin-top: 4px; color: #8d97a6; font-size: 10px; font-weight: 400; }
+.opsRunGroups { display: grid; gap: 12px; }
+.opsRunGroup { overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+.opsRunGroup summary { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 18px 20px; cursor: pointer; list-style: none; background: #f8fafb; }
+.opsRunGroup summary::-webkit-details-marker { display: none; }
+.opsRunGroup summary::before { content: "+"; flex: 0 0 auto; width: 24px; color: var(--accent); font-size: 20px; font-weight: 700; }
+.opsRunGroup[open] summary::before { content: "−"; }
+.opsRunGroup summary > span:first-of-type { flex: 1; }
+.opsRunGroup summary > span:last-of-type { text-align: right; }
+.opsRunGroup summary strong, .opsRunGroup summary b, .opsRunGroup summary small { display: block; }
+.opsRunGroup summary strong { font-size: 14px; }
+.opsRunGroup summary b { font-size: 13px; }
+.opsRunGroup summary small { margin-top: 5px; color: #8d97a6; font-size: 11px; font-weight: 400; }
+.opsNestedTable th:first-child, .opsNestedTable td:first-child { padding-left: 20px; }
 .opsSource { color: #8d97a6; font-size: 11px; line-height: 1.65; }
 @media (max-width: 980px) { .opsMetricGrid { grid-template-columns: repeat(2, 1fr); } .opsGrid { grid-template-columns: 1fr; } }
-@media (max-width: 640px) { .opsPage { width: min(100% - 28px, 1480px); padding-top: 28px; } .opsHeader { display: block; } .opsFreshness { margin-top: 20px; } .opsMetricGrid { grid-template-columns: 1fr; } .opsBarRow { grid-template-columns: 125px minmax(80px,1fr) 62px; gap: 8px; } }
+@media (max-width: 640px) { .opsPage { width: min(100% - 28px, 1480px); padding-top: 28px; } .opsHeader { display: block; } .opsFreshness { margin-top: 20px; } .opsMetricGrid { grid-template-columns: 1fr; } .opsBarRow { grid-template-columns: 125px minmax(80px,1fr) 62px; gap: 8px; } .opsRunGroup summary { align-items: flex-start; gap: 10px; padding: 15px; } .opsRunGroup summary > span:last-of-type { text-align: left; } }
 
 .primaryButton, .secondaryButton {
   min-height: 46px;
