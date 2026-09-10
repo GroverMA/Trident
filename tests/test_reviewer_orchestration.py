@@ -12,6 +12,7 @@ from src.models.enterprise import (
     EnterpriseStatementType,
 )
 from src.models.evidence import (
+    EvidenceCollectionArtifact,
     EvidenceItem,
     EvidenceKind,
     EvidenceReviewStatus,
@@ -110,6 +111,12 @@ class _EvidenceService:
     def __init__(self, calls: list[str]) -> None:
         self.calls = calls
 
+    async def collect_task(self, project, plan, task_id):
+        self.calls.append("reference_collection")
+        return _evidence_run()
+
+
+class _RetryEvidenceService(_EvidenceService):
     async def collect_task(self, project, plan, task_id):
         self.calls.append("reference_collection")
         return _evidence_run()
@@ -244,6 +251,30 @@ def test_general_reviewer_orchestration_generates_report_before_trace_review() -
     assert result.project.general_report_artifact.accepted_evidence_ids == ["EVD-1"]
     reference_items = _reference_check_items(result.project)
     assert [item.evidence_id for item in reference_items] == ["EVD-1"]
+
+
+def test_reviewer_retry_replaces_a_previous_empty_search_run() -> None:
+    calls: list[str] = []
+    project = _project().model_copy(
+        update={
+            "evidence_collection_artifact": EvidenceCollectionArtifact(
+                research_plan_id="PLAN-1",
+                task_runs=[TaskEvidenceRun(
+                    task_id="T01",
+                    task_title="行业定义",
+                    queries_used=["failed query"],
+                    search_errors=["Structured REST request failed (HTTP 403)"],
+                )],
+            )
+        }
+    )
+    service = _service(calls, enterprise=False)
+    service.evidence = _RetryEvidenceService(calls)
+
+    result = asyncio.run(service.run(project))
+
+    assert calls.count("reference_collection") == 1
+    assert result.project.evidence_collection_artifact.task_runs[0].evidence
 
 
 def test_enterprise_reviewer_orchestration_generates_scorecard_action_and_report() -> None:

@@ -1540,7 +1540,11 @@ async def _execute_report_first_background(
         await research.run_report_first(project_id, enterprise=enterprise)
     except ReviewerPipelineError as exc:
         research.projects.save(exc.project.model_copy(update={
-            "last_pipeline_error": f"{exc.stage}：{exc}",
+            "last_pipeline_error": str(exc),
+            "workflow_status": {
+                **exc.project.workflow_status,
+                "decision_report": WorkflowStatus.READY,
+            },
             "updated_at": datetime.now(UTC),
         }))
     except Exception as exc:
@@ -1549,5 +1553,9 @@ async def _execute_report_first_background(
         project = research.get_project(project_id)
         research.projects.save(project.model_copy(update={
             "last_pipeline_error": f"report_first：{type(exc).__name__}",
+            "workflow_status": {
+                **project.workflow_status,
+                "decision_report": WorkflowStatus.READY,
+            },
             "updated_at": datetime.now(UTC),
         }))

@@ -255,6 +255,26 @@ def test_simple_brief_does_not_pay_for_reasoning_escalation() -> None:
     assert reasoning.messages == []
 
 
+def test_brief_never_asks_user_to_choose_consultant_research_methods() -> None:
+    payload = brief_payload()
+    payload["clarification_questions"] = [
+        "数据来源和证据等级是否有特殊要求（如仅用一手来源、是否接受商业报告）？",
+        "工业机器人是否包含协作机器人？",
+        "研究地域是否包括中国香港？",
+        "是否要求特定引用格式？",
+    ]
+    fake = FakeStructuredModel([payload])
+    service = ResearchPlanningService(fake, load_active_sop())
+
+    brief = service.generate_brief(project())
+
+    assert brief.clarification_questions == [
+        "工业机器人是否包含协作机器人？",
+        "研究地域是否包括中国香港？",
+    ]
+    assert "咨询师内部执行事项一律按当前SOP处理" in fake.messages[0][0].content
+
+
 def test_service_rejects_plan_without_counter_evidence() -> None:
     invalid = plan_payload()
     invalid["tasks"][0]["counter_evidence_required"] = False

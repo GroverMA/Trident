@@ -40,6 +40,30 @@ class FakeRest:
         return CrawlResult()
 
 
+class FakePublic:
+    def __init__(self) -> None:
+        self.search_calls = 0
+        self.crawl_calls = 0
+
+    def search_web(self, query: str) -> WebSearchResult:
+        self.search_calls += 1
+        return WebSearchResult(query=query, engine="public-test")
+
+    def crawl_page(self, url: str) -> CrawlResult:
+        self.crawl_calls += 1
+        return CrawlResult(engine="public-test")
+
+
+class FailingRest(FakeRest):
+    def search_web(self, query: str) -> WebSearchResult:
+        self.search_calls += 1
+        raise ProviderError("Structured REST request failed (HTTP 403)")
+
+    def crawl_page(self, url: str) -> CrawlResult:
+        self.crawl_calls += 1
+        raise ProviderError("Structured REST request failed (HTTP 403)")
+
+
 def test_auto_mode_falls_back_and_remembers_mcp_failure() -> None:
     mcp = FakeMCP(fail=True)
     rest = FakeRest()
@@ -79,3 +103,24 @@ def test_rest_mode_never_calls_mcp() -> None:
     assert result.transport == "rest"
     assert mcp.crawl_calls == 0
     assert rest.crawl_calls == 1
+
+
+def test_rest_authorization_failure_falls_back_to_public_web() -> None:
+    mcp = FakeMCP(fail=False)
+    rest = FailingRest()
+    public = FakePublic()
+    router = SearchRouter(  # type: ignore[arg-type]
+        mcp,
+        rest,
+        mode="rest",
+        public=public,
+    )
+
+    search = asyncio.run(router.search_web("query"))
+    crawl = asyncio.run(router.crawl_page("https://example.com"))
+
+    assert search.transport == "public"
+    assert crawl.transport == "public"
+    assert "HTTP 403" in (search.fallback_reason or "")
+    assert public.search_calls == 1
+    assert public.crawl_calls == 1

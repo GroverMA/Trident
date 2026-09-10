@@ -183,7 +183,9 @@ class ReviewerOrchestrationService:
 
             evidence = active.evidence_collection_artifact
             completed_tasks = {
-                run.task_id for run in evidence.task_runs
+                run.task_id
+                for run in evidence.task_runs
+                if run.evidence
             } if evidence and evidence.research_plan_id == plan.artifact_id else set()
             if evidence is not None and evidence.research_plan_id != plan.artifact_id:
                 evidence = None
@@ -326,6 +328,10 @@ class ReviewerOrchestrationService:
             failed = active.model_copy(
                 update={
                     "last_pipeline_error": f"{stage}：{exc}",
+                    "workflow_status": {
+                        **active.workflow_status,
+                        "decision_report": WorkflowStatus.READY,
+                    },
                     "updated_at": datetime.now(UTC),
                 }
             )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Protocol
 
 from pydantic import ValidationError
@@ -152,6 +153,8 @@ class ResearchPlanningService:
                     content=(
                         "你是 Research Brief 边界裁决专家。Flash 已完成第一轮结构化诊断。"
                         "仅解决高风险歧义、输入冲突和市场口径，不扩大用户目标，不把假设写成事实。"
+                        "澄清问题只能面向研究对象与行业边界；不得把数据源选择、证据等级、研究方法、"
+                        "检索策略或引用方式等咨询师内部工作转交给用户。"
                         "保留所有仍未解决的信息缺口，并输出完全符合给定合同的 JSON。\n\n"
                         + self.sop.prompt_context("brief")
                     ),
@@ -216,6 +219,10 @@ class ResearchPlanningService:
                     "探索性研究目的。必须按语义理解用户表达：发展条件、增长动力、关键变量、"
                     "促进因素和限制因素不能靠关键词硬匹配；应在terminology_map中记录用户术语"
                     "与标准研究概念的解释。只输出合法JSON对象，不要输出Markdown。\n\n"
+                    "clarification_questions只能询问研究问题以及行业、产品、客户、应用、地域、"
+                    "时间、计量口径、纳入排除和竞争边界。不得询问数据来源偏好、证据等级、是否仅用"
+                    "一手来源、是否接受商业或券商报告、研究方法、检索策略、样本数量或引用格式；"
+                    "这些咨询师内部执行事项一律按当前SOP处理。\n\n"
                     + self.sop.prompt_context("brief")
                 ),
             ),
@@ -234,6 +241,7 @@ class ResearchPlanningService:
         for attempt in range(2):
             payload, response = self.model.complete_json(messages, enable_thinking=True)
             payload = self._unwrap(payload, "research_brief")
+            payload = self._sanitize_brief_questions(payload)
             if (
                 not escalated
                 and self.reasoning_model is not None
@@ -241,6 +249,7 @@ class ResearchPlanningService:
             ):
                 payload, response = self._refine_complex_brief(project, payload)
                 payload = self._unwrap(payload, "research_brief")
+                payload = self._sanitize_brief_questions(payload)
                 escalated = True
             try:
                 self._validate_brief_payload(payload)
@@ -259,6 +268,26 @@ class ResearchPlanningService:
                     raise
                 messages.extend(self._repair_messages(response, exc))
         raise SOPComplianceError("Research Brief未通过SOP校验")
+
+    @staticmethod
+    def _sanitize_brief_questions(payload: dict[str, Any]) -> dict[str, Any]:
+        """Keep Gate 0 about the subject; methodology remains owned by the SOP."""
+
+        forbidden = re.compile(
+            r"数据来源|资料来源|来源偏好|证据等级|证据级别|一手来源|二手来源|"
+            r"商业报告|券商报告|付费报告|研究方法|调研方法|检索策略|搜索策略|"
+            r"引用格式|参考文献格式|样本数量|样本量|交叉验证要求",
+            re.IGNORECASE,
+        )
+        cleaned = dict(payload)
+        questions = payload.get("clarification_questions")
+        if isinstance(questions, list):
+            cleaned["clarification_questions"] = [
+                question
+                for question in questions
+                if isinstance(question, str) and not forbidden.search(question)
+            ]
+        return cleaned
 
     def generate_plan(
         self,

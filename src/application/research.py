@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Callable, Mapping, TypeVar
 
 from src.core.container import ServiceContainer
@@ -957,7 +957,14 @@ class ResearchApplication:
             raise ResearchWorkflowError("Research Brief必须先经过人工确认")
         if plan is None or not plan.human_confirmed:
             raise ResearchWorkflowError("Research Plan必须先经过人工确认")
-        if project.workflow_status.get("decision_report") == WorkflowStatus.IN_PROGRESS:
+        report_status = project.workflow_status.get("decision_report")
+        stale_cutoff = datetime.now(UTC) - timedelta(hours=1)
+        actively_running = (
+            report_status == WorkflowStatus.IN_PROGRESS
+            and project.last_pipeline_error is None
+            and project.updated_at > stale_cutoff
+        )
+        if actively_running:
             raise ResearchWorkflowError("报告初稿已经在后台生成，请等待当前任务完成")
         statuses = dict(project.workflow_status)
         statuses["decision_report"] = WorkflowStatus.IN_PROGRESS
