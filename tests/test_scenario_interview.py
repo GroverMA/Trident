@@ -37,6 +37,27 @@ class AdaptiveInterviewModel:
         }, object())
 
 
+def test_growth_interview_caps_all_questions_including_followups() -> None:
+    service = ScenarioInterviewService(ExtensionRegistry(builtin_scenario_packs()), model_factory=AdaptiveInterviewModel)
+    project = ProjectState(project_name="五题验收", industry="电机", region="中国",
+                           research_objective="三年销售额翻倍", time_horizon="三年",
+                           scenario_pack="growth_strategy", scenario_pack_version="1.0.0")
+    project = service.start(project)
+    assert project.interview_session_artifact.max_turns == 5
+    assert "三年销售额翻倍" in project.interview_session_artifact.current_turn.question
+    # Persisted sessions from the old policy must obey the new cap as well.
+    project.interview_session_artifact.max_turns = 12
+    for _ in range(5):
+        project = service.answer(project, "收入大概增长了一些")
+        assert len(project.interview_session_artifact.turns) <= 5
+    session = project.interview_session_artifact
+    assert session.status == "completed"
+    assert session.current_turn is None
+    assert len(session.turns) == 5
+    assert project.entity_profile_artifact is not None
+    assert session.remaining_topics
+
+
 def test_interview_analyses_answer_before_moving_to_next_topic() -> None:
     service = ScenarioInterviewService(
         ExtensionRegistry(builtin_scenario_packs()),

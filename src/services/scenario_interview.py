@@ -61,7 +61,8 @@ class ScenarioInterviewService:
             scenario_id=project.scenario_pack,
             scenario_version=project.scenario_pack_version,
             objective=project.company_strategy_objective or project.research_objective,
-            turns=[InterviewTurn(topic_id=topics[0], question=questions[0])],
+            turns=[InterviewTurn(topic_id=topics[0], question=questions[0].replace("{objective}", project.company_strategy_objective or project.research_objective))],
+            max_turns=int(policy.get("max_questions", 12)),
             remaining_topics=topics,
             suggested_uploads=[str(item) for item in policy.get("suggested_uploads", [])],
         )
@@ -74,6 +75,17 @@ class ScenarioInterviewService:
         session = project.interview_session_artifact
         if session is None:
             raise ScenarioInterviewError("请先开始诊断访谈")
+        policy = self._policy(project)
+        limit = min(session.max_turns, int(policy.get("max_questions", session.max_turns)))
+        if sum(turn.answer is not None for turn in session.turns) >= limit:
+            completed_turns = [turn for turn in session.turns if turn.answer is not None]
+            return project.model_copy(update={
+                "interview_session_artifact": session.model_copy(update={
+                    "turns": completed_turns, "max_turns": limit,
+                    "status": InterviewStatus.COMPLETED,
+                }),
+                "entity_profile_artifact": self._profile(project, completed_turns),
+            })
         current = session.current_turn
         if current is None:
             raise ScenarioInterviewError("当前访谈已经完成")
@@ -89,10 +101,13 @@ class ScenarioInterviewService:
             not analysis.topic_complete
             and bool(analysis.follow_up_question)
             and followups_for_topic < 2
-            and len(turns) < session.max_turns
+            and len(turns) < limit
         )
         if can_follow_up:
-            turns.append(InterviewTurn(topic_id=current.topic_id, question=str(analysis.follow_up_question)))
+            follow_up = str(analysis.follow_up_question)
+            if follow_up == self._fallback_question(text):
+                follow_up = f"围绕“{session.objective}”，能用一个具体例子说明你刚才的判断吗？"
+            turns.append(InterviewTurn(topic_id=current.topic_id, question=follow_up))
             covered = list(session.covered_topics)
             remaining = list(session.remaining_topics)
         else:
@@ -106,17 +121,21 @@ class ScenarioInterviewService:
         if can_follow_up:
             status = InterviewStatus.IN_PROGRESS
             profile = None
-        elif remaining:
+        elif remaining and len(turns) < limit:
             next_topic = remaining[0]
             next_index = topics.index(next_topic)
-            turns.append(InterviewTurn(topic_id=next_topic, question=questions[next_index]))
+            turns.append(InterviewTurn(topic_id=next_topic, question=questions[next_index].replace("{objective}", session.objective)))
             status = InterviewStatus.IN_PROGRESS
             profile = None
         else:
             status = InterviewStatus.COMPLETED
             profile = self._profile(project, turns)
+            profile = profile.model_copy(update={"data_gaps": list(dict.fromkeys([
+                *profile.data_gaps, *[f"访谈额度内未覆盖：{topic}" for topic in remaining],
+            ]))})
         updated = session.model_copy(update={
             "turns": turns,
+            "max_turns": limit,
             "covered_topics": covered,
             "remaining_topics": remaining,
             "status": status,
@@ -167,6 +186,9 @@ class ScenarioInterviewService:
                                 "你是企业决策诊断访谈分析器。必须只输出JSON。逐轮分析用户回答，"
                                 "不得把意见或推测写成已验证事实。若答案含糊、矛盾或缺少对后续决策必要的信息，"
                                 "只提出一个自然、容易回答的追问；若当前主题信息已足够，则topic_complete=true。"
+                                "所有提问必须紧扣objective中的客户目标，只追问对该目标决策最关键的缺口。"
+                                "一次只能问一个问题，不得把多个子问题包装为一题。追问也占用remaining_question_budget；"
+                                "预算为0时不得追问，将未解决信息记入missing_information。"
                                 "JSON字段必须包含summary, extracted_facts, ambiguities, missing_information, "
                                 "answer_quality, topic_complete, follow_up_question, confidence。"
                             ),
@@ -177,6 +199,7 @@ class ScenarioInterviewService:
                                 {
                                     "scenario": project.scenario_pack,
                                     "objective": session.objective,
+                                    "remaining_question_budget": max(0, min(session.max_turns, int(self._policy(project).get("max_questions", session.max_turns))) - len(session.turns)),
                                     "topic": current.topic_id,
                                     "question": current.question,
                                     "answer": answer,
